@@ -20,6 +20,11 @@
     max-width: 100%;
   }
 
+  html {
+    /* Scale the entire UI to 90% (rem-based Tailwind sizing follows). */
+    font-size: 90%;
+  }
+
   html, body, #root {
     height: 100%;
     margin: 0;
