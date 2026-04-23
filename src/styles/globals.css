@@ -1,0 +1,105 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --color-brand-dark:  #093A7A;
+  --color-brand-blue:  #0572B2;
+  --color-brand-teal:  #0BB592;
+  --color-brand-pink:  #F55486;
+}
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+
+  /* Prevent images from overflowing; inline styles (width/height) still win */
+  img {
+    display: block;
+    max-width: 100%;
+  }
+
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    color-scheme: light;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: #f8fafc;
+    background-image:
+      radial-gradient(ellipse at 10% 60%, rgba(11, 181, 146, 0.06) 0%, transparent 55%),
+      radial-gradient(ellipse at 90% 20%, rgba(5, 114, 178, 0.06) 0%, transparent 55%),
+      url("data:image/svg+xml,%3Csvg width='40' height='40' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath stroke='rgba(9,58,122,0.04)' stroke-width='1' d='M40 0L0 0 0 40'/%3E%3C/svg%3E");
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: #0f172a;
+  }
+}
+
+@layer utilities {
+  /* Gradient text */
+  .text-gradient {
+    background: linear-gradient(135deg, #093A7A, #0572B2, #0BB592);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Glassmorphism card */
+  .glass-card {
+    background: rgba(255,255,255,0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.6);
+    box-shadow: 0 8px 32px rgba(9,58,122,0.06);
+  }
+
+  /* Monospace data values */
+  .data-mono {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  /* Micro label */
+  .label-xs {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #94a3b8;
+  }
+
+  /* Scrollbar hide */
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+  .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* Sonar pulse (federated site status) */
+  .sonar {
+    position: relative;
+  }
+  .sonar::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 2px solid currentColor;
+    animation: sonar-pulse 2s ease-out infinite;
+    opacity: 0;
+  }
+  @keyframes sonar-pulse {
+    0%   { transform: scale(0.8); opacity: 0.8; }
+    100% { transform: scale(2.2); opacity: 0; }
+  }
+}
