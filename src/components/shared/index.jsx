@@ -1,5 +1,6 @@
-import { motion } from 'framer-motion'
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { TrendingUp, TrendingDown, Minus, X as XIcon } from 'lucide-react'
+import { useEffect } from 'react'
 import { cn } from '@/lib/utils'
 
 // ── Stagger container ──────────────────────────────────────────────────────
@@ -141,6 +142,120 @@ export function Btn({ children, onClick, variant = 'primary', size = 'md', class
     >
       {children}
     </motion.button>
+  )
+}
+
+// ── Modal ──────────────────────────────────────────────────────────────────
+export function Modal({ open, onClose, title, subtitle, children, size = 'md', footer }) {
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e) => { if (e.key === 'Escape') onClose?.() }
+    window.addEventListener('keydown', onKey)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = ''
+    }
+  }, [open, onClose])
+
+  const sizes = { sm: 'max-w-md', md: 'max-w-xl', lg: 'max-w-3xl' }
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[80]"
+          />
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.97 }}
+            transition={{ duration: 0.18 }}
+            className={cn(
+              'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[90] w-[calc(100%-2rem)] bg-white rounded-2xl border border-slate-200 shadow-2xl flex flex-col max-h-[90vh]',
+              sizes[size]
+            )}
+          >
+            <div className="flex items-start justify-between px-6 py-4 border-b border-slate-100">
+              <div>
+                {title && <h3 className="text-base font-extrabold text-slate-900 tracking-tight">{title}</h3>}
+                {subtitle && <p className="text-xs text-slate-500 font-medium mt-0.5">{subtitle}</p>}
+              </div>
+              <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="px-6 py-5 overflow-y-auto">{children}</div>
+            {footer && <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 rounded-b-2xl flex justify-end gap-2">{footer}</div>}
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  )
+}
+
+// ── Field ──────────────────────────────────────────────────────────────────
+export function Field({ label, hint, children, className }) {
+  return (
+    <label className={cn('flex flex-col gap-1.5', className)}>
+      <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</span>
+      {children}
+      {hint && <span className="text-[10px] text-slate-400 font-medium">{hint}</span>}
+    </label>
+  )
+}
+
+export const inputClass = 'w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0572B2]/20 focus:border-[#0572B2] transition'
+
+// ── ConfirmDialog ──────────────────────────────────────────────────────────
+export function ConfirmDialog({ open, onClose, onConfirm, title, message, confirmLabel = 'Confirm', danger = false }) {
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={title}
+      size="sm"
+      footer={
+        <>
+          <Btn variant="secondary" onClick={onClose}>Cancel</Btn>
+          <Btn variant={danger ? 'danger' : 'primary'} onClick={() => { onConfirm?.(); onClose?.() }}>{confirmLabel}</Btn>
+        </>
+      }
+    >
+      <p className="text-sm text-slate-600 leading-relaxed">{message}</p>
+    </Modal>
+  )
+}
+
+// ── Toast (simple, hook-less) ──────────────────────────────────────────────
+export function Toast({ open, onClose, message, tone = 'teal' }) {
+  useEffect(() => {
+    if (!open) return
+    const t = setTimeout(() => onClose?.(), 2400)
+    return () => clearTimeout(t)
+  }, [open, onClose])
+  const tones = {
+    teal: 'bg-[#0BB592]',
+    blue: 'bg-[#0572B2]',
+    pink: 'bg-[#F55486]',
+    slate: 'bg-slate-900',
+  }
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 20, opacity: 0 }}
+          className={cn('fixed bottom-6 right-6 z-[100] text-white rounded-xl px-4 py-3 shadow-xl text-sm font-bold', tones[tone])}
+        >
+          {message}
+        </motion.div>
+      )}
+    </AnimatePresence>
   )
 }
 
