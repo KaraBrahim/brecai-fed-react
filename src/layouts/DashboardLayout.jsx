@@ -158,6 +158,7 @@ function useIsDesktop() {
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [testMode, setTestMode] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
   const isDesktop = useIsDesktop()
@@ -209,30 +210,61 @@ export default function DashboardLayout() {
           </button>
         </div>
 
-        {/* Module switcher */}
-        <div className="px-3 pt-3 pb-2 border-b border-slate-100 shrink-0">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 px-1">Module</p>
-          <div className="grid grid-cols-2 gap-1">
-            {topNav.map(({ label, path, icon: Icon }) => {
-              const active = location.pathname.startsWith(path)
-              return (
-                <NavLink
-                  key={path}
-                  to={path}
-                  className={cn(
-                    'flex flex-col items-center gap-1 py-2 rounded-xl text-[11px] font-bold transition-all duration-200',
-                    active
-                      ? 'bg-[#0572B2] text-white shadow-md'
-                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
-                  )}
-                >
-                  <Icon className="w-4 h-4" />
-                  {label}
-                </NavLink>
-              )
-            })}
+        {/* Test Mode Toggle */}
+        <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/30 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className={cn("w-3.5 h-3.5 transition-colors", testMode ? "text-[#0BB592]" : "text-slate-400")} />
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Test Mode</span>
           </div>
+          <button
+            onClick={() => setTestMode(!testMode)}
+            className={cn(
+              "relative w-9 h-5 rounded-full transition-colors duration-300 focus:outline-none shadow-inner",
+              testMode ? "bg-[#0BB592]" : "bg-slate-200"
+            )}
+          >
+            <motion.div
+              animate={{ x: testMode ? 18 : 2 }}
+              initial={false}
+              className="absolute top-1 left-0 w-3 h-3 bg-white rounded-full shadow-md"
+              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+            />
+          </button>
         </div>
+
+        <AnimatePresence>
+          {testMode && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              className="px-3 pt-3 pb-2 border-b border-slate-100 shrink-0 overflow-hidden"
+            >
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 px-1">Module Switcher</p>
+              <div className="grid grid-cols-2 gap-1">
+                {topNav.map(({ label, path, icon: Icon }) => {
+                  const active = location.pathname.startsWith(path)
+                  return (
+                    <NavLink
+                      key={path}
+                      to={path}
+                      className={cn(
+                        'flex flex-col items-center gap-1 py-2 rounded-xl text-[11px] font-bold transition-all duration-200',
+                        active
+                          ? 'bg-[#0572B2] text-white shadow-md'
+                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                      )}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {label}
+                    </NavLink>
+                  )
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Page links */}
         <nav className="flex-1 overflow-y-auto scrollbar-none py-3 px-3 space-y-0.5">

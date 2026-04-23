@@ -17,7 +17,7 @@ import { usePatientStore } from '@/stores/patientStore'
 
 const StatusBadge = ({ status }) => ({
   confirmed:  <Badge color="teal">Confirmed</Badge>,
-  pending:    <Badge color="amber">Pending Review</Badge>,
+  pending:    <Badge color="amber">Pending</Badge>,
   overridden: <Badge color="blue">Modified</Badge>,
 }[status] || <Badge color="slate">{status}</Badge>)
 
