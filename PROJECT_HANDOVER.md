@@ -21,7 +21,7 @@
 - `src/styles/globals.css`: Core design system and Tailwind 4 config.
 
 ## 🎨 Design System
-- **Density**: "God Mode" information density for clinical efficiency.
+- **Density**: "God Mode" information density for clinical 
 - **Aesthetics**: Glassmorphism, clinical gradients, and subtle blurs.
 - **Navigation**: Sidebar-centric navigation with breadcrumbs and role-switching capabilities.
 
