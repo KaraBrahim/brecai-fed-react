@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { CreditCard, RefreshCcw, AlertTriangle, TrendingUp } from 'lucide-react'
-import { AdminHero, MetricTile, DataTable, StatusPill } from '@/components/admin'
+import { CalendarHero, MetricTile, DataTable, StatusPill } from '@/components/admin'
 import { Btn, stagger } from '@/components/shared'
 import { seedSubscriptions } from '@/lib/adminSeed'
 
@@ -30,12 +30,11 @@ export default function SubscriptionTracker() {
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show">
-      <AdminHero
-        eyebrow="Financials"
+      <CalendarHero
+        eyebrow="Financials · Renewal Calendar"
         title="Subscription Tracker"
         subtitle="Recurring revenue, seat utilization, billing cadence and renewal pipeline across every customer."
         icon={CreditCard}
-        accent="teal"
         stats={[
           { label: 'Subscriptions', value: stats.total },
           { label: 'Active',        value: stats.active },
@@ -44,7 +43,7 @@ export default function SubscriptionTracker() {
         ]}
       >
         <Btn variant="primary"><RefreshCcw className="w-4 h-4" /> Sync billing</Btn>
-      </AdminHero>
+      </CalendarHero>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <MetricTile label="Active subs"   value={stats.active}                     sub="Paying customers"   icon={CreditCard} color="teal" />

@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { Brain, Zap, Layers, Activity, Rocket, Archive, Beaker } from 'lucide-react'
-import { AdminHero, MetricTile, DataTable, StatusPill } from '@/components/admin'
+import { CircuitHero, MetricTile, DataTable, StatusPill } from '@/components/admin'
 import { Btn, stagger } from '@/components/shared'
 import { seedModels } from '@/lib/adminSeed'
 
@@ -56,12 +56,11 @@ export default function AIModelRegistry() {
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show">
-      <AdminHero
-        eyebrow="AI & Infrastructure"
+      <CircuitHero
+        eyebrow="AI · Model Mesh"
         title="AI Model Registry"
         subtitle="Catalog of every trained, staged and production-promoted model. Track lineage, accuracy and federated rollout."
         icon={Brain}
-        accent="pink"
         stats={[
           { label: 'Models',       value: stats.total },
           { label: 'In production', value: stats.production },
@@ -71,7 +70,7 @@ export default function AIModelRegistry() {
       >
         <Btn variant="primary"><Rocket className="w-4 h-4" /> Promote model</Btn>
         <Btn variant="secondary"><Beaker className="w-4 h-4" /> New experiment</Btn>
-      </AdminHero>
+      </CircuitHero>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <MetricTile label="Production"   value={stats.production} sub="Live serving"      icon={Rocket} color="teal" />

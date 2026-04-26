@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { Brain, Activity, CheckCircle2, Cpu } from 'lucide-react'
-import { AdminHero, MetricTile, DataTable, StatusPill } from '@/components/admin'
+import { NeuralHero, MetricTile, DataTable, StatusPill } from '@/components/admin'
 import { stagger } from '@/components/shared'
 import { seedPredictions } from '@/lib/adminSeed'
 
@@ -38,12 +38,11 @@ export default function PredictionAudit() {
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show">
-      <AdminHero
-        eyebrow="Clinical Data"
+      <NeuralHero
+        eyebrow="Inference · Neural Audit"
         title="AI Prediction Audit"
         subtitle="Every inference produced by BRECAI-FED is logged and traceable, with model lineage and clinician verdicts."
         icon={Brain}
-        accent="pink"
         stats={[
           { label: 'Predictions', value: stats.total },
           { label: 'Avg conf.',   value: `${stats.avgConf}%` },

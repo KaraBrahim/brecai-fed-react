@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { FileText, AlertTriangle, ClipboardCheck, Microscope } from 'lucide-react'
-import { AdminHero, MetricTile, DataTable, StatusPill } from '@/components/admin'
+import { LabHero, MetricTile, DataTable, StatusPill } from '@/components/admin'
 import { Btn, stagger } from '@/components/shared'
 import { seedExaminations } from '@/lib/adminSeed'
 
@@ -32,12 +32,11 @@ export default function ExaminationAudit() {
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show">
-      <AdminHero
-        eyebrow="Clinical Data"
+      <LabHero
+        eyebrow="Clinical Data · Live Scan"
         title="Examination Audit"
         subtitle="Every IHC, mammography, histology and genomic assay submitted to BRECAI-FED is auditable here."
         icon={Microscope}
-        accent="dark"
         stats={[
           { label: 'Total',     value: stats.total },
           { label: 'Completed', value: stats.completed },
@@ -46,7 +45,7 @@ export default function ExaminationAudit() {
         ]}
       >
         <Btn variant="primary"><ClipboardCheck className="w-4 h-4" /> Review queue</Btn>
-      </AdminHero>
+      </LabHero>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <MetricTile label="Examinations"    value={stats.total}      sub="All time"     icon={FileText} color="blue" />

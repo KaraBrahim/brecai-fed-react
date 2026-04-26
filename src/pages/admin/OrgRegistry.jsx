@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { Building2, Plus, Edit3, Trash2, Globe2, Users, MapPin, Server } from 'lucide-react'
-import { AdminHero, MetricTile, DataTable, StatusPill } from '@/components/admin'
+import { MapHero, MetricTile, DataTable, StatusPill } from '@/components/admin'
 import { Btn, Modal, Field, inputClass, ConfirmDialog, Toast, stagger } from '@/components/shared'
 import { seedOrgs } from '@/lib/adminSeed'
 
@@ -74,12 +74,15 @@ export default function OrgRegistry() {
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show">
-      <AdminHero
+      <MapHero
         eyebrow="Identity & Access"
         title="Organizations"
         subtitle="Hospitals, research institutes and clinics participating in the federated network."
         icon={Building2}
-        accent="teal"
+        pins={[
+          { x: 140, y: 90 }, { x: 240, y: 110 }, { x: 320, y: 70 }, { x: 420, y: 130 },
+          { x: 520, y: 90 }, { x: 600, y: 150 }, { x: 700, y: 110 }, { x: 380, y: 175 },
+        ]}
         stats={[
           { label: 'Active',   value: stats.active,   sub: `${stats.trial} trial` },
           { label: 'Sites',    value: stats.sites,    sub: 'federated' },
@@ -89,7 +92,7 @@ export default function OrgRegistry() {
       >
         <Btn variant="primary" onClick={openNew}><Plus className="w-4 h-4" /> Add organization</Btn>
         <Btn variant="secondary" onClick={() => showToast('Directory exported', 'blue')}><Globe2 className="w-4 h-4" /> Export directory</Btn>
-      </AdminHero>
+      </MapHero>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <MetricTile label="Organizations" value={stats.total} sub="Including trials" icon={Building2} color="blue" />

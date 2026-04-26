@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { Receipt, Download, RefreshCcw, AlertTriangle, CheckCircle2 } from 'lucide-react'
-import { AdminHero, MetricTile, DataTable, StatusPill } from '@/components/admin'
+import { ReceiptHero, MetricTile, CoinTile, DataTable, StatusPill } from '@/components/admin'
 import { Btn, stagger } from '@/components/shared'
 import { seedPayments } from '@/lib/adminSeed'
 
@@ -38,12 +38,11 @@ export default function PaymentHistory() {
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show">
-      <AdminHero
-        eyebrow="Financials"
+      <ReceiptHero
+        eyebrow="Financials · Live Ledger"
         title="Payment History"
         subtitle="Full ledger of charges, refunds and outstanding balances across all paying customers."
         icon={Receipt}
-        accent="blue"
         stats={[
           { label: 'Transactions', value: stats.total },
           { label: 'Paid',         value: stats.paid },
@@ -53,10 +52,10 @@ export default function PaymentHistory() {
       >
         <Btn variant="primary"><Download className="w-4 h-4" /> Export ledger</Btn>
         <Btn variant="secondary"><RefreshCcw className="w-4 h-4" /> Retry failed</Btn>
-      </AdminHero>
+      </ReceiptHero>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <MetricTile label="Cleared revenue" value={`$${stats.revenue.toLocaleString()}`} sub="Net of refunds" icon={CheckCircle2} color="teal" />
+        <CoinTile label="Cleared revenue" value={stats.revenue.toLocaleString()} sub="Net of refunds" delta={18} />
         <MetricTile label="Failed amount" value={`$${stats.failedAmt.toLocaleString()}`} sub="Pending retry" icon={AlertTriangle} color="pink" />
         <MetricTile label="Refunded" value={stats.refunded} sub="This period" icon={RefreshCcw} color="amber" />
         <MetricTile label="Avg invoice" value={`$${Math.round(stats.revenue / Math.max(1, stats.paid)).toLocaleString()}`} sub="Per transaction" icon={Receipt} color="blue" />

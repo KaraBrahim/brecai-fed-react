@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { FileText, ShieldAlert, Activity, Download, Eye } from 'lucide-react'
-import { AdminHero, MetricTile, DataTable, StatusPill } from '@/components/admin'
+import { TerminalHero, MetricTile, DataTable, StatusPill } from '@/components/admin'
 import { Btn, stagger } from '@/components/shared'
 import { seedAuditLogs } from '@/lib/adminSeed'
 
@@ -43,12 +43,11 @@ export default function AuditLogs() {
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show">
-      <AdminHero
-        eyebrow="AI & Infrastructure"
-        title="Audit Logs"
-        subtitle="Immutable, append-only ledger of every action across BRECAI-FED. SOC 2 & HIPAA-grade traceability."
+      <TerminalHero
+        eyebrow="brecai-fed:/var/log/audit"
+        title="audit --tail --follow"
+        subtitle="// Immutable, append-only ledger of every action across BRECAI-FED. SOC 2 & HIPAA-grade traceability."
         icon={ShieldAlert}
-        accent="dark"
         stats={[
           { label: 'Events',   value: stats.total },
           { label: 'Critical', value: stats.critical, sub: 'investigate' },
@@ -58,7 +57,7 @@ export default function AuditLogs() {
       >
         <Btn variant="primary" onClick={exportCSV}><Download className="w-4 h-4" /> Export ledger</Btn>
         <Btn variant="secondary"><Eye className="w-4 h-4" /> Live tail</Btn>
-      </AdminHero>
+      </TerminalHero>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <MetricTile label="Events (7d)" value={stats.total}    sub="Across platform" icon={FileText} color="blue" />

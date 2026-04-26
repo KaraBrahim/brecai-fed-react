@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { CreditCard, Check, Star, Edit3, Plus, Sparkles } from 'lucide-react'
-import { AdminHero, MetricTile, StatusPill } from '@/components/admin'
+import { PremiumHero, MetricTile, StatusPill } from '@/components/admin'
 import { Btn, Modal, Field, inputClass, Toast, stagger } from '@/components/shared'
 import { seedPlans } from '@/lib/adminSeed'
 import { cn } from '@/lib/utils'
@@ -33,12 +33,11 @@ export default function PlansManager() {
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show">
-      <AdminHero
-        eyebrow="Financials"
+      <PremiumHero
+        eyebrow="Financials · Premium Tiers"
         title="Plans Manager"
         subtitle="Bold, modern subscription tiers offered to participating hospitals and research labs."
         icon={CreditCard}
-        accent="teal"
         stats={[
           { label: 'Plans',     value: plans.length },
           { label: 'Active',    value: totalActive,             sub: 'subscribed orgs' },
@@ -46,13 +45,13 @@ export default function PlansManager() {
           { label: 'Conversion',value: '64%',                   sub: 'trial → paid' },
         ]}
       >
-        <div className="inline-flex bg-white/10 border border-white/20 rounded-xl p-1">
+        <div className="inline-flex bg-amber-500/10 border border-amber-300/30 rounded-xl p-1">
           {['monthly', 'yearly'].map(b => (
-            <button key={b} onClick={() => setBilling(b)} className={cn('px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition', billing === b ? 'bg-white text-[#093A7A]' : 'text-white/80 hover:text-white')}>{b}</button>
+            <button key={b} onClick={() => setBilling(b)} className={cn('px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition', billing === b ? 'bg-amber-300 text-zinc-900 shadow-sm' : 'text-amber-200/90 hover:text-amber-100')}>{b}</button>
           ))}
         </div>
         <Btn variant="primary"><Plus className="w-4 h-4" /> New plan</Btn>
-      </AdminHero>
+      </PremiumHero>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <MetricTile label="Plans" value={plans.length} sub="Public + internal" icon={CreditCard} color="blue" />

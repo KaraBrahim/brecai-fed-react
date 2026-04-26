@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { Users, Download, ShieldAlert, FileText, Activity } from 'lucide-react'
-import { AdminHero, MetricTile, DataTable, StatusPill } from '@/components/admin'
+import { ClinicalHero, MetricTile, DataTable, StatusPill } from '@/components/admin'
 import { Btn, stagger } from '@/components/shared'
 import { usePatientStore } from '@/stores/patientStore'
 
@@ -52,12 +52,11 @@ export default function PatientRecords() {
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show">
-      <AdminHero
+      <ClinicalHero
         eyebrow="Clinical Data"
         title="Patient Records"
         subtitle="Read-only registry of every patient across the federation. Source of truth for downstream auditing and exports."
         icon={Users}
-        accent="dark"
         stats={[
           { label: 'Patients',    value: stats.total },
           { label: 'Luminal A',   value: stats.luminal,    sub: `${Math.round(stats.luminal/stats.total*100)}%` },
@@ -66,8 +65,8 @@ export default function PatientRecords() {
         ]}
       >
         <Btn variant="primary" onClick={exportCSV}><Download className="w-4 h-4" /> Export CSV</Btn>
-        <div className="px-3 py-2 rounded-xl bg-white/10 border border-white/20 text-[10px] font-black uppercase tracking-widest text-white flex items-center gap-1.5"><ShieldAlert className="w-3.5 h-3.5" /> PHI Protected</div>
-      </AdminHero>
+        <div className="px-3 py-2 rounded-xl bg-white border border-pink-200 text-[10px] font-black uppercase tracking-widest text-[#F55486] flex items-center gap-1.5 shadow-sm"><ShieldAlert className="w-3.5 h-3.5" /> PHI Protected</div>
+      </ClinicalHero>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <MetricTile label="Total patients" value={stats.total} sub="All sites" icon={Users} color="blue" />

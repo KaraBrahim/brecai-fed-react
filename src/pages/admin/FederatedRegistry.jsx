@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { Network, Server, Wifi, WifiOff, RefreshCcw, Globe2 } from 'lucide-react'
-import { AdminHero, MetricTile, DataTable, StatusPill } from '@/components/admin'
+import { AdminHero, PulseTile, DataTable, StatusPill } from '@/components/admin'
 import { Btn, SectionCard, stagger } from '@/components/shared'
 import { seedFederatedSites } from '@/lib/adminSeed'
 
@@ -72,10 +72,10 @@ export default function FederatedRegistry() {
       </AdminHero>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <MetricTile label="Online" value={`${stats.online}/${stats.total}`} sub="Healthy nodes" icon={Wifi} color="teal" />
-        <MetricTile label="Syncing" value={stats.syncing} sub="Mid-aggregation" icon={RefreshCcw} color="amber" />
-        <MetricTile label="Offline" value={stats.offline} sub="Need attention" icon={WifiOff} color="pink" />
-        <MetricTile label="Avg drift" value={stats.avgDrift} sub="L2 from global" icon={Network} color="blue" />
+        <PulseTile label="Online" value={`${stats.online}/${stats.total}`} sub="Healthy nodes" status="ok" />
+        <PulseTile label="Syncing" value={stats.syncing} sub="Mid-aggregation" status="warn" />
+        <PulseTile label="Offline" value={stats.offline} sub="Need attention" status="crit" />
+        <PulseTile label="Avg drift" value={stats.avgDrift} sub="L2 from global" status="info" />
       </div>
 
       <SectionCard title="Federation map" subtitle="High-level topology" icon={Globe2} iconColor="blue" className="mb-6">

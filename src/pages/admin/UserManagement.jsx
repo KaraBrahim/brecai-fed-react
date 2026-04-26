@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { Users, Plus, Trash2, Edit3, ShieldCheck, KeyRound, MailCheck, Filter } from 'lucide-react'
-import { AdminHero, MetricTile, DataTable, StatusPill, Avatar } from '@/components/admin'
+import { GlassHero, SparkTile, DataTable, StatusPill, Avatar } from '@/components/admin'
 import { Btn, Modal, Field, inputClass, ConfirmDialog, Toast, stagger } from '@/components/shared'
 import { seedUsers } from '@/lib/adminSeed'
 
@@ -78,12 +78,12 @@ export default function UserManagement() {
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show">
-      <AdminHero
+      <GlassHero
         eyebrow="Identity & Access"
         title="User Management"
         subtitle="Provision clinicians, instructors and platform staff. Govern roles, MFA, and access across every connected hospital."
         icon={Users}
-        accent="blue"
+        avatars={users.slice(0, 5).map(u => u.name)}
         stats={[
           { label: 'Total',     value: stats.total,     sub: 'all roles' },
           { label: 'Doctors',   value: stats.doctors,   sub: 'clinical' },
@@ -93,13 +93,13 @@ export default function UserManagement() {
       >
         <Btn variant="primary" onClick={openNew}><Plus className="w-4 h-4" /> Invite user</Btn>
         <Btn variant="secondary" onClick={() => showToast('CSV exported', 'blue')}><MailCheck className="w-4 h-4" /> Send digest</Btn>
-      </AdminHero>
+      </GlassHero>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <MetricTile label="Total users" value={stats.total} sub="All roles" icon={Users} color="blue" />
-        <MetricTile label="Active doctors" value={stats.doctors} sub="Clinical seats" icon={ShieldCheck} color="teal" />
-        <MetricTile label="Pending invites" value={stats.pending} sub="Awaiting accept" icon={MailCheck} color="amber" />
-        <MetricTile label="MFA enforced" value={`${Math.round(users.filter(u => u.mfa).length / users.length * 100)}%`} sub="Security posture" icon={ShieldCheck} color="pink" />
+        <SparkTile label="Total users" value={stats.total} sub="All roles" icon={Users} color="blue" trend={[3,4,4,6,7,8,10,11,12]} delta={18} />
+        <SparkTile label="Active doctors" value={stats.doctors} sub="Clinical seats" icon={ShieldCheck} color="teal" trend={[2,3,3,4,5,6,6,7,7]} delta={12} />
+        <SparkTile label="Pending invites" value={stats.pending} sub="Awaiting accept" icon={MailCheck} color="amber" trend={[0,1,2,2,3,2,1,1,1]} delta={-50} />
+        <SparkTile label="MFA enforced" value={`${Math.round(users.filter(u => u.mfa).length / users.length * 100)}%`} sub="Security posture" icon={ShieldCheck} color="pink" trend={[55,60,68,72,75,80,82,83,83]} delta={4} />
       </div>
 
       <DataTable
