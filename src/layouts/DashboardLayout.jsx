@@ -4,68 +4,70 @@ import {
   Stethoscope, Network, Building2, ShieldCheck,
   Bell, Settings, ChevronLeft, Menu, X,
   Activity, LayoutDashboard, Users, FileText,
-  CreditCard, Brain, BarChart3, ChevronDown
+  CreditCard, Brain, BarChart3, ChevronDown,
+  LogOut, User,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import logo from '@/assets/logo.png'
 import { cn } from '@/lib/utils'
+import { useAuthStore, ROLE_META, ROLE_HOME } from '@/stores/authStore'
 
 const doctorNav = [
-  { label: 'Insights', path: '/app/doctor', icon: Activity },
-  { label: 'Patients', path: '/app/doctor/patients', icon: Users },
-  { label: 'AI Prediction', path: '/app/doctor/predict', icon: Brain },
-  { label: 'Final Exam', path: '/app/doctor/exam', icon: FileText },
-  { label: 'Reports', path: '/app/doctor/reports', icon: BarChart3 },
-  { label: 'XAI Lab', path: '/app/doctor/xai', icon: Stethoscope },
+  { label: 'Insights',     path: '/app/doctor',          icon: Activity },
+  { label: 'Patients',     path: '/app/doctor/patients', icon: Users },
+  { label: 'AI Prediction',path: '/app/doctor/predict',  icon: Brain },
+  { label: 'Final Exam',   path: '/app/doctor/exam',     icon: FileText },
+  { label: 'Reports',      path: '/app/doctor/reports',  icon: BarChart3 },
+  { label: 'XAI Lab',      path: '/app/doctor/xai',      icon: Stethoscope },
 ]
 
 const instructorNav = [
-  { label: 'Training Console', path: '/app/instructor', icon: Network },
-  { label: 'Model Architect', path: '/app/instructor/architect', icon: Brain },
-  { label: 'Aggregation Logs', path: '/app/instructor/logs', icon: BarChart3 },
+  { label: 'Training Console', path: '/app/instructor',           icon: Network },
+  { label: 'Model Architect',  path: '/app/instructor/architect', icon: Brain },
+  { label: 'Aggregation Logs', path: '/app/instructor/logs',      icon: BarChart3 },
 ]
 
 const orgNav = [
-  { label: 'Team Roster', path: '/app/org', icon: Users },
-  { label: 'Site Compliance', path: '/app/org/compliance', icon: ShieldCheck },
+  { label: 'Team Roster',    path: '/app/org',            icon: Users },
+  { label: 'Site Compliance',path: '/app/org/compliance', icon: ShieldCheck },
 ]
 
 const adminNav = [
   { label: 'Overview', path: '/app/admin', icon: LayoutDashboard },
   {
     group: 'Identity & Access', items: [
-      { label: 'Users', path: '/app/admin/users', icon: Users },
-      { label: 'Organizations', path: '/app/admin/orgs', icon: Building2 },
+      { label: 'Users',         path: '/app/admin/users', icon: Users },
+      { label: 'Organizations', path: '/app/admin/orgs',  icon: Building2 },
     ]
   },
   {
     group: 'Clinical Data', items: [
-      { label: 'Patients', path: '/app/admin/patients', icon: Users },
-      { label: 'Examinations', path: '/app/admin/examinations', icon: FileText },
-      { label: 'Predictions', path: '/app/admin/predictions', icon: Activity },
+      { label: 'Patients',     path: '/app/admin/patients',      icon: Users },
+      { label: 'Examinations', path: '/app/admin/examinations',  icon: FileText },
+      { label: 'Predictions',  path: '/app/admin/predictions',   icon: Activity },
     ]
   },
   {
     group: 'Financials', items: [
-      { label: 'Plans', path: '/app/admin/plans', icon: CreditCard },
+      { label: 'Plans',         path: '/app/admin/plans',         icon: CreditCard },
       { label: 'Subscriptions', path: '/app/admin/subscriptions', icon: CreditCard },
-      { label: 'Payments', path: '/app/admin/payments', icon: CreditCard },
+      { label: 'Payments',      path: '/app/admin/payments',      icon: CreditCard },
     ]
   },
   {
     group: 'AI & Infrastructure', items: [
-      { label: 'AI Models', path: '/app/admin/models', icon: Brain },
-      { label: 'Fed. Registry', path: '/app/admin/federated', icon: Network },
-      { label: 'Audit Logs', path: '/app/admin/logs', icon: FileText },
+      { label: 'AI Models',    path: '/app/admin/models',    icon: Brain },
+      { label: 'Fed. Registry',path: '/app/admin/federated', icon: Network },
+      { label: 'Audit Logs',   path: '/app/admin/logs',      icon: FileText },
     ]
   },
 ]
 
 const topNav = [
-  { label: 'Doctor', path: '/app/doctor', icon: Stethoscope },
+  { label: 'Doctor',     path: '/app/doctor',     icon: Stethoscope },
   { label: 'Instructor', path: '/app/instructor', icon: Network },
-  { label: 'Org Mgmt', path: '/app/org', icon: Building2 },
-  { label: 'Admin', path: '/app/admin', icon: LayoutDashboard },
+  { label: 'Org Mgmt',   path: '/app/org',        icon: Building2 },
+  { label: 'Admin',      path: '/app/admin',      icon: LayoutDashboard },
 ]
 
 function NavGroup({ group, items }) {
@@ -110,7 +112,7 @@ function SideNavLink({ label, path, icon: Icon }) {
   return (
     <NavLink
       to={path}
-      end={path === '/app/doctor' || path === '/app/instructor' || path === '/app/org' || path === '/app/admin'}
+      end={['/app/doctor', '/app/instructor', '/app/org', '/app/admin'].includes(path)}
       className={({ isActive }) => cn(
         'group flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all duration-200 relative overflow-hidden',
         isActive
@@ -138,13 +140,12 @@ function SideNavLink({ label, path, icon: Icon }) {
 
 function buildSideNav(location) {
   const p = location.pathname
-  if (p.startsWith('/app/admin')) return { nav: adminNav, grouped: true }
+  if (p.startsWith('/app/admin'))      return { nav: adminNav,      grouped: true }
   if (p.startsWith('/app/instructor')) return { nav: instructorNav, grouped: false }
-  if (p.startsWith('/app/org')) return { nav: orgNav, grouped: false }
+  if (p.startsWith('/app/org'))        return { nav: orgNav,        grouped: false }
   return { nav: doctorNav, grouped: false }
 }
 
-// Hook to detect desktop breakpoint reactively
 function useIsDesktop() {
   const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1024)
   useEffect(() => {
@@ -156,20 +157,74 @@ function useIsDesktop() {
   return isDesktop
 }
 
+function RoleBadge({ role }) {
+  const meta = ROLE_META[role] || ROLE_META.Platform
+  return (
+    <span
+      className="hidden sm:inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border"
+      style={{
+        background: `${meta.accent}14`,
+        color: meta.accent,
+        borderColor: `${meta.accent}30`,
+      }}
+    >
+      <span className="w-1.5 h-1.5 rounded-full" style={{ background: meta.accent }} />
+      {meta.badge}
+    </span>
+  )
+}
+
+function UserAvatar({ user, onClick, size = 9 }) {
+  const meta = ROLE_META[user?.role] || ROLE_META.Platform
+  return (
+    <motion.button
+      onClick={onClick}
+      whileHover={{ scale: 1.06 }}
+      whileTap={{ scale: 0.96 }}
+      title={user?.name || 'Guest'}
+      className={`w-${size} h-${size} rounded-xl flex items-center justify-center text-white text-xs font-bold shadow-sm cursor-pointer shrink-0`}
+      style={{
+        background: `linear-gradient(135deg, ${meta.gradFrom}, ${meta.gradTo})`,
+      }}
+    >
+      {user?.initials || <User className="w-4 h-4" />}
+    </motion.button>
+  )
+}
+
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [testMode, setTestMode] = useState(false)
+  const [showUserMenu, setShowUserMenu] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
   const isDesktop = useIsDesktop()
   const { nav, grouped } = buildSideNav(location)
+  const { user, loginAs, logout } = useAuthStore()
+
+  // Soft redirect to login if no user
+  useEffect(() => {
+    if (!user) navigate('/auth', { replace: true })
+  }, [user])
 
   // Close mobile sidebar on route change
   useEffect(() => {
     setSidebarOpen(false)
+    setShowUserMenu(false)
   }, [location.pathname])
 
   const sidebarVisible = isDesktop || sidebarOpen
+  const meta = ROLE_META[user?.role] || ROLE_META.Platform
+
+  function handleLogout() {
+    logout()
+    navigate('/auth', { replace: true })
+  }
+
+  function handleSwitchRole(role) {
+    loginAs(role)
+    navigate(ROLE_HOME[role] || '/app/doctor', { replace: true })
+  }
 
   return (
     <div className="min-h-screen flex bg-transparent font-sans">
@@ -184,6 +239,11 @@ export default function DashboardLayout() {
           />
         )}
       </AnimatePresence>
+
+      {/* User menu overlay dismiss */}
+      {showUserMenu && (
+        <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
+      )}
 
       {/* ── Sidebar ── */}
       <motion.aside
@@ -202,10 +262,7 @@ export default function DashboardLayout() {
               BRECAI<span className="text-[#0BB592]">FED</span>
             </span>
           </div>
-          <button
-            onClick={() => setSidebarOpen(false)}
-            className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-slate-700"
-          >
+          <button onClick={() => setSidebarOpen(false)} className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-slate-700">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -213,21 +270,18 @@ export default function DashboardLayout() {
         {/* Test Mode Toggle */}
         <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/30 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
-            <ShieldCheck className={cn("w-3.5 h-3.5 transition-colors", testMode ? "text-[#0BB592]" : "text-slate-400")} />
+            <ShieldCheck className={cn('w-3.5 h-3.5 transition-colors', testMode ? 'text-[#0BB592]' : 'text-slate-400')} />
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Test Mode</span>
           </div>
           <button
             onClick={() => setTestMode(!testMode)}
-            className={cn(
-              "relative w-9 h-5 rounded-full transition-colors duration-300 focus:outline-none shadow-inner",
-              testMode ? "bg-[#0BB592]" : "bg-slate-200"
-            )}
+            className={cn('relative w-9 h-5 rounded-full transition-colors duration-300 focus:outline-none shadow-inner', testMode ? 'bg-[#0BB592]' : 'bg-slate-200')}
           >
             <motion.div
               animate={{ x: testMode ? 18 : 2 }}
               initial={false}
               className="absolute top-1 left-0 w-3 h-3 bg-white rounded-full shadow-md"
-              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              transition={{ type: 'spring', stiffness: 500, damping: 30 }}
             />
           </button>
         </div>
@@ -241,24 +295,25 @@ export default function DashboardLayout() {
               transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
               className="px-3 pt-3 pb-2 border-b border-slate-100 shrink-0 overflow-hidden"
             >
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 px-1">Module Switcher</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 px-1">Switch Role</p>
               <div className="grid grid-cols-2 gap-1">
                 {topNav.map(({ label, path, icon: Icon }) => {
+                  const role = label === 'Doctor' ? 'Doctor' : label === 'Instructor' ? 'Instructor' : label === 'Org Mgmt' ? 'Org Admin' : 'Platform'
                   const active = location.pathname.startsWith(path)
+                  const m = ROLE_META[role] || ROLE_META.Platform
                   return (
-                    <NavLink
+                    <button
                       key={path}
-                      to={path}
+                      onClick={() => handleSwitchRole(role)}
                       className={cn(
                         'flex flex-col items-center gap-1 py-2 rounded-xl text-[11px] font-bold transition-all duration-200',
-                        active
-                          ? 'bg-[#0572B2] text-white shadow-md'
-                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                        active ? 'text-white shadow-md' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
                       )}
+                      style={active ? { background: `linear-gradient(135deg, ${m.gradFrom}, ${m.gradTo})` } : {}}
                     >
                       <Icon className="w-4 h-4" />
                       {label}
-                    </NavLink>
+                    </button>
                   )
                 })}
               </div>
@@ -278,37 +333,50 @@ export default function DashboardLayout() {
           }
         </nav>
 
-        {/* Back to landing */}
-        <div className="p-3 border-t border-slate-100 shrink-0">
+        {/* User profile section */}
+        <div className="p-3 border-t border-slate-100 shrink-0 space-y-1">
+          {user && (
+            <div
+              className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer group"
+              onClick={() => navigate('/')}
+            >
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0"
+                style={{ background: `linear-gradient(135deg, ${meta.gradFrom}, ${meta.gradTo})` }}
+              >
+                {user.initials}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-slate-800 truncate">{user.name}</p>
+                <p className="text-[10px] font-medium text-slate-400 truncate">{user.org}</p>
+              </div>
+            </div>
+          )}
           <button
-            onClick={() => navigate('/')}
-            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-all duration-200 group"
+            onClick={handleLogout}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-semibold text-slate-500 hover:bg-red-50 hover:text-red-600 transition-all duration-200 group"
           >
-            <ChevronLeft className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors group-hover:-translate-x-0.5" />
-            Back to Landing
+            <LogOut className="w-4 h-4 text-slate-400 group-hover:text-red-500 transition-colors" />
+            Sign out
           </button>
         </div>
       </motion.aside>
 
-      {/* ── Main Content — offset by sidebar width on desktop ── */}
-      <div className={cn(
-        'flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300',
-        isDesktop ? 'ml-64' : 'ml-0'
-      )}>
+      {/* ── Main Content ── */}
+      <div className={cn('flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300', isDesktop ? 'ml-64' : 'ml-0')}>
         {/* Topbar */}
         <header className="h-16 bg-white/80 backdrop-blur-xl border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 shrink-0 z-30 sticky top-0">
           <div className="flex items-center gap-3">
-            {/* Show hamburger on mobile, or on desktop if you want a collapse toggle */}
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="lg:hidden p-2 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors"
-            >
+            <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors">
               <Menu className="w-5 h-5" />
             </button>
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Active status pill */}
+            {/* Role badge */}
+            {user && <RoleBadge role={user.role} />}
+
+            {/* System status */}
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-teal-50 border border-teal-200">
               <span className="w-2 h-2 rounded-full bg-[#0BB592] animate-pulse" />
               <span className="text-[10px] font-black uppercase tracking-widest text-teal-700">System Active</span>
@@ -323,8 +391,51 @@ export default function DashboardLayout() {
               <Settings className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
             </button>
 
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#093A7A] via-[#0572B2] to-[#0BB592] flex items-center justify-center text-white text-xs font-bold shadow-sm cursor-pointer hover:scale-105 transition-transform">
-              DR
+            {/* User avatar + dropdown */}
+            <div className="relative">
+              <UserAvatar user={user} onClick={() => setShowUserMenu(v => !v)} />
+
+              <AnimatePresence>
+                {showUserMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                    transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                    className="absolute right-0 top-11 z-50 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden"
+                  >
+                    {/* User info */}
+                    <div className="px-4 py-3 border-b border-slate-100">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0"
+                          style={{ background: `linear-gradient(135deg, ${meta.gradFrom}, ${meta.gradTo})` }}
+                        >
+                          {user?.initials}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-slate-900 truncate">{user?.name}</p>
+                          <p className="text-[10px] text-slate-400 font-medium truncate">{user?.email}</p>
+                        </div>
+                      </div>
+                      <div className="mt-2">
+                        <RoleBadge role={user?.role} />
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="p-2">
+                      <button
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-red-50 hover:text-red-600 transition-all duration-200 group"
+                      >
+                        <LogOut className="w-4 h-4 text-slate-400 group-hover:text-red-500 transition-colors" />
+                        Sign out
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </header>
