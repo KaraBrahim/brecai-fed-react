@@ -44,12 +44,24 @@ export const DEMO_ACCOUNTS = [
   },
 ]
 
+export const DEMO_ORGS = [
+  { id: 1, name: 'CHU Oran',           city: 'Oran',          type: 'hospital' },
+  { id: 2, name: 'CHU Algiers',        city: 'Algiers',       type: 'hospital' },
+  { id: 3, name: 'CHU Constantine',    city: 'Constantine',   type: 'hospital' },
+  { id: 4, name: 'USTHB Research',     city: 'Algiers',       type: 'laboratory' },
+  { id: 5, name: 'CHU Tlemcen',        city: 'Tlemcen',       type: 'hospital' },
+  { id: 6, name: 'CHU Annaba',         city: 'Annaba',        type: 'hospital' },
+  { id: 7, name: 'CHU Batna',          city: 'Batna',         type: 'hospital' },
+  { id: 8, name: 'Clinique Es-Salam',  city: 'Setif',         type: 'clinic' },
+  { id: 9, name: 'Centre de Radiologie Oran', city: 'Oran',   type: 'radiology_center' },
+]
+
 export const ROLE_HOME = {
-  Doctor: '/app/doctor',
+  Doctor:     '/app/doctor',
   Instructor: '/app/instructor',
-  'Org Admin': '/app/org',
-  Platform: '/app/admin',
-  Support: '/app/admin',
+  'Org Admin':'/app/org',
+  Platform:   '/app/admin',
+  Support:    '/app/admin',
 }
 
 export const ROLE_META = {
@@ -90,30 +102,79 @@ export const ROLE_META = {
   },
 }
 
+function genOtp() {
+  return String(Math.floor(100000 + Math.random() * 900000))
+}
+
+function makeInitials(name) {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('')
+}
+
 export const useAuthStore = create(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
-      login: (email, password) => {
+      pendingUser: null,
+      pendingOtp: null,
+
+      // Step 1 of sign-in: validate creds, set pending + OTP
+      requestOtp: (email, password) => {
         const found = DEMO_ACCOUNTS.find(
-          u =>
-            u.email.toLowerCase() === email.toLowerCase() &&
-            u.password === password
+          u => u.email.toLowerCase() === email.toLowerCase() && u.password === password
         )
         if (!found)
-          return { ok: false, error: 'Invalid credentials. All demo passwords are "demo".' }
-        const { password: _p, ...user } = found
-        set({ user })
-        return { ok: true, user }
+          return { ok: false, error: 'Invalid email or password. Demo password is "demo".' }
+        const otp = genOtp()
+        const { password: _p, ...pending } = found
+        set({ pendingUser: pending, pendingOtp: otp })
+        return { ok: true, email: found.email, otp }
       },
+
+      // Step 2 of sign-in / sign-up: verify OTP
+      verifyOtp: (code) => {
+        const { pendingUser, pendingOtp } = get()
+        if (!pendingUser || !pendingOtp)
+          return { ok: false, error: 'Session expired. Please start again.' }
+        if (code.trim() !== pendingOtp)
+          return { ok: false, error: 'Incorrect code. Try again.' }
+        set({ user: pendingUser, pendingUser: null, pendingOtp: null })
+        return { ok: true, user: pendingUser }
+      },
+
+      // Begin sign-up: store pending user + OTP
+      register: (formData) => {
+        const otp = genOtp()
+        const roleKey = formData.api_role === 'org_manager' ? 'Org Admin' : 'Doctor'
+        const orgLabel =
+          formData.organization_name ||
+          DEMO_ORGS.find(o => String(o.id) === String(formData.organization_id))?.name ||
+          'My Organization'
+        const user = {
+          id: 'REG-' + Date.now(),
+          name: formData.name,
+          email: formData.email,
+          role: roleKey,
+          org: orgLabel,
+          initials: makeInitials(formData.name),
+          specialty:
+            roleKey === 'Org Admin'
+              ? 'Site Management · Compliance'
+              : 'Oncology · Breast Cancer',
+        }
+        set({ pendingUser: user, pendingOtp: otp })
+        return { ok: true, email: formData.email, otp }
+      },
+
+      // One-click demo login (bypasses OTP for test mode)
       loginAs: (role) => {
         const found = DEMO_ACCOUNTS.find(u => u.role === role)
         if (!found) return null
         const { password: _p, ...user } = found
-        set({ user })
+        set({ user, pendingUser: null, pendingOtp: null })
         return user
       },
-      logout: () => set({ user: null }),
+
+      logout: () => set({ user: null, pendingUser: null, pendingOtp: null }),
     }),
     { name: 'brecai-auth' }
   )

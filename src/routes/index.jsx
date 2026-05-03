@@ -9,6 +9,7 @@ import LandingPage from '@/pages/landing/LandingPage'
 
 // Auth
 import LoginPage from '@/pages/auth/LoginPage'
+import SignUpPage from '@/pages/auth/SignUpPage'
 
 // Doctor
 import DoctorInsights from '@/pages/doctor/DoctorInsights'
@@ -51,6 +52,7 @@ export const router = createBrowserRouter([
     element: <AuthLayout />,
     children: [
       { index: true, element: <LoginPage /> },
+      { path: 'signup', element: <SignUpPage /> },
     ],
   },
   {

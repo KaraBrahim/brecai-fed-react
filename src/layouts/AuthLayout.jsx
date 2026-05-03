@@ -244,9 +244,25 @@ export default function AuthLayout() {
       {/* ── Right login panel ── */}
       <main className="w-full lg:w-[52%] flex flex-col justify-center px-6 sm:px-12 md:px-16 py-12 bg-white relative overflow-y-auto">
         {/* Top nav */}
-        <div className="absolute top-6 right-6 flex items-center gap-4 text-sm font-semibold">
+        <div className="absolute top-6 right-6 flex items-center gap-3 text-sm font-semibold">
           <NavLink to="/" className="text-slate-400 hover:text-[#0572B2] transition-colors text-xs font-bold uppercase tracking-widest">Platform</NavLink>
-          <NavLink to="/auth" className="text-[#0572B2] border-b-2 border-[#0572B2] pb-0.5 text-xs font-bold uppercase tracking-widest">Sign In</NavLink>
+          <NavLink
+            to="/auth"
+            end
+            className={({ isActive }) =>
+              isActive
+                ? 'text-[#0572B2] border-b-2 border-[#0572B2] pb-0.5 text-xs font-bold uppercase tracking-widest'
+                : 'text-slate-400 hover:text-[#0572B2] transition-colors text-xs font-bold uppercase tracking-widest'
+            }
+          >Sign In</NavLink>
+          <NavLink
+            to="/auth/signup"
+            className={({ isActive }) =>
+              isActive
+                ? 'text-[#0BB592] border-b-2 border-[#0BB592] pb-0.5 text-xs font-bold uppercase tracking-widest'
+                : 'text-slate-400 hover:text-[#0BB592] transition-colors text-xs font-bold uppercase tracking-widest'
+            }
+          >Sign Up</NavLink>
         </div>
 
         {/* Mobile logo */}
