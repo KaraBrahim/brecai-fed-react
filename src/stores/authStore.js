@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import api from '@/lib/api'
 import { ROLE_HOME_MAP } from '@/enums/roles'
+import log from '@/lib/logger'
 
 /* ── Demo data (preserved for quick-access UI) ─────────────── */
 export const DEMO_ACCOUNTS = [
@@ -118,112 +119,130 @@ export const useAuthStore = create(
       userRole: () => resolveUserRole(get().user),
 
       /* ── fetchUser ────────────────────────────────────── */
-      // Mirrors Vue: tries real API first, falls back gracefully.
       fetchUser: async () => {
+        log.info('AUTH', 'fetchUser → attempting GET /api/user ...')
         try {
           const data = await api.get('/api/user')
+          log.info('AUTH', `fetchUser ✓ — authenticated as "${data?.name}" [${resolveUserRole(data)}]`)
           set({ user: data, isAuthenticated: true, isInitialized: true })
-        } catch {
-          // No backend or not authenticated — check for a persisted demo user
+        } catch (err) {
+          log.warn('AUTH', `fetchUser ✗ — API unreachable or 401 (${err.message})`)
+
           const persisted = get().user
           if (persisted && get().isAuthenticated) {
+            log.info('AUTH', `fetchUser — using persisted session: "${persisted.name}" [${resolveUserRole(persisted)}] (demo/offline mode)`)
             set({ isInitialized: true })
           } else {
+            log.info('AUTH', 'fetchUser — no persisted session, setting guest state')
             set({ user: null, isAuthenticated: false, isInitialized: true })
           }
         }
       },
 
       /* ── login ────────────────────────────────────────── */
-      // Mirrors Vue auth store: POST /api/login → stores tempEmail → ready for OTP.
-      // Falls back to demo requestOtp logic if no backend is reachable.
       login: async (email, password) => {
+        log.info('AUTH', `login → "${email}"`)
         try {
+          log.debug('AUTH', 'login — fetching CSRF cookie ...')
           await api.getCsrf()
+          log.debug('AUTH', 'login — posting credentials to /api/login ...')
           await api.post('/api/login', { email, password })
           localStorage.setItem('temp_email', email)
           set({ tempEmail: email })
+          log.info('AUTH', `login ✓ — OTP sent to "${email}" (real API)`)
           return { ok: true, email }
-        } catch {
-          // Demo fallback
+        } catch (err) {
+          log.warn('AUTH', `login ✗ — API unavailable (${err.message}), falling back to demo mode`)
           return get()._demoRequestOtp(email, password)
         }
       },
 
       /* ── verifyOtp ────────────────────────────────────── */
-      // Mirrors Vue: POST /api/verify-otp → fetchUser → redirectBasedOnRole.
-      // Falls back to demo verification.
       verifyOtp: async (otp) => {
         const { tempEmail, _pendingOtp } = get()
+        log.info('AUTH', `verifyOtp → email="${tempEmail}" otp="${otp}"`)
 
         try {
+          log.debug('AUTH', 'verifyOtp — posting to /api/verify-otp ...')
           await api.post('/api/verify-otp', { email: tempEmail, otp })
           localStorage.removeItem('temp_email')
           set({ tempEmail: null, _pendingOtp: null, isInitialized: false })
+          log.info('AUTH', 'verifyOtp ✓ — fetching user from API ...')
           await get().fetchUser()
           const user = get().user
+          log.info('AUTH', `verifyOtp ✓ — session established for "${user?.name}" [${resolveUserRole(user)}]`)
           return { ok: true, user }
-        } catch {
-          // Demo fallback: verify locally
+        } catch (err) {
+          log.warn('AUTH', `verifyOtp ✗ — API unavailable (${err.message}), trying demo verification`)
+
           if (!tempEmail || !_pendingOtp) {
+            log.error('AUTH', 'verifyOtp demo ✗ — no pending OTP in state (session expired?)')
             return { ok: false, error: 'Session expired. Please start again.' }
           }
           if (otp.trim() !== _pendingOtp) {
+            log.warn('AUTH', `verifyOtp demo ✗ — wrong code (entered="${otp}", expected="${_pendingOtp}")`)
             return { ok: false, error: 'Incorrect code. Try again.' }
           }
-          // Find demo user and authenticate
           const found = DEMO_ACCOUNTS.find(
             u => u.email.toLowerCase() === tempEmail.toLowerCase()
           )
-          if (!found) return { ok: false, error: 'User not found.' }
+          if (!found) {
+            log.error('AUTH', `verifyOtp demo ✗ — no demo account for "${tempEmail}"`)
+            return { ok: false, error: 'User not found.' }
+          }
           const { password: _p, ...user } = found
           localStorage.removeItem('temp_email')
           set({ user, isAuthenticated: true, tempEmail: null, _pendingOtp: null })
+          log.info('AUTH', `verifyOtp demo ✓ — session established for "${user.name}" [${user.role}]`)
           return { ok: true, user }
         }
       },
 
-      /* ── redirectBasedOnRole ──────────────────────────── */
-      // Returns the correct path for the current user's role.
-      // Navigation itself is handled by the caller (components).
+      /* ── getRoleHome ──────────────────────────────────── */
       getRoleHome: () => {
         const role = get().userRole()
-        return ROLE_HOME[role] || '/app/doctor'
+        const home = ROLE_HOME[role] || '/app/doctor'
+        log.debug('AUTH', `getRoleHome → role="${role}" home="${home}"`)
+        return home
       },
 
       /* ── logout ───────────────────────────────────────── */
       logout: async () => {
+        log.info('AUTH', 'logout → calling /api/logout ...')
         try {
           await api.post('/api/logout')
-        } catch { /* ignore — always clear local state */ }
+          log.info('AUTH', 'logout ✓ — server session cleared')
+        } catch (err) {
+          log.warn('AUTH', `logout — API unavailable (${err.message}), clearing local state only`)
+        }
         localStorage.removeItem('temp_email')
-        set({
-          user:            null,
-          isAuthenticated: false,
-          tempEmail:       null,
-          _pendingOtp:     null,
-        })
+        set({ user: null, isAuthenticated: false, tempEmail: null, _pendingOtp: null })
+        log.info('AUTH', 'logout ✓ — local auth state cleared')
       },
 
       /* ── loginAs ──────────────────────────────────────── */
-      // Demo quick-access: bypasses OTP.
       loginAs: (role) => {
+        log.info('AUTH', `loginAs → role="${role}" (demo quick-access, bypassing OTP)`)
         const found = DEMO_ACCOUNTS.find(u => u.role === role)
-        if (!found) return null
+        if (!found) {
+          log.error('AUTH', `loginAs ✗ — no demo account for role "${role}"`)
+          return null
+        }
         const { password: _p, ...user } = found
         set({ user, isAuthenticated: true, tempEmail: null, _pendingOtp: null })
+        log.info('AUTH', `loginAs ✓ — signed in as "${user.name}" [${user.role}]`)
         return user
       },
 
       /* ── requestOtp (legacy UI compat) ───────────────── */
-      // Called directly by SignInForm before switching to the OTP view.
-      // In demo mode this is the primary login path.
       requestOtp: (email, password) => {
+        log.debug('AUTH', `requestOtp (legacy) → "${email}"`)
         return get()._demoRequestOtp(email, password)
       },
 
       /* ── register ─────────────────────────────────────── */
       register: (formData) => {
+        log.info('AUTH', `register → name="${formData.name}" email="${formData.email}"`)
         const otp = genOtp()
         const roleKey = formData.api_role === 'org_manager' ? 'org_manager' : 'doctor'
         const orgLabel =
@@ -244,26 +263,29 @@ export const useAuthStore = create(
         }
         localStorage.setItem('temp_email', formData.email)
         set({ tempEmail: formData.email, _pendingOtp: otp })
+        log.info('AUTH', `register ✓ — demo OTP generated: ${otp} (role: ${roleKey})`)
         return { ok: true, email: formData.email, otp }
       },
 
       /* ── Internal: demo OTP request ───────────────────── */
       _demoRequestOtp: (email, password) => {
+        log.debug('AUTH', `_demoRequestOtp → "${email}"`)
         const found = DEMO_ACCOUNTS.find(
           u => u.email.toLowerCase() === email.toLowerCase() && u.password === password
         )
         if (!found) {
+          log.warn('AUTH', `_demoRequestOtp ✗ — no match for "${email}" / "${password}"`)
           return { ok: false, error: 'Invalid email or password. Demo password is "demo".' }
         }
         const otp = genOtp()
         localStorage.setItem('temp_email', found.email)
         set({ tempEmail: found.email, _pendingOtp: otp })
+        log.info('AUTH', `_demoRequestOtp ✓ — OTP for "${found.email}": ${otp}`)
         return { ok: true, email: found.email, otp }
       },
     }),
     {
       name: 'brecai-auth',
-      // Only persist user identity; session flags are re-initialized on load
       partialize: (s) => ({
         user:            s.user,
         isAuthenticated: s.isAuthenticated,

@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuthStore } from '@/stores/authStore'
+import log from '@/lib/logger'
 
 function AppLoading() {
   return (
@@ -19,10 +20,18 @@ export default function RootLayout() {
   const { isInitialized, fetchUser } = useAuthStore()
 
   useEffect(() => {
-    fetchUser()
+    log.info('ROOT', 'App mounted — initialising auth state (fetchUser) ...')
+    fetchUser().then(() => {
+      const { isAuthenticated, userRole } = useAuthStore.getState()
+      log.info('ROOT', `Init complete — isAuthenticated=${isAuthenticated}, role="${userRole()}"`)
+    })
   }, [])
 
-  if (!isInitialized) return <AppLoading />
+  if (!isInitialized) {
+    log.debug('ROOT', 'Rendering loading spinner (isInitialized=false)')
+    return <AppLoading />
+  }
 
+  log.debug('ROOT', 'isInitialized=true — rendering app outlet')
   return <Outlet />
 }
