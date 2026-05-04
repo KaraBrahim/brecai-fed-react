@@ -25,17 +25,34 @@ Preferred communication style: Simple, everyday language.
 
 **Framework**: React 19 with Vite 8 as the build tool. The app uses ESM modules throughout.
 
-**Routing**: React Router DOM v7 with a centralized route configuration at `src/routes/index.jsx`. Routes are organized by user role:
-- `/doctor/*` → Doctor dashboard suite
-- `/instructor/*` → Federated training console
-- `/admin/*` → System administration
+**Routing**: React Router DOM v7 with a centralized route configuration at `src/routes/index.jsx`. A root `RootLayout` wrapper handles app initialization (mirrors Vue's `App.vue` onMounted fetchUser). Routes are organized by user role under `/app/*`:
+- `/app/doctor/*` → Doctor dashboard suite (requires `doctor` role)
+- `/app/instructor/*` → Federated training console (requires `instructor` role)
+- `/app/org/*` → Org Manager pages (requires `org_manager` role)
+- `/app/admin/*` → System administration (requires `admin` role)
+- `*` → CatchAll: authenticated → role home, guest → `/`
 
-**Layouts**: Two layout wrappers in `src/layouts/`:
-- `DashboardLayout` — sidebar navigation with role-based menu items and breadcrumbs
+**Route Guards** (`src/routes/guards.jsx`) — mirrors Vue Router's `beforeEach`:
+- `GuestOnly` — wraps `/auth` routes; authenticated users are redirected to their role home
+- `RequireAuth` — wraps `/app` routes; unauthenticated → `/auth`; wrong role → correct role home
+- `CatchAll` — 404 handler, redirects based on auth state
+
+**Role Enum** (`src/enums/roles.js`):
+- API role keys: `admin`, `org_manager`, `doctor`, `instructor`
+- `ROLE_HOME_MAP` maps both API keys and legacy display names to React paths
+
+**Layouts** (`src/layouts/`):
+- `RootLayout` — root wrapper; calls `fetchUser()` on mount, shows spinner while `!isInitialized`
+- `DashboardLayout` — sidebar navigation with role-based menu items
 - `AuthLayout` — login/registration wrapper
 
+**API Client** (`src/lib/api.js`):
+- Fetch-based API client with `credentials: 'include'` and CSRF cookie support
+- Base URL configurable via `VITE_API_URL` env variable
+- Used by auth store for real backend calls
+
 **State Management**: Zustand 5 with `persist` middleware (localStorage). Three main stores:
-- `src/stores/authStore.js` — Demo accounts, login state, role switching. Contains hardcoded DEMO_ACCOUNTS with passwords.
+- `src/stores/authStore.js` — Full Vue-parity auth logic: `isInitialized`, `isAuthenticated`, `tempEmail` (localStorage bridge), `userRole()` getter (reads `user.roles[0].name || user.role`), `fetchUser()`, `login()`, `verifyOtp()`, `logout()`, `redirectBasedOnRole()`. Tries real API first, falls back to demo mode gracefully.
 - `src/stores/patientStore.js` — Patient list with clinical biomarker data (ER, PR, HER2, Ki-67, tumor size, etc.)
 - `src/stores/reportStore.js` — Clinical reports with sign/draft status
 

@@ -202,10 +202,7 @@ export default function DashboardLayout() {
   const { nav, grouped } = buildSideNav(location)
   const { user, loginAs, logout } = useAuthStore()
 
-  // Soft redirect to login if no user
-  useEffect(() => {
-    if (!user) navigate('/auth', { replace: true })
-  }, [user])
+  // Soft redirect handled by RequireAuth guard — no need for manual effect
 
   // Close mobile sidebar on route change
   useEffect(() => {
@@ -216,14 +213,14 @@ export default function DashboardLayout() {
   const sidebarVisible = isDesktop || sidebarOpen
   const meta = ROLE_META[user?.role] || ROLE_META.Platform
 
-  function handleLogout() {
-    logout()
+  async function handleLogout() {
+    await logout()
     navigate('/auth', { replace: true })
   }
 
   function handleSwitchRole(role) {
-    loginAs(role)
-    navigate(ROLE_HOME[role] || '/app/doctor', { replace: true })
+    const user = loginAs(role)
+    if (user) navigate(ROLE_HOME[user.role] || '/app/doctor', { replace: true })
   }
 
   return (
@@ -298,7 +295,7 @@ export default function DashboardLayout() {
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 px-1">Switch Role</p>
               <div className="grid grid-cols-2 gap-1">
                 {topNav.map(({ label, path, icon: Icon }) => {
-                  const role = label === 'Doctor' ? 'Doctor' : label === 'Instructor' ? 'Instructor' : label === 'Org Mgmt' ? 'Org Admin' : 'Platform'
+                  const role = label === 'Doctor' ? 'doctor' : label === 'Instructor' ? 'instructor' : label === 'Org Mgmt' ? 'org_manager' : 'admin'
                   const active = location.pathname.startsWith(path)
                   const m = ROLE_META[role] || ROLE_META.Platform
                   return (

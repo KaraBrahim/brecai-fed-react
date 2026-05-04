@@ -518,11 +518,10 @@ function OtpStep({ email, demoOtp, onBack }) {
     if (code.length < 6) return
     setError('')
     setLoading(true)
-    await new Promise(r => setTimeout(r, 700))
-    const res = verifyOtp(code)
+    const res = await verifyOtp(code)
     setLoading(false)
     if (!res.ok) { setError(res.error); return }
-    navigate(ROLE_HOME[res.user.role] || '/app/org', { replace: true })
+    navigate(ROLE_HOME[res.user?.role] || '/app/doctor', { replace: true })
   }
 
   return (

@@ -7,6 +7,7 @@ import {
   Mail, Sparkles,
 } from 'lucide-react'
 import { useAuthStore, DEMO_ACCOUNTS, ROLE_HOME, ROLE_META } from '@/stores/authStore'
+import { RoleEnum } from '@/enums/roles'
 import { cn } from '@/lib/utils'
 
 /* ── OTP Input ──────────────────────────────────── */
@@ -81,7 +82,10 @@ function useCountdown(init = 60) {
 }
 
 /* ── Role quick-access card ─────────────────────── */
-const ROLE_ICONS = { Doctor: Stethoscope, Instructor: Network, 'Org Admin': Building2, Platform: ShieldCheck }
+const ROLE_ICONS = {
+  doctor: Stethoscope, instructor: Network, org_manager: Building2, admin: ShieldCheck,
+  Doctor: Stethoscope, Instructor: Network, 'Org Admin': Building2, Platform: ShieldCheck,
+}
 
 function QuickCard({ account, onClick, busy }) {
   const meta = ROLE_META[account.role] || ROLE_META.Platform
@@ -273,11 +277,10 @@ function OtpView({ email, demoOtp, onBack }) {
     if (code.length < 6) return
     setError('')
     setLoading(true)
-    await new Promise(r => setTimeout(r, 700))
-    const res = verifyOtp(code)
+    const res = await verifyOtp(code)
     setLoading(false)
     if (!res.ok) { setError(res.error); return }
-    navigate(ROLE_HOME[res.user.role] || '/app/doctor', { replace: true })
+    navigate(ROLE_HOME[res.user?.role] || '/app/doctor', { replace: true })
   }
 
   return (
