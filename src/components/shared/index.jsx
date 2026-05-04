@@ -145,7 +145,7 @@ export function Btn({ children, onClick, variant = 'primary', size = 'md', class
   )
 }
 
-// ── Modal ──────────────────────────────────────────────────────────────────
+
 export function Modal({ open, onClose, title, subtitle, children, size = 'md', footer }) {
   useEffect(() => {
     if (!open) return
@@ -197,7 +197,6 @@ export function Modal({ open, onClose, title, subtitle, children, size = 'md', f
   )
 }
 
-// ── Field ──────────────────────────────────────────────────────────────────
 export function Field({ label, hint, children, className }) {
   return (
     <label className={cn('flex flex-col gap-1.5', className)}>

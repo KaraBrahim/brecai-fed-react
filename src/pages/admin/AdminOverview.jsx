@@ -62,7 +62,7 @@ export default function AdminOverview() {
         icon={LayoutDashboard}
         accent="blue"
         stats={[
-          { label: 'MRR',          value: `$${stats.mrr.toLocaleString()}`, sub: '+18% MoM' },
+          { label: 'MRR',          value: ` DA${stats.mrr.toLocaleString()}`, sub: '+18% MoM' },
           { label: 'Active Orgs',  value: stats.activeOrgs,                 sub: `${seedOrgs.length} total` },
           { label: 'Live Sites',   value: `${stats.onlineSites}/${seedFederatedSites.length}`, sub: 'Federated' },
           { label: 'Flags',        value: stats.flaggedExams,                sub: 'Need review' },
@@ -81,7 +81,7 @@ export default function AdminOverview() {
         <MetricTile label="Total users"    value={stats.totalUsers}                          sub="Across all orgs"      icon={Users}     color="blue"  accent={{ label: 'New (30d)', value: '+4' }} />
         <MetricTile label="Predictions"    value={stats.totalPredictions.toLocaleString()}    sub="All-time inferences"  icon={Brain}     color="pink"  accent={{ label: 'Today',     value: '142' }} />
         <MetricTile label="Live sites"     value={`${stats.onlineSites}/${seedFederatedSites.length}`} sub="Federated nodes"  icon={Network} color="teal" accent={{ label: 'Round',     value: 'R-08' }} />
-        <MetricTile label="MRR"            value={`$${(stats.mrr / 1000).toFixed(1)}k`}      sub="Recurring revenue"    icon={CreditCard} color="amber" accent={{ label: 'Trend',     value: '+18%' }} />
+        <MetricTile label="MRR"            value={` DA${(stats.mrr / 1000).toFixed(1)}k`}      sub="Recurring revenue"    icon={CreditCard} color="amber" accent={{ label: 'Trend',     value: '+18%' }} />
       </div>
 
       {/* Charts row */}
@@ -98,7 +98,7 @@ export default function AdminOverview() {
                 </defs>
                 <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="m" tick={{ fontSize: 11, fontWeight: 700, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fontWeight: 700, fill: '#64748b' }} axisLine={false} tickLine={false} tickFormatter={v => `$${v/1000}k`} />
+                <YAxis tick={{ fontSize: 11, fontWeight: 700, fill: '#64748b' }} axisLine={false} tickLine={false} tickFormatter={v => ` DA${v/1000}k`} />
                 <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 12, fontWeight: 700 }} />
                 <Area type="monotone" dataKey="r" stroke="#0572B2" strokeWidth={3} fill="url(#revGrad)" />
               </AreaChart>

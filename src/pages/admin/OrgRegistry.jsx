@@ -87,7 +87,7 @@ export default function OrgRegistry() {
           { label: 'Active',   value: stats.active,   sub: `${stats.trial} trial` },
           { label: 'Sites',    value: stats.sites,    sub: 'federated' },
           { label: 'Seats',    value: stats.users,    sub: 'all roles' },
-          { label: 'MRR',      value: `$${(stats.mrr/1000).toFixed(1)}k`, sub: 'recurring' },
+          { label: 'MRR',      value: ` DA${(stats.mrr/1000).toFixed(1)}k`, sub: 'recurring' },
         ]}
       >
         <Btn variant="primary" onClick={openNew}><Plus className="w-4 h-4" /> Add organization</Btn>
@@ -98,7 +98,7 @@ export default function OrgRegistry() {
         <MetricTile label="Organizations" value={stats.total} sub="Including trials" icon={Building2} color="blue" />
         <MetricTile label="Federated sites" value={stats.sites} sub="Total nodes" icon={Server} color="teal" />
         <MetricTile label="Seats provisioned" value={stats.users} sub="Across all orgs" icon={Users} color="pink" />
-        <MetricTile label="Total MRR" value={`$${stats.mrr.toLocaleString()}`} sub="From paying orgs" icon={Globe2} color="amber" />
+        <MetricTile label="Total MRR" value={` DA${stats.mrr.toLocaleString()}`} sub="From paying orgs" icon={Globe2} color="amber" />
       </div>
 
       <DataTable

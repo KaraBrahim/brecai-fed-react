@@ -31,7 +31,7 @@ export function AdminHero({ eyebrow, title, subtitle, icon: Icon, accent = 'blue
       <div className="absolute -right-24 -top-24 w-72 h-72 rounded-full bg-white/10 blur-3xl pointer-events-none" />
       <div className="absolute -left-16 -bottom-24 w-72 h-72 rounded-full bg-[#0BB592]/30 blur-3xl pointer-events-none" />
       <div className="absolute inset-0 opacity-[0.07] pointer-events-none"
-           style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '22px 22px' }} />
+        style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '22px 22px' }} />
 
       <div className="relative px-7 py-7 sm:px-9 sm:py-8 flex flex-col xl:flex-row xl:items-end xl:justify-between gap-7">
         <div className="max-w-3xl">
@@ -72,11 +72,11 @@ export function AdminHero({ eyebrow, title, subtitle, icon: Icon, accent = 'blue
 // ── Bold metric tile (light surface, big number) ──────────────────────────
 export function MetricTile({ label, value, sub, icon: Icon, color = 'blue', accent }) {
   const palette = {
-    blue:  { bg: 'from-blue-50 to-white',   ring: 'ring-blue-100',   icon: 'bg-[#0572B2]', val: 'text-[#093A7A]' },
-    teal:  { bg: 'from-teal-50 to-white',   ring: 'ring-teal-100',   icon: 'bg-[#0BB592]', val: 'text-[#0BB592]' },
-    pink:  { bg: 'from-pink-50 to-white',   ring: 'ring-pink-100',   icon: 'bg-[#F55486]', val: 'text-[#F55486]' },
-    amber: { bg: 'from-amber-50 to-white',  ring: 'ring-amber-100',  icon: 'bg-amber-500',  val: 'text-amber-700' },
-    slate: { bg: 'from-slate-50 to-white',  ring: 'ring-slate-200',  icon: 'bg-slate-700',  val: 'text-slate-900' },
+    blue: { bg: 'from-blue-50 to-white', ring: 'ring-blue-100', icon: 'bg-[#0572B2]', val: 'text-[#093A7A]' },
+    teal: { bg: 'from-teal-50 to-white', ring: 'ring-teal-100', icon: 'bg-[#0BB592]', val: 'text-[#0BB592]' },
+    pink: { bg: 'from-pink-50 to-white', ring: 'ring-pink-100', icon: 'bg-[#F55486]', val: 'text-[#F55486]' },
+    amber: { bg: 'from-amber-50 to-white', ring: 'ring-amber-100', icon: 'bg-amber-500', val: 'text-amber-700' },
+    slate: { bg: 'from-slate-50 to-white', ring: 'ring-slate-200', icon: 'bg-slate-700', val: 'text-slate-900' },
   }
   const c = palette[color] || palette.blue
   return (
@@ -255,13 +255,13 @@ export function DataTable({
 // ── Status pill ───────────────────────────────────────────────────────────
 export function StatusPill({ tone = 'slate', children, dot = true }) {
   const tones = {
-    teal:   { bg: 'bg-emerald-50',  text: 'text-emerald-700', dot: 'bg-emerald-500',  border: 'border-emerald-200' },
-    blue:   { bg: 'bg-blue-50',     text: 'text-[#0572B2]',   dot: 'bg-[#0572B2]',    border: 'border-blue-200' },
-    pink:   { bg: 'bg-pink-50',     text: 'text-[#F55486]',   dot: 'bg-[#F55486]',    border: 'border-pink-200' },
-    amber:  { bg: 'bg-amber-50',    text: 'text-amber-700',   dot: 'bg-amber-500',    border: 'border-amber-200' },
-    red:    { bg: 'bg-red-50',      text: 'text-red-700',     dot: 'bg-red-500',      border: 'border-red-200' },
-    slate:  { bg: 'bg-slate-100',   text: 'text-slate-600',   dot: 'bg-slate-400',    border: 'border-slate-200' },
-    purple: { bg: 'bg-violet-50',   text: 'text-violet-700',  dot: 'bg-violet-500',   border: 'border-violet-200' },
+    teal: { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500', border: 'border-emerald-200' },
+    blue: { bg: 'bg-blue-50', text: 'text-[#0572B2]', dot: 'bg-[#0572B2]', border: 'border-blue-200' },
+    pink: { bg: 'bg-pink-50', text: 'text-[#F55486]', dot: 'bg-[#F55486]', border: 'border-pink-200' },
+    amber: { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500', border: 'border-amber-200' },
+    red: { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500', border: 'border-red-200' },
+    slate: { bg: 'bg-slate-100', text: 'text-slate-600', dot: 'bg-slate-400', border: 'border-slate-200' },
+    purple: { bg: 'bg-violet-50', text: 'text-violet-700', dot: 'bg-violet-500', border: 'border-violet-200' },
   }
   const c = tones[tone] || tones.slate
   return (
@@ -301,7 +301,7 @@ export function GlassHero({ eyebrow, title, subtitle, icon: Icon, children, stat
       <div className="absolute -right-20 -top-20 w-80 h-80 rounded-full blur-3xl pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(245,84,134,0.25), transparent 70%)' }} />
       <div className="absolute -left-12 -bottom-12 w-64 h-64 rounded-full blur-3xl pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(11,181,146,0.3), transparent 70%)' }} />
       <div className="absolute inset-0 opacity-40 pointer-events-none"
-           style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(9,58,122,0.15) 1px, transparent 0)', backgroundSize: '18px 18px' }} />
+        style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(9,58,122,0.15) 1px, transparent 0)', backgroundSize: '18px 18px' }} />
       <div className="relative px-7 py-7 sm:px-9 sm:py-8 grid lg:grid-cols-[1fr_auto] gap-7 items-end">
         <div className="max-w-2xl">
           {eyebrow && (
@@ -326,12 +326,12 @@ export function GlassHero({ eyebrow, title, subtitle, icon: Icon, children, stat
             <div className="flex -space-x-3">
               {avatars.slice(0, 6).map((a, i) => (
                 <div key={i} className="w-11 h-11 rounded-2xl border-3 border-white shadow-md flex items-center justify-center text-white font-black text-xs"
-                     style={{ background: ['#0572B2','#0BB592','#F55486','#7c3aed','#f59e0b','#093A7A'][i % 6] }}>
+                  style={{ background: ['#0572B2', '#0BB592', '#F55486', '#7c3aed', '#f59e0b', '#093A7A'][i % 6] }}>
                   {(a || '?').split(' ').map(s => s[0]).slice(0, 2).join('').toUpperCase()}
                 </div>
               ))}
               <div className="w-11 h-11 rounded-2xl border-3 border-white bg-white shadow-md flex items-center justify-center text-[10px] font-black text-slate-600">
-                +{Math.max(0, (stats?.[0]?.value?.toString().replace(/\D/g,'') | 0) - avatars.length)}
+                +{Math.max(0, (stats?.[0]?.value?.toString().replace(/\D/g, '') | 0) - avatars.length)}
               </div>
             </div>
           )}
@@ -371,7 +371,14 @@ export function ClinicalHero({ eyebrow, title, subtitle, icon: Icon, children, s
             </linearGradient>
           </defs>
           <motion.path
-            initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 2.5, ease: 'easeInOut' }}
+            initial={{ pathLength: 0 }} 
+            animate={{ pathLength: 1 }} 
+            transition={{ 
+              duration: 3, 
+              repeat: Infinity, 
+              ease: "easeInOut",
+              repeatDelay: 1
+            }}
             d="M0,110 L120,110 L140,110 L150,60 L165,160 L180,40 L200,180 L220,110 L320,110 L340,110 L350,80 L365,140 L380,110 L600,110"
             fill="none" stroke="url(#ekg)" strokeWidth="2.5"
           />
@@ -389,7 +396,7 @@ export function ClinicalHero({ eyebrow, title, subtitle, icon: Icon, children, s
           <div className="flex items-center gap-4">
             {Icon && (
               <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-md text-white"
-                   style={{ background: 'linear-gradient(135deg, #F55486, #7a1d59)' }}>
+                style={{ background: 'linear-gradient(135deg, #F55486, #7a1d59)' }}>
                 <Icon className="w-6 h-6" />
               </div>
             )}
@@ -424,7 +431,7 @@ export function LabHero({ eyebrow, title, subtitle, icon: Icon, children, stats 
       style={{ background: 'linear-gradient(135deg, #ecfdf5 0%, #f0fdfa 60%, #f0f9ff 100%)' }}
     >
       <div className="absolute inset-0 opacity-100 pointer-events-none"
-           style={{ backgroundImage: 'linear-gradient(rgba(11,181,146,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(11,181,146,0.08) 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
+        style={{ backgroundImage: 'linear-gradient(rgba(11,181,146,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(11,181,146,0.08) 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
       <motion.div
         initial={{ x: '-30%' }} animate={{ x: '130%' }}
         transition={{ duration: 4.5, repeat: Infinity, ease: 'linear' }}
@@ -443,7 +450,7 @@ export function LabHero({ eyebrow, title, subtitle, icon: Icon, children, stats 
           <div className="flex items-center gap-4">
             {Icon && (
               <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-md text-white"
-                   style={{ background: 'linear-gradient(135deg, #0BB592, #047857)' }}>
+                style={{ background: 'linear-gradient(135deg, #0BB592, #047857)' }}>
                 <Icon className="w-6 h-6" />
               </div>
             )}
@@ -547,31 +554,72 @@ export function PremiumHero({ eyebrow, title, subtitle, icon: Icon, children, st
       style={{ background: 'linear-gradient(135deg, #18181b 0%, #1e1b4b 35%, #422006 100%)' }}
     >
       <div className="absolute inset-0 opacity-30 pointer-events-none"
-           style={{ background: 'conic-gradient(from 200deg at 80% 0%, transparent 0deg, rgba(251,191,36,0.5) 80deg, transparent 160deg)' }} />
-      <div className="absolute right-6 top-6 hidden lg:block pointer-events-none">
-        <div className="relative w-44 h-32">
+        style={{ background: 'conic-gradient(from 200deg at 80% 0%, transparent 0deg, rgba(251,191,36,0.5) 80deg, transparent 160deg)' }} />
+      <div className="absolute right-8 top-6 hidden lg:block z-20">
+        <motion.div 
+          className="relative w-44 h-32 cursor-pointer"
+          initial="initial"
+          animate="animate"
+          whileHover="hover"
+          whileTap="hover"
+        >
           {[0, 1, 2].map(i => (
-            <motion.div key={i}
-              initial={{ opacity: 0, y: 20, rotate: -8 + i * 4 }}
-              animate={{ opacity: 1, y: i * -8, rotate: -8 + i * 8 }}
-              transition={{ duration: 0.6, delay: i * 0.1 }}
-              className="absolute inset-0 rounded-2xl border border-white/15 shadow-2xl"
+            <motion.div 
+              key={i}
+              custom={i}
+              variants={{
+                initial: (i) => ({ opacity: 0, x: -300, y: 50, rotate: -45, scale: 0.8 }),
+                animate: (i) => ({ 
+                  opacity: 1, 
+                  x: i * 14, 
+                  y: [i * -8, i * -8 - 7, i * -8], 
+                  rotate: -8 + i * 8, 
+                  scale: 1,
+                  zIndex: i,
+                  transition: { 
+                    x: { type: "spring", stiffness: 100, damping: 8, mass: 1, delay: i * 0.15 },
+                    rotate: { type: "spring", stiffness: 100, damping: 8, mass: 1, delay: i * 0.15 },
+                    scale: { type: "spring", stiffness: 100, damping: 8, mass: 1, delay: i * 0.15 },
+                    opacity: { duration: 0.6, delay: i * 0.15 },
+                    y: { 
+                      repeat: Infinity, 
+                      duration: 3, 
+                      ease: "easeInOut",
+                      delay: i * 0.2
+                    }
+                  }
+                }),
+                hover: (i) => ({
+                  x: (i - 2) * 85 + 14, 
+                  y: i * -15 + 20, 
+                  rotate: (i - 2) * 6, 
+                  scale: 1.05,
+                  zIndex: i,
+                  transition: { type: "spring", stiffness: 300, damping: 20 }
+                })
+              }}
+              whileHover={{ 
+                scale: 1.15, 
+                y: + 40,
+                zIndex: 50,
+                transition: { type: "spring", stiffness: 400, damping: 25 } 
+              }}
+              className="absolute inset-0 rounded-2xl border border-white/15 shadow-2xl origin-bottom-left"
               style={{
                 background: i === 0
                   ? 'linear-gradient(135deg, #fbbf24, #d97706)'
                   : i === 1
-                  ? 'linear-gradient(135deg, #a78bfa, #4c1d95)'
-                  : 'linear-gradient(135deg, #0BB592, #047857)',
-                transform: `translateX(${i * 14}px) translateY(${i * -8}px) rotate(${-8 + i * 8}deg)`,
+                    ? 'linear-gradient(135deg, #a78bfa, #4c1d95)'
+                    : 'linear-gradient(135deg, #0BB592, #047857)',
               }}
             >
               <div className="p-3 h-full flex flex-col justify-between">
-                <div className="text-[8px] font-black uppercase tracking-widest opacity-80">Tier {i + 1}</div>
-                <div className="text-2xl font-black">${(i + 1) * 199}</div>
+                <div className="text-[12px] font-black uppercase tracking-widest opacity-80">Tier {i + 1}</div>
+                <div className="text-2xl font-black">DA {(i + 1) * 10000.000}</div>
               </div>
             </motion.div>
           ))}
-        </div>
+        </motion.div>
       </div>
       <div className="absolute -left-16 -bottom-20 w-72 h-72 rounded-full bg-amber-400/20 blur-3xl pointer-events-none" />
       <div className="relative px-7 py-7 sm:px-9 sm:py-8 flex flex-col xl:flex-row xl:items-end xl:justify-between gap-7">
@@ -585,7 +633,7 @@ export function PremiumHero({ eyebrow, title, subtitle, icon: Icon, children, st
           <div className="flex items-center gap-4">
             {Icon && (
               <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 text-zinc-900 shadow-lg shadow-amber-900/30"
-                   style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)' }}>
+                style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)' }}>
                 <Icon className="w-6 h-6" />
               </div>
             )}
@@ -647,7 +695,7 @@ export function CalendarHero({ eyebrow, title, subtitle, icon: Icon, children, s
           <div className="flex items-center gap-4">
             {Icon && (
               <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-md text-white"
-                   style={{ background: 'linear-gradient(135deg, #0572B2, #093A7A)' }}>
+                style={{ background: 'linear-gradient(135deg, #0572B2, #093A7A)' }}>
                 <Icon className="w-6 h-6" />
               </div>
             )}
@@ -682,7 +730,7 @@ export function ReceiptHero({ eyebrow, title, subtitle, icon: Icon, children, st
       style={{ background: 'linear-gradient(135deg, #064e3b 0%, #065f46 50%, #047857 100%)' }}
     >
       <div className="absolute inset-0 pointer-events-none opacity-15"
-           style={{ background: 'repeating-linear-gradient(135deg, transparent 0 18px, rgba(255,255,255,0.45) 18px 19px)' }} />
+        style={{ background: 'repeating-linear-gradient(135deg, transparent 0 18px, rgba(255,255,255,0.45) 18px 19px)' }} />
       <div className="absolute right-0 top-0 bottom-0 w-2 bg-emerald-300/40 pointer-events-none" />
       <div className="absolute right-2 top-0 bottom-0 w-px bg-emerald-300/30 pointer-events-none" />
       <div className="absolute -left-20 -top-20 w-72 h-72 rounded-full bg-emerald-300/20 blur-3xl pointer-events-none" />
@@ -759,7 +807,7 @@ export function CircuitHero({ eyebrow, title, subtitle, icon: Icon, children, st
           <div className="flex items-center gap-4">
             {Icon && (
               <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 text-cyan-100 shadow-lg shadow-cyan-900/40 border border-cyan-400/40"
-                   style={{ background: 'linear-gradient(135deg, rgba(34,211,238,0.2), rgba(8,145,178,0.5))' }}>
+                style={{ background: 'linear-gradient(135deg, rgba(34,211,238,0.2), rgba(8,145,178,0.5))' }}>
                 <Icon className="w-6 h-6" />
               </div>
             )}
@@ -794,9 +842,9 @@ export function TerminalHero({ eyebrow, title, subtitle, icon: Icon, children, s
       style={{ background: 'linear-gradient(180deg, #09090b 0%, #18181b 100%)' }}
     >
       <div className="absolute inset-0 pointer-events-none opacity-30"
-           style={{ background: 'repeating-linear-gradient(0deg, rgba(16,185,129,0.06) 0 1px, transparent 1px 3px)' }} />
+        style={{ background: 'repeating-linear-gradient(0deg, rgba(16,185,129,0.06) 0 1px, transparent 1px 3px)' }} />
       <div className="absolute inset-0 pointer-events-none"
-           style={{ background: 'radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.6) 100%)' }} />
+        style={{ background: 'radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.6) 100%)' }} />
       <div className="absolute top-0 inset-x-0 h-9 bg-zinc-900/80 border-b border-zinc-800 flex items-center px-4 gap-2 pointer-events-none">
         <span className="w-2.5 h-2.5 rounded-full bg-red-500/80" />
         <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
@@ -819,7 +867,7 @@ export function TerminalHero({ eyebrow, title, subtitle, icon: Icon, children, s
               </div>
             )}
             <h1 className="text-3xl sm:text-4xl font-black tracking-tight leading-tight text-emerald-50 font-mono">
-              <span className="text-emerald-500 mr-2">$</span>{title}<motion.span className="inline-block w-2 h-7 ml-1 align-middle bg-emerald-400" animate={{ opacity: [1, 0, 1] }} transition={{ duration: 1, repeat: Infinity }} />
+              <span className="text-emerald-500 mr-2"> DA</span>{title}<motion.span className="inline-block w-2 h-7 ml-1 align-middle bg-emerald-400" animate={{ opacity: [1, 0, 1] }} transition={{ duration: 1, repeat: Infinity }} />
             </h1>
           </div>
           {subtitle && <p className="mt-3 text-sm sm:text-base text-zinc-400 max-w-2xl leading-relaxed font-mono">{subtitle}</p>}
@@ -880,7 +928,7 @@ export function MapHero({ eyebrow, title, subtitle, icon: Icon, children, stats,
           <div className="flex items-center gap-4">
             {Icon && (
               <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-md text-white"
-                   style={{ background: 'linear-gradient(135deg, #0BB592, #0572B2)' }}>
+                style={{ background: 'linear-gradient(135deg, #0BB592, #0572B2)' }}>
                 <Icon className="w-6 h-6" />
               </div>
             )}
@@ -912,12 +960,12 @@ export function MapHero({ eyebrow, title, subtitle, icon: Icon, children, stats,
 // ── Spark tile with mini-bar trend ────────────────────────────────────────
 export function SparkTile({ label, value, sub, icon: Icon, color = 'blue', trend = [], delta }) {
   const palette = {
-    blue:  { val: 'text-[#093A7A]', bar: '#0572B2', glow: 'shadow-blue-500/10' },
-    teal:  { val: 'text-emerald-700', bar: '#0BB592', glow: 'shadow-emerald-500/10' },
-    pink:  { val: 'text-[#F55486]', bar: '#F55486', glow: 'shadow-pink-500/10' },
+    blue: { val: 'text-[#093A7A]', bar: '#0572B2', glow: 'shadow-blue-500/10' },
+    teal: { val: 'text-emerald-700', bar: '#0BB592', glow: 'shadow-emerald-500/10' },
+    pink: { val: 'text-[#F55486]', bar: '#F55486', glow: 'shadow-pink-500/10' },
     amber: { val: 'text-amber-700', bar: '#f59e0b', glow: 'shadow-amber-500/10' },
-    violet:{ val: 'text-violet-700', bar: '#7c3aed', glow: 'shadow-violet-500/10' },
-    cyan:  { val: 'text-cyan-700', bar: '#06b6d4', glow: 'shadow-cyan-500/10' },
+    violet: { val: 'text-violet-700', bar: '#7c3aed', glow: 'shadow-violet-500/10' },
+    cyan: { val: 'text-cyan-700', bar: '#06b6d4', glow: 'shadow-cyan-500/10' },
   }
   const c = palette[color] || palette.blue
   const max = Math.max(...trend, 1)
@@ -946,7 +994,7 @@ export function SparkTile({ label, value, sub, icon: Icon, color = 'blue', trend
       )}
       {delta !== undefined && (
         <div className="absolute top-3 right-3 inline-flex items-center gap-0.5 text-[10px] font-black px-1.5 py-0.5 rounded-md"
-             style={{ background: delta >= 0 ? 'rgba(16,185,129,0.1)' : 'rgba(245,84,134,0.1)', color: delta >= 0 ? '#047857' : '#be185d' }}>
+          style={{ background: delta >= 0 ? 'rgba(16,185,129,0.1)' : 'rgba(245,84,134,0.1)', color: delta >= 0 ? '#047857' : '#be185d' }}>
           {delta >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
           {Math.abs(delta)}%
         </div>
@@ -958,10 +1006,10 @@ export function SparkTile({ label, value, sub, icon: Icon, color = 'blue', trend
 // ── Pulse tile (for live infrastructure metrics) ──────────────────────────
 export function PulseTile({ label, value, sub, status = 'ok' }) {
   const map = {
-    ok:    { dot: '#10b981', ring: 'ring-emerald-200', val: 'text-emerald-700', bg: 'from-emerald-50 to-white' },
-    warn:  { dot: '#f59e0b', ring: 'ring-amber-200',   val: 'text-amber-700',   bg: 'from-amber-50 to-white' },
-    crit:  { dot: '#ef4444', ring: 'ring-red-200',     val: 'text-red-700',     bg: 'from-red-50 to-white' },
-    info:  { dot: '#0572B2', ring: 'ring-blue-200',    val: 'text-[#093A7A]',   bg: 'from-blue-50 to-white' },
+    ok: { dot: '#10b981', ring: 'ring-emerald-200', val: 'text-emerald-700', bg: 'from-emerald-50 to-white' },
+    warn: { dot: '#f59e0b', ring: 'ring-amber-200', val: 'text-amber-700', bg: 'from-amber-50 to-white' },
+    crit: { dot: '#ef4444', ring: 'ring-red-200', val: 'text-red-700', bg: 'from-red-50 to-white' },
+    info: { dot: '#0572B2', ring: 'ring-blue-200', val: 'text-[#093A7A]', bg: 'from-blue-50 to-white' },
   }
   const c = map[status] || map.ok
   return (
@@ -980,14 +1028,14 @@ export function PulseTile({ label, value, sub, status = 'ok' }) {
 }
 
 // ── Coin tile (financial KPIs) ────────────────────────────────────────────
-export function CoinTile({ label, value, sub, currency = '$', delta }) {
+export function CoinTile({ label, value, sub, currency = ' DA', delta }) {
   return (
     <motion.div whileHover={{ y: -3 }}
       className="relative overflow-hidden rounded-2xl p-5 text-white shadow-lg shadow-emerald-900/20"
       style={{ background: 'linear-gradient(135deg, #064e3b 0%, #047857 50%, #10b981 100%)' }}
     >
       <div className="absolute -right-8 -bottom-8 w-32 h-32 rounded-full opacity-30"
-           style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.4), transparent 70%)' }} />
+        style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.4), transparent 70%)' }} />
       <div className="absolute -left-6 -top-6 w-24 h-24 rounded-full border-4 border-emerald-300/30" />
       <div className="absolute -left-4 -top-4 w-20 h-20 rounded-full border border-emerald-300/40" />
       <div className="relative">

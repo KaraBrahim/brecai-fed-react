@@ -1,0 +1,60 @@
+@import './base.css';
+@import 'tailwindcss';
+@import "preline/variants.css";
+@source "../../node_modules/preline/dist/*.js";
+
+/* Optional Preline UI Datepicker Plugin */
+/* @import "preline/src/plugins/datepicker/styles.css"; */
+
+/* Third-party plugins */
+/* @plugin "@tailwindcss/forms"; */
+
+/* Preline Themes */
+/*@import "./themes/theme.css";*/
+
+
+:root {
+  font-family: 'DM Sans', 'Inter', system-ui, sans-serif;
+}
+
+body {
+  background-color: #ffffff;
+  display: block;
+  min-width: 100%;
+  /* Remove dark mode override from base.css for light pages */
+  color: #0f172a;
+  background: #ffffff;
+}
+
+#app {
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  display: block;
+}
+
+@theme {
+  --color-medical-50: #f0f9ff;
+  --color-medical-100: #e0f2fe;
+  --color-medical-200: #bae6fd;
+  --color-medical-300: #7dd3fc;
+  --color-medical-400: #38bdf8;
+  --color-medical-500: #0ea5e9;
+  --color-medical-600: #0284c7;
+  --color-medical-700: #0369a1;
+  --color-medical-800: #075985;
+  --color-medical-900: #0c4a6e;
+  --color-medical-950: #082f49;
+
+  --color-rose-50: #fff1f2;
+  --color-rose-100: #ffe4e6;
+  --color-rose-200: #fecdd3;
+  --color-rose-300: #fda4af;
+  --color-rose-400: #fb7185;
+  --color-rose-500: #f43f5e;
+  --color-rose-600: #e11d48;
+  --color-rose-700: #be123c;
+  --color-rose-800: #9f1239;
+  --color-rose-900: #881337;
+  --color-rose-950: #4c0519;
+}
