@@ -59,6 +59,10 @@ function errorMessage(err, fallback) {
   return err?.message || fallback
 }
 
+function shouldDisableAppVerificationForTesting() {
+  return import.meta.env.DEV && import.meta.env.VITE_FIREBASE_PHONE_TEST_MODE === 'true'
+}
+
 /* ── Store ───────────────────────────────────────────────────── */
 export const useAuthStore = create(
   persist(
@@ -132,6 +136,10 @@ export const useAuthStore = create(
       /* ── startLoginOtp ─────────────────────────────────── */
       startLoginOtp: async (phone, recaptchaContainerId = 'recaptcha-container') => {
         try {
+          if (shouldDisableAppVerificationForTesting()) {
+            firebaseAuth.settings.appVerificationDisabledForTesting = true
+          }
+
           const existing = get()._recaptcha
           if (existing) {
             existing.clear()
@@ -246,6 +254,10 @@ export const useAuthStore = create(
         if (!phone) return { ok: false, error: 'Phone number is required.' }
 
         try {
+          if (shouldDisableAppVerificationForTesting()) {
+            firebaseAuth.settings.appVerificationDisabledForTesting = true
+          }
+
           const existing = get()._recaptcha
           if (existing) {
             existing.clear()
