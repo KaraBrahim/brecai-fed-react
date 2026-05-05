@@ -68,23 +68,6 @@ function OtpInput({ value, onChange, hasError }) {
   )
 }
 
-/* ── Countdown ──────────────────────────────────── */
-function useCountdown(init = 60) {
-  const [s, setS] = useState(init)
-  const [active, setActive] = useState(true)
-  const ref = useRef(null)
-  ref.current = { s, active }
-  useState(() => {
-    function tick() {
-      if (!ref.current.active || ref.current.s <= 0) { setActive(false); return }
-      const t = setTimeout(() => { setS(v => v - 1); tick() }, 1000)
-      return () => clearTimeout(t)
-    }
-    tick()
-  })
-  return { seconds: s, done: !active, reset: () => { setS(init); setActive(true) } }
-}
-
 /* ── Field wrapper ──────────────────────────────── */
 function Field({ label, error, children }) {
   return (
@@ -124,7 +107,7 @@ function Select({ children, ...props }) {
 }
 
 /* ── Step indicator ─────────────────────────────── */
-const STEP_LABELS = ['Role', 'Details', 'Verify']
+const STEP_LABELS = ['Role', 'Details', 'OTP', 'Verify']
 
 function StepBar({ step }) {
   return (
@@ -327,7 +310,7 @@ function OrgManagerForm({ onBack, onNext }) {
 
         <div className="pt-1">
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2.5">Organization Details</p>
-          <div className="space-y-3 p-4 rounded-2xl bg-amber-50/60 border border-amber-200/60">
+          <div className="space-y-3 p-4 rounded-2xl bg-slate-50 border border-slate-200">
             <Field label="Organization name" error={errors.organization_name}>
               <Input icon={Building2} value={f.organization_name} onChange={e => set('organization_name', e.target.value)} placeholder="Constantine Oncology Center" />
             </Field>
@@ -523,17 +506,129 @@ function DoctorForm({ onBack, onNext }) {
   )
 }
 
-/* ── Step 3: OTP ────────────────────────────────── */
-function OtpStep({ email, demoOtp, onBack }) {
+function maskEmail(email) {
+  const s = String(email || '').trim()
+  const [u, d] = s.split('@')
+  if (!u || !d) return s
+  const head = u.slice(0, 1)
+  const tail = u.slice(-1)
+  return `${head}***${tail}@${d}`
+}
+
+function maskPhone(phone) {
+  const digits = String(phone || '').replace(/\D/g, '')
+  if (digits.length <= 4) return String(phone || '')
+  const tail = digits.slice(-2)
+  return `*** *** ** ${tail}`
+}
+
+/* ── Step 3: OTP channel ────────────────────────── */
+function OtpChannelStep({ email, phone_number, onBack, onNext }) {
+  const { requestSignUpOtp } = useAuthStore()
+  const [channel, setChannel] = useState('phone')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSend() {
+    setError('')
+    setLoading(true)
+    const res = await requestSignUpOtp({ channel, email, phone_number })
+    setLoading(false)
+    if (!res?.ok) { setError(res?.error || 'Failed to send code'); return }
+    onNext({
+      channel,
+      token: res.token,
+      demoOtp: res.demoOtp ?? null,
+      target: channel === 'phone' ? maskPhone(phone_number) : maskEmail(email),
+    })
+  }
+
+  return (
+    <motion.div key="otp-channel" initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}>
+      <div className="flex items-center gap-3 mb-8">
+        <button onClick={onBack} className="p-2 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors">
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <div>
+          <h1 className="text-[42px] font-black tracking-[-0.04em] leading-[0.9] uppercase text-slate-900">
+            Choose<br />
+            <span style={{ WebkitTextFillColor: 'transparent', background: 'linear-gradient(135deg,#0BB592,#0572B2)', WebkitBackgroundClip: 'text' }}>OTP</span>
+            <span style={{ color: '#0BB592' }}>.</span>
+          </h1>
+          <p className="text-slate-500 text-sm font-semibold mt-2">Select where to receive your verification code</p>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {[
+          { key: 'phone', label: 'Phone number', icon: Phone, sub: phone_number ? maskPhone(phone_number) : 'Add a phone number first' },
+          { key: 'email', label: 'Email address', icon: Mail, sub: email ? maskEmail(email) : 'Add an email first' },
+        ].map(opt => {
+          const Icon = opt.icon
+          const active = channel === opt.key
+          const disabled = opt.key === 'phone' ? !phone_number : !email
+          return (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => { if (!disabled) { setChannel(opt.key); setError('') } }}
+              disabled={disabled}
+              className={cn(
+                'w-full text-left rounded-2xl border-2 px-4 py-4 transition-all',
+                active ? 'border-[#0BB592] bg-teal-50/50' : 'border-slate-200 bg-slate-50 hover:bg-white',
+                disabled && 'opacity-50 cursor-not-allowed'
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <div className={cn('w-10 h-10 rounded-2xl flex items-center justify-center', active ? 'bg-[#0BB592] text-white' : 'bg-white border border-slate-200 text-slate-500')}>
+                  <Icon className="w-4 h-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-black uppercase tracking-widest text-slate-600">{opt.label}</p>
+                  <p className="text-sm font-semibold text-slate-900 truncate">{opt.sub}</p>
+                </div>
+                <div className={cn('w-5 h-5 rounded-full border-2 flex items-center justify-center', active ? 'border-[#0BB592] bg-[#0BB592]' : 'border-slate-300')}>
+                  {active && <div className="w-2 h-2 bg-white rounded-full" />}
+                </div>
+              </div>
+            </button>
+          )
+        })}
+      </div>
+
+      <AnimatePresence>
+        {error && (
+          <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            className="text-[#F55486] text-xs font-semibold bg-pink-50 border border-pink-200 rounded-xl px-4 py-3 mt-4">
+            {error}
+          </motion.p>
+        )}
+      </AnimatePresence>
+
+      <motion.button
+        onClick={handleSend}
+        disabled={loading || (channel === 'phone' ? !phone_number : !email)}
+        whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
+        className="w-full mt-5 flex items-center justify-between rounded-2xl px-6 py-4 text-[15px] font-black uppercase tracking-wide text-white transition-all disabled:opacity-40"
+        style={{ background: 'linear-gradient(135deg,#0BB592,#0572B2)', boxShadow: '0 6px 24px #0BB59244' }}
+      >
+        <span>{loading ? 'Sending...' : 'Send Code'}</span>
+        {loading ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }} className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full" /> : <ArrowRight className="w-5 h-5" />}
+      </motion.button>
+    </motion.div>
+  )
+}
+
+/* ── Step 4: OTP verify ─────────────────────────── */
+function OtpStep({ email, target, token, demoOtp, onBack, onTokenUpdate, channel, phone_number }) {
   const navigate = useNavigate()
-  const { verifyOtp } = useAuthStore()
+  const { verifySignUpOtp, requestSignUpOtp } = useAuthStore()
   const [code, setCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [seconds, setSeconds] = useState(60)
   const [canResend, setCanResend] = useState(false)
 
-  // simple countdown without custom hook to avoid closure issues
   useState(() => {
     let s = 60
     const interval = setInterval(() => {
@@ -548,10 +643,21 @@ function OtpStep({ email, demoOtp, onBack }) {
     if (code.length < 6) return
     setError('')
     setLoading(true)
-    const res = await verifyOtp(code)
+    const res = await verifySignUpOtp({ token, otp: code })
     setLoading(false)
     if (!res.ok) { setError(res.error); return }
     navigate(ROLE_HOME[res.user?.role] || '/app/doctor', { replace: true })
+  }
+
+  async function handleResend() {
+    if (!canResend || loading) return
+    setError('')
+    setLoading(true)
+    const res = await requestSignUpOtp({ channel, email, phone_number })
+    setLoading(false)
+    if (!res?.ok) { setError(res?.error || 'Failed to resend code'); return }
+    onTokenUpdate({ token: res.token, demoOtp: res.demoOtp ?? null })
+    setCode('')
   }
 
   return (
@@ -563,11 +669,13 @@ function OtpStep({ email, demoOtp, onBack }) {
         <div>
           <h1 className="text-[42px] font-black tracking-[-0.04em] leading-[0.9] uppercase text-slate-900">
             Verify<br />
-            <span style={{ WebkitTextFillColor: 'transparent', background: 'linear-gradient(135deg,#0BB592,#0572B2)', WebkitBackgroundClip: 'text' }}>Email</span>
+            <span style={{ WebkitTextFillColor: 'transparent', background: 'linear-gradient(135deg,#0BB592,#0572B2)', WebkitBackgroundClip: 'text' }}>
+              {channel === 'phone' ? 'Phone' : 'Email'}
+            </span>
             <span style={{ color: '#0BB592' }}>.</span>
           </h1>
           <p className="text-slate-500 text-sm font-semibold mt-2">
-            Code sent to <span className="text-slate-800 font-bold">{email}</span>
+            Code sent to <span className="text-slate-800 font-bold">{target || email}</span>
           </p>
         </div>
       </div>
@@ -609,7 +717,7 @@ function OtpStep({ email, demoOtp, onBack }) {
 
       <div className="mt-4 flex justify-end">
         {canResend
-          ? <button className="flex items-center gap-1.5 text-xs font-bold text-[#0572B2] hover:underline">
+          ? <button onClick={handleResend} className="flex items-center gap-1.5 text-xs font-bold text-[#0572B2] hover:underline">
               <RotateCcw className="w-3 h-3" /> Resend code
             </button>
           : <span className="text-xs font-bold text-slate-400">Resend in <span className="text-slate-600 tabular-nums">{seconds}s</span></span>
@@ -624,6 +732,7 @@ export default function SignUpPage() {
   const { register } = useAuthStore()
   const [step, setStep] = useState(1)
   const [role, setRole]   = useState(null)
+  const [regData, setRegData] = useState(null)
   const [otpData, setOtpData] = useState(null)
 
   function handleRoleSelect(api_role) {
@@ -634,7 +743,8 @@ export default function SignUpPage() {
   async function handleFormSubmit(formData) {
     const res = await register(formData)
     if (res.ok) {
-      setOtpData({ email: res.email, otp: res.otp })
+      setRegData({ email: res.email, phone_number: res.phone_number ?? formData.phone_number ?? null })
+      setOtpData(null)
       setStep(3)
     }
     return res
@@ -653,8 +763,27 @@ export default function SignUpPage() {
         {step === 2 && role === 'doctor' && (
           <DoctorForm key="s2b" onBack={() => setStep(1)} onNext={handleFormSubmit} />
         )}
-        {step === 3 && otpData && (
-          <OtpStep key="s3" email={otpData.email} demoOtp={otpData.otp} onBack={() => setStep(2)} />
+        {step === 3 && regData && (
+          <OtpChannelStep
+            key="s3"
+            email={regData.email}
+            phone_number={regData.phone_number}
+            onBack={() => setStep(2)}
+            onNext={(data) => { setOtpData(data); setStep(4) }}
+          />
+        )}
+        {step === 4 && otpData && regData && (
+          <OtpStep
+            key={`s4-${otpData.token}`}
+            email={regData.email}
+            phone_number={regData.phone_number}
+            channel={otpData.channel}
+            target={otpData.target}
+            token={otpData.token}
+            demoOtp={otpData.demoOtp}
+            onBack={() => setStep(3)}
+            onTokenUpdate={({ token, demoOtp }) => setOtpData(p => ({ ...p, token, demoOtp }))}
+          />
         )}
       </AnimatePresence>
     </div>
