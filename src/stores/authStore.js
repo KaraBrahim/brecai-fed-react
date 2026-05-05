@@ -112,6 +112,7 @@ function buildRegisterPayload(formData) {
     email: formData.email,
     password,
     password_confirmation,
+    phone_number: formData.phone_number ?? formData.phone ?? null,
     role: formData.role ?? formData.api_role,
     plan_id: formData.plan_id,
     organization_name: formData.organization_name,
