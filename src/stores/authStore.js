@@ -60,7 +60,15 @@ function errorMessage(err, fallback) {
 }
 
 function shouldDisableAppVerificationForTesting() {
-  return import.meta.env.DEV && import.meta.env.VITE_FIREBASE_PHONE_TEST_MODE === 'true'
+  const raw = String(import.meta.env.VITE_FIREBASE_PHONE_TEST_MODE || '').trim().toLowerCase()
+  return import.meta.env.DEV && (raw === 'true' || raw === '1' || raw === 'yes')
+}
+
+function shouldFallbackToTestMode(err) {
+  if (!import.meta.env.DEV) return false
+  if (shouldDisableAppVerificationForTesting()) return false
+  const message = String(err?.message || '')
+  return err?.code === 'auth/configuration-not-found' || message.includes('recaptchaParams')
 }
 
 /* ── Store ───────────────────────────────────────────────────── */
@@ -145,9 +153,19 @@ export const useAuthStore = create(
             existing.clear()
           }
 
-          const verifier = new RecaptchaVerifier(firebaseAuth, recaptchaContainerId, { size: 'invisible' })
-          await verifier.render()
-          const confirmation = await signInWithPhoneNumber(firebaseAuth, phone, verifier)
+          let verifier = new RecaptchaVerifier(firebaseAuth, recaptchaContainerId, { size: 'invisible' })
+          let confirmation
+          try {
+            await verifier.render()
+            confirmation = await signInWithPhoneNumber(firebaseAuth, phone, verifier)
+          } catch (err) {
+            if (!shouldFallbackToTestMode(err)) throw err
+            firebaseAuth.settings.appVerificationDisabledForTesting = true
+            verifier.clear()
+            verifier = new RecaptchaVerifier(firebaseAuth, recaptchaContainerId, { size: 'invisible' })
+            await verifier.render()
+            confirmation = await signInWithPhoneNumber(firebaseAuth, phone, verifier)
+          }
 
           localStorage.setItem('temp_phone', phone)
           localStorage.setItem('verification_id', confirmation.verificationId)
@@ -263,9 +281,19 @@ export const useAuthStore = create(
             existing.clear()
           }
 
-          const verifier = new RecaptchaVerifier(firebaseAuth, recaptchaContainerId, { size: 'invisible' })
-          await verifier.render()
-          const confirmation = await signInWithPhoneNumber(firebaseAuth, phone, verifier)
+          let verifier = new RecaptchaVerifier(firebaseAuth, recaptchaContainerId, { size: 'invisible' })
+          let confirmation
+          try {
+            await verifier.render()
+            confirmation = await signInWithPhoneNumber(firebaseAuth, phone, verifier)
+          } catch (err) {
+            if (!shouldFallbackToTestMode(err)) throw err
+            firebaseAuth.settings.appVerificationDisabledForTesting = true
+            verifier.clear()
+            verifier = new RecaptchaVerifier(firebaseAuth, recaptchaContainerId, { size: 'invisible' })
+            await verifier.render()
+            confirmation = await signInWithPhoneNumber(firebaseAuth, phone, verifier)
+          }
 
           localStorage.setItem('temp_phone', phone)
           localStorage.setItem('verification_id', confirmation.verificationId)
