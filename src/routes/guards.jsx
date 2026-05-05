@@ -54,7 +54,7 @@ export function RequireAuth({ children, role }) {
    - No temp email → /auth
 ──────────────────────────────────────────────────────────────── */
 export function RequireOtp({ children }) {
-  const { isAuthenticated, tempPhone, pendingProfile, getRoleHome, userRole } = useAuthStore()
+  const { isAuthenticated, tempEmail, getRoleHome, userRole } = useAuthStore()
 
   if (isAuthenticated) {
     const home = getRoleHome()
@@ -62,12 +62,12 @@ export function RequireOtp({ children }) {
     return <Navigate to={home} replace />
   }
 
-  if (!tempPhone || !pendingProfile) {
-    log.warn('GUARD', 'RequireOtp — no pending sign-up OTP session, redirecting to /auth')
+  if (!tempEmail) {
+    log.warn('GUARD', 'RequireOtp — no pending OTP session, redirecting to /auth')
     return <Navigate to="/auth" replace />
   }
 
-  log.debug('GUARD', `RequireOtp ✓ — pending sign-up OTP session for "${tempPhone}", rendering OTP page`)
+  log.debug('GUARD', `RequireOtp ✓ — pending OTP session for "${tempEmail}", rendering OTP page`)
   return children
 }
 
