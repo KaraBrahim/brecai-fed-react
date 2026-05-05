@@ -146,7 +146,7 @@ export default function AuthLayout() {
         />
 
         {/* Floating stat cards */}
-        {STATS_CARDS.map(card => (
+        {/* {STATS_CARDS.map(card => (
           <FloatingCard
             key={card.label}
             delay={card.delay}
@@ -161,7 +161,7 @@ export default function AuthLayout() {
             <p className="text-white font-extrabold text-2xl tracking-tight leading-none">{card.value}</p>
             <p className="text-white/40 text-[10px] font-medium mt-0.5">{card.sub}</p>
           </FloatingCard>
-        ))}
+        ))} */}
 
         {/* Central branding */}
         <motion.div
