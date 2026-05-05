@@ -94,14 +94,33 @@ function genOtp() {
   return String(Math.floor(100000 + Math.random() * 900000))
 }
 
-function makeInitials(name) {
-  return name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('')
-}
-
 function resolveUserRole(user) {
   if (!user) return null
   if (user?.roles?.length > 0) return user.roles[0].name
   return user?.role || null
+}
+
+function buildRegisterPayload(formData) {
+  const password = formData.password
+  const password_confirmation =
+    formData.password_confirmation ??
+    formData.confirm ??
+    password
+
+  return {
+    name: formData.name,
+    email: formData.email,
+    password,
+    password_confirmation,
+    role: formData.role ?? formData.api_role,
+    plan_id: formData.plan_id,
+    organization_name: formData.organization_name,
+    organization_address: formData.organization_address,
+    organization_type: formData.organization_type,
+    organization_code: formData.organization_code,
+    organization_id: formData.organization_id,
+    invite_code: formData.invite_code,
+  }
 }
 
 /* ── Store ───────────────────────────────────────────────────── */
@@ -241,30 +260,34 @@ export const useAuthStore = create(
       },
 
       /* ── register ─────────────────────────────────────── */
-      register: (formData) => {
-        log.info('AUTH', `register → name="${formData.name}" email="${formData.email}"`)
-        const otp = genOtp()
-        const roleKey = formData.api_role === 'org_manager' ? 'org_manager' : 'doctor'
-        const orgLabel =
-          formData.organization_name ||
-          DEMO_ORGS.find(o => String(o.id) === String(formData.organization_id))?.name ||
-          'My Organization'
-        const user = {
-          id:       'REG-' + Date.now(),
-          name:     formData.name,
-          email:    formData.email,
-          role:     roleKey,
-          org:      orgLabel,
-          initials: makeInitials(formData.name),
-          specialty:
-            roleKey === 'org_manager'
-              ? 'Site Management · Compliance'
-              : 'Oncology · Breast Cancer',
+      register: async (formData) => {
+        const payload = buildRegisterPayload(formData)
+        log.info('AUTH', `register → name="${payload.name}" email="${payload.email}" role="${payload.role}"`)
+        try {
+          await api.getCsrf()
+          const data = await api.post('/api/register', payload)
+          const email = data?.email || payload.email
+          localStorage.setItem('temp_email', email)
+          set({ tempEmail: email, _pendingOtp: null })
+          log.info('AUTH', `register ✓ — created account for "${email}" (real API)`)
+          return { ok: true, email, otp: data?.otp ?? null, data }
+        } catch (err) {
+          if (err?.status) {
+            const message =
+              err?.data?.message ||
+              (typeof err?.data === 'string' ? err.data : null) ||
+              err.message ||
+              'Registration failed'
+            log.warn('AUTH', `register ✗ — API rejected (${err.status}): ${message}`)
+            return { ok: false, error: message, details: err?.data }
+          }
+          log.warn('AUTH', `register ✗ — API unavailable (${err.message}), falling back to demo mode`)
+          const otp = genOtp()
+          const email = payload.email
+          localStorage.setItem('temp_email', email)
+          set({ tempEmail: email, _pendingOtp: otp })
+          return { ok: true, email, otp, demo: true }
         }
-        localStorage.setItem('temp_email', formData.email)
-        set({ tempEmail: formData.email, _pendingOtp: otp })
-        log.info('AUTH', `register ✓ — demo OTP generated: ${otp} (role: ${roleKey})`)
-        return { ok: true, email: formData.email, otp }
       },
 
       /* ── Internal: demo OTP request ───────────────────── */
