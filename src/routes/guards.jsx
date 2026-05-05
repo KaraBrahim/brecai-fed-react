@@ -48,6 +48,29 @@ export function RequireAuth({ children, role }) {
   return children
 }
 
+/* ── RequireOtp ───────────────────────────────────────────────
+   Mirrors Vue's { meta: { requiresOtp: true } }.
+   - Authenticated users → role home
+   - No temp email → /auth
+──────────────────────────────────────────────────────────────── */
+export function RequireOtp({ children }) {
+  const { isAuthenticated, tempEmail, getRoleHome, userRole } = useAuthStore()
+
+  if (isAuthenticated) {
+    const home = getRoleHome()
+    log.info('GUARD', `RequireOtp — already authenticated [${userRole()}], redirecting to "${home}"`)
+    return <Navigate to={home} replace />
+  }
+
+  if (!tempEmail) {
+    log.warn('GUARD', 'RequireOtp — no temp email, redirecting to /auth')
+    return <Navigate to="/auth" replace />
+  }
+
+  log.debug('GUARD', `RequireOtp ✓ — pending session for "${tempEmail}", rendering OTP page`)
+  return children
+}
+
 /* ── CatchAll ─────────────────────────────────────────────────
    Mirrors Vue's 404 catch-all:
    - Authenticated → role home
