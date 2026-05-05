@@ -79,18 +79,24 @@ export default function OtpPage() {
   const methods = Array.isArray(otpMethods) && otpMethods.length ? otpMethods : ['email']
   const selectedMethod = otpMethod || methods[0]
 
+  // useRef persists across React Strict Mode's mount→unmount→remount cycle,
+  // preventing the initial auto-send from firing twice and sending duplicate emails.
+  const initialSendFired = useRef(false)
+
   useEffect(() => {
-    let mounted = true
-    async function run() {
-      if (!tempEmail || sent) return
-      const res = await sendOtp(selectedMethod)
-      if (!mounted) return
-      if (!res.ok) setError(res.error)
-      else setSent(true)
-    }
-    run()
-    return () => { mounted = false }
-  }, [tempEmail, selectedMethod, sent, sendOtp])
+    if (!tempEmail || initialSendFired.current) return
+    initialSendFired.current = true
+
+    sendOtp(selectedMethod).then(res => {
+      if (!res.ok) {
+        setError(res.error)
+        initialSendFired.current = false // allow retry if it failed
+      } else {
+        setSent(true)
+      }
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tempEmail])
 
   async function handleVerify() {
     if (code.length < 6) return
