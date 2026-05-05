@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowRight, RotateCcw, ChevronLeft, Sparkles } from 'lucide-react'
+import { ArrowRight, ChevronLeft } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { cn } from '@/lib/utils'
 import log from '@/lib/logger'
@@ -65,27 +65,14 @@ function OtpInput({ value, onChange, hasError }) {
   )
 }
 
-/* ── Countdown hook ─────────────────────────────── */
-function useCountdown(init = 60) {
-  const [s, setS] = useState(init)
-  const [active, setActive] = useState(true)
-  useEffect(() => {
-    if (!active || s <= 0) { setActive(false); return }
-    const t = setTimeout(() => setS(v => v - 1), 1000)
-    return () => clearTimeout(t)
-  }, [s, active])
-  return { seconds: s, done: !active, reset: () => { setS(init); setActive(true) } }
-}
-
 /* ── Main OTP Page Component ────────────────────── */
 export default function OtpPage() {
   const navigate = useNavigate()
-  const { verifyOtp, tempEmail, _pendingOtp, getRoleHome } = useAuthStore()
+  const { verifyOtp, tempPhone, getRoleHome } = useAuthStore()
   
   const [code, setCode]   = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const { seconds, done, reset } = useCountdown(60)
 
   async function handleVerify() {
     if (code.length < 6) return
@@ -117,33 +104,15 @@ export default function OtpPage() {
         <h1 className="text-[52px] font-black tracking-[-0.04em] leading-[0.88] uppercase text-slate-900">
           Check<br />
           <span style={{ WebkitTextFillColor: 'transparent', background: 'linear-gradient(135deg,#0BB592,#0572B2)', WebkitBackgroundClip: 'text' }}>
-            Email
+            Phone
           </span>
           <span style={{ color: '#0BB592' }}>.</span>
         </h1>
         <p className="text-slate-500 text-sm font-semibold mt-3 leading-relaxed">
           Enter the 6-digit code sent to<br />
-          <span className="text-slate-800 font-bold">{tempEmail}</span>
+          <span className="text-slate-800 font-bold">{tempPhone}</span>
         </p>
       </div>
-
-      {/* Demo banner (only if pending OTP exists in state) */}
-      <AnimatePresence>
-        {_pendingOtp && (
-          <motion.div
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="flex items-center gap-2.5 mb-6 px-4 py-3 rounded-2xl border border-amber-200 bg-amber-50"
-          >
-            <span className="text-lg">⚡</span>
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-amber-700 mb-0.5">Demo Mode — Your OTP</p>
-              <p className="font-mono font-black text-xl text-amber-900 tracking-[0.2em]">{_pendingOtp}</p>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <OtpInput value={code} onChange={v => { setCode(v); setError('') }} hasError={!!error} />
 
@@ -172,20 +141,13 @@ export default function OtpPage() {
       </motion.button>
 
       {/* Footer Actions */}
-      <div className="mt-6 flex items-center justify-between">
+      <div className="mt-6 flex items-center justify-start">
         <button 
           onClick={() => navigate('/auth')} 
           className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-slate-700 transition-colors"
         >
           <ChevronLeft className="w-3.5 h-3.5" /> Back to Login
         </button>
-        
-        {done
-          ? <button onClick={() => { setCode(''); reset() }} className="flex items-center gap-1.5 text-xs font-bold text-[#0572B2] hover:underline">
-              <RotateCcw className="w-3 h-3" /> Resend code
-            </button>
-          : <span className="text-xs font-bold text-slate-400">Resend in <span className="text-slate-600 tabular-nums">{seconds}s</span></span>
-        }
       </div>
     </motion.div>
   )

@@ -6,7 +6,7 @@ import {
   Eye, EyeOff, Check, MapPin, Mail,
   Phone, User as UserIcon,
 } from 'lucide-react'
-import { useAuthStore, ROLE_HOME } from '@/stores/authStore'
+import { useAuthStore } from '@/stores/authStore'
 import { cn } from '@/lib/utils'
 
 /* ── Shared OTP Input ───────────────────────────── */
@@ -454,7 +454,7 @@ function DoctorForm({ onBack, onNext }) {
 /* ── Step 3: OTP verify ─────────────────────────── */
 function OtpStep({ email, onBack }) {
   const navigate = useNavigate()
-  const { verifyOtp } = useAuthStore()
+  const { verifyOtp, getRoleHome } = useAuthStore()
   const [code, setCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -466,7 +466,7 @@ function OtpStep({ email, onBack }) {
     const res = await verifyOtp(code)
     setLoading(false)
     if (!res.ok) { setError(res.error); return }
-    navigate(ROLE_HOME[res.user?.role] || '/app/doctor', { replace: true })
+    navigate(getRoleHome(), { replace: true })
   }
 
   return (
@@ -514,10 +514,10 @@ function OtpStep({ email, onBack }) {
 
 /* ── Main export ─────────────────────────────────── */
 export default function SignUpPage() {
-  const { register } = useAuthStore()
+  const navigate = useNavigate()
+  const { startSignUpOtp } = useAuthStore()
   const [step, setStep] = useState(1)
   const [role, setRole]   = useState(null)
-  const [regData, setRegData] = useState(null)
 
   function handleRoleSelect(api_role) {
     setRole(api_role)
@@ -525,16 +525,22 @@ export default function SignUpPage() {
   }
 
   async function handleFormSubmit(formData) {
-    const res = await register(formData)
-    if (res.ok) {
-      setRegData({ email: res.email })
-      setStep(3)
+    const profile = {
+      role: formData.api_role ?? formData.role ?? role ?? 'doctor',
+      name: formData.name,
+      email: formData.email,
+      phone_number: formData.phone_number ?? formData.phone ?? null,
+      org: formData.organization_name ?? formData.organization_id ?? '',
     }
+
+    const res = await startSignUpOtp(profile)
+    if (res.ok) navigate('/auth/otp')
     return res
   }
 
   return (
     <div className="w-full max-w-sm mx-auto">
+      <div id="recaptcha-container" />
       <StepBar step={step} />
       <AnimatePresence mode="wait">
         {step === 1 && (
@@ -545,13 +551,6 @@ export default function SignUpPage() {
         )}
         {step === 2 && role === 'doctor' && (
           <DoctorForm key="s2b" onBack={() => setStep(1)} onNext={handleFormSubmit} />
-        )}
-        {step === 3 && regData && (
-          <OtpStep
-            key="s3"
-            email={regData.email}
-            onBack={() => setStep(2)}
-          />
         )}
       </AnimatePresence>
     </div>

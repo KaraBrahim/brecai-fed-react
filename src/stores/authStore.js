@@ -1,9 +1,16 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import api from '@/lib/api'
 import { ROLE_HOME_MAP } from '@/enums/roles'
 import log from '@/lib/logger'
-import { AUTH_ENDPOINTS } from '@/config/auth'
+import { firebaseAuth } from '@/lib/firebase'
+import {
+  RecaptchaVerifier,
+  PhoneAuthProvider,
+  onAuthStateChanged,
+  signInWithCredential,
+  signInWithPhoneNumber,
+  signOut,
+} from 'firebase/auth'
 
 /* ── Role helpers (UI display metadata, supports both API keys & display names) ── */
 export const ROLE_HOME = ROLE_HOME_MAP
@@ -41,37 +48,15 @@ function resolveUserRole(user) {
   return user?.role || null
 }
 
-function errorMessage(err, fallback = 'Request failed') {
-  return (
-    err?.data?.message ||
-    (typeof err?.data === 'string' ? err.data : null) ||
-    err?.message ||
-    fallback
-  )
+function initialsFromName(name) {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean)
+  const a = parts[0]?.[0] || ''
+  const b = parts.length > 1 ? parts[parts.length - 1][0] : ''
+  return (a + b).toUpperCase() || 'U'
 }
 
-function buildRegisterPayload(formData) {
-  const password = formData.password
-  const password_confirmation =
-    formData.password_confirmation ??
-    formData.confirm ??
-    password
-
-  return {
-    name: formData.name,
-    email: formData.email,
-    password,
-    password_confirmation,
-    phone_number: formData.phone_number ?? formData.phone ?? null,
-    role: formData.role ?? formData.api_role,
-    plan_id: formData.plan_id,
-    organization_name: formData.organization_name,
-    organization_address: formData.organization_address,
-    organization_type: formData.organization_type,
-    organization_code: formData.organization_code,
-    organization_id: formData.organization_id,
-    invite_code: formData.invite_code,
-  }
+function errorMessage(err, fallback) {
+  return err?.message || fallback
 }
 
 /* ── Store ───────────────────────────────────────────────────── */
@@ -82,62 +67,155 @@ export const useAuthStore = create(
       user:            null,
       isAuthenticated: false,
       isInitialized:   false,
-      tempEmail:       localStorage.getItem('temp_email') || null,
+      tempPhone:       localStorage.getItem('temp_phone') || null,
+      verificationId:  localStorage.getItem('verification_id') || null,
+      pendingProfile:  (() => {
+        try {
+          const raw = localStorage.getItem('pending_profile')
+          return raw ? JSON.parse(raw) : null
+        } catch {
+          return null
+        }
+      })(),
+      _recaptcha:      null,
 
       /* ── Computed helper (call as a function) ─────────── */
       userRole: () => resolveUserRole(get().user),
 
       /* ── fetchUser ────────────────────────────────────── */
       fetchUser: async () => {
-        log.info('AUTH', 'fetchUser → attempting GET /api/user ...')
-        try {
-          const data = await api.get(AUTH_ENDPOINTS.user)
-          log.info('AUTH', `fetchUser ✓ — authenticated as "${data?.name}" [${resolveUserRole(data)}]`)
-          set({ user: data, isAuthenticated: true, isInitialized: true })
-        } catch (err) {
-          log.warn('AUTH', `fetchUser ✗ — API unreachable or 401 (${err.message})`)
-          set({ user: null, isAuthenticated: false, isInitialized: true })
-        }
+        if (get().isInitialized) return
+        await new Promise((resolve) => {
+          const unsub = onAuthStateChanged(
+            firebaseAuth,
+            async (fbUser) => {
+              if (!fbUser) {
+                set({ user: null, isAuthenticated: false, isInitialized: true })
+                unsub()
+                resolve()
+                return
+              }
+
+              let role = null
+              try {
+                const tokenResult = await fbUser.getIdTokenResult()
+                role = tokenResult?.claims?.role || tokenResult?.claims?.roles?.[0] || null
+              } catch {
+                role = null
+              }
+
+              const persisted = get().user
+              const name = persisted?.name || fbUser.displayName || fbUser.phoneNumber || 'User'
+              const user = {
+                id: fbUser.uid,
+                name,
+                email: persisted?.email || fbUser.email || null,
+                phone_number: fbUser.phoneNumber || get().tempPhone || null,
+                role: role || persisted?.role || 'doctor',
+                org: persisted?.org || '',
+                initials: persisted?.initials || initialsFromName(name),
+              }
+
+              set({ user, isAuthenticated: true, isInitialized: true })
+              unsub()
+              resolve()
+            },
+            () => {
+              set({ user: null, isAuthenticated: false, isInitialized: true })
+              unsub()
+              resolve()
+            }
+          )
+        })
       },
 
-      /* ── login ────────────────────────────────────────── */
-      login: async (email, password) => {
-        log.info('AUTH', `login → "${email}"`)
+      /* ── startLoginOtp ─────────────────────────────────── */
+      startLoginOtp: async (phone, recaptchaContainerId = 'recaptcha-container') => {
         try {
-          log.debug('AUTH', 'login — fetching CSRF cookie ...')
-          await api.getCsrf()
-          log.debug('AUTH', 'login — posting credentials to /api/login ...')
-          await api.post(AUTH_ENDPOINTS.login, { email, password })
-          localStorage.setItem('temp_email', email)
-          set({ tempEmail: email })
-          log.info('AUTH', `login ✓ — OTP sent to "${email}" (real API)`)
-          return { ok: true, email }
+          const existing = get()._recaptcha
+          if (existing) {
+            existing.clear()
+          }
+
+          const verifier = new RecaptchaVerifier(firebaseAuth, recaptchaContainerId, { size: 'invisible' })
+          await verifier.render()
+          const confirmation = await signInWithPhoneNumber(firebaseAuth, phone, verifier)
+
+          localStorage.setItem('temp_phone', phone)
+          localStorage.setItem('verification_id', confirmation.verificationId)
+          localStorage.removeItem('pending_profile')
+
+          set({
+            tempPhone: phone,
+            verificationId: confirmation.verificationId,
+            pendingProfile: null,
+            _recaptcha: verifier,
+          })
+
+          return { ok: true }
         } catch (err) {
-          const message = errorMessage(err, 'Login failed')
-          log.warn('AUTH', `login ✗ — ${message}`)
-          return { ok: false, error: message, details: err?.data }
+          const message = errorMessage(err, 'Failed to send OTP')
+          log.warn('AUTH', `startLoginOtp ✗ — ${message}`)
+          return { ok: false, error: message }
         }
       },
 
       /* ── verifyOtp ────────────────────────────────────── */
       verifyOtp: async (otp) => {
-        const { tempEmail } = get()
-        log.info('AUTH', `verifyOtp → email="${tempEmail}"`)
-
         try {
-          log.debug('AUTH', 'verifyOtp — posting to /api/verify-otp ...')
-          await api.post(AUTH_ENDPOINTS.verifyOtp, { email: tempEmail, otp })
-          localStorage.removeItem('temp_email')
-          set({ tempEmail: null, isInitialized: false })
-          log.info('AUTH', 'verifyOtp ✓ — fetching user from API ...')
-          await get().fetchUser()
-          const user = get().user
-          log.info('AUTH', `verifyOtp ✓ — session established for "${user?.name}" [${resolveUserRole(user)}]`)
+          const verificationId = get().verificationId || localStorage.getItem('verification_id')
+          if (!verificationId) return { ok: false, error: 'Session expired. Please request a new code.' }
+
+          const cred = PhoneAuthProvider.credential(verificationId, otp)
+          const res = await signInWithCredential(firebaseAuth, cred)
+          const fbUser = res.user
+          let claimRole = null
+          try {
+            const tokenResult = await fbUser.getIdTokenResult()
+            claimRole = tokenResult?.claims?.role || tokenResult?.claims?.roles?.[0] || null
+          } catch {
+            claimRole = null
+          }
+
+          let pending = get().pendingProfile
+          if (!pending) {
+            try {
+              const raw = localStorage.getItem('pending_profile')
+              pending = raw ? JSON.parse(raw) : null
+            } catch {
+              pending = null
+            }
+          }
+
+          const name = pending?.name || get().user?.name || fbUser.displayName || fbUser.phoneNumber || 'User'
+          const user = {
+            id: fbUser.uid,
+            name,
+            email: pending?.email || get().user?.email || fbUser.email || null,
+            phone_number: fbUser.phoneNumber || get().tempPhone || null,
+            role: pending?.role || claimRole || get().user?.role || 'doctor',
+            org: pending?.org || get().user?.org || '',
+            initials: initialsFromName(name),
+          }
+
+          localStorage.removeItem('temp_phone')
+          localStorage.removeItem('verification_id')
+          localStorage.removeItem('pending_profile')
+
+          set({
+            user,
+            isAuthenticated: true,
+            tempPhone: null,
+            verificationId: null,
+            pendingProfile: null,
+            isInitialized: true,
+          })
+
           return { ok: true, user }
         } catch (err) {
           const message = errorMessage(err, 'OTP verification failed')
           log.warn('AUTH', `verifyOtp ✗ — ${message}`)
-          return { ok: false, error: message, details: err?.data }
+          return { ok: false, error: message }
         }
       },
 
@@ -151,34 +229,48 @@ export const useAuthStore = create(
 
       /* ── logout ───────────────────────────────────────── */
       logout: async () => {
-        log.info('AUTH', 'logout → calling /api/logout ...')
         try {
-          await api.post(AUTH_ENDPOINTS.logout)
-          log.info('AUTH', 'logout ✓ — server session cleared')
-        } catch (err) {
-          log.warn('AUTH', `logout — ${errorMessage(err, 'Logout failed')}`)
+          await signOut(firebaseAuth)
+        } catch {
+          null
         }
-        localStorage.removeItem('temp_email')
-        set({ user: null, isAuthenticated: false, tempEmail: null })
-        log.info('AUTH', 'logout ✓ — local auth state cleared')
+        localStorage.removeItem('temp_phone')
+        localStorage.removeItem('verification_id')
+        localStorage.removeItem('pending_profile')
+        set({ user: null, isAuthenticated: false, tempPhone: null, verificationId: null, pendingProfile: null })
       },
 
-      /* ── register ─────────────────────────────────────── */
-      register: async (formData) => {
-        const payload = buildRegisterPayload(formData)
-        log.info('AUTH', `register → name="${payload.name}" email="${payload.email}" role="${payload.role}"`)
+      /* ── startSignUpOtp ───────────────────────────────── */
+      startSignUpOtp: async (profile, recaptchaContainerId = 'recaptcha-container') => {
+        const phone = profile?.phone_number || profile?.phone || ''
+        if (!phone) return { ok: false, error: 'Phone number is required.' }
+
         try {
-          await api.getCsrf()
-          const data = await api.post(AUTH_ENDPOINTS.register, payload)
-          const email = data?.email || payload.email
-          localStorage.setItem('temp_email', email)
-          set({ tempEmail: email })
-          log.info('AUTH', `register ✓ — created account for "${email}" (real API)`)
-          return { ok: true, email, phone_number: payload.phone_number, data }
+          const existing = get()._recaptcha
+          if (existing) {
+            existing.clear()
+          }
+
+          const verifier = new RecaptchaVerifier(firebaseAuth, recaptchaContainerId, { size: 'invisible' })
+          await verifier.render()
+          const confirmation = await signInWithPhoneNumber(firebaseAuth, phone, verifier)
+
+          localStorage.setItem('temp_phone', phone)
+          localStorage.setItem('verification_id', confirmation.verificationId)
+          localStorage.setItem('pending_profile', JSON.stringify(profile))
+
+          set({
+            tempPhone: phone,
+            verificationId: confirmation.verificationId,
+            pendingProfile: profile,
+            _recaptcha: verifier,
+          })
+
+          return { ok: true }
         } catch (err) {
-          const message = errorMessage(err, 'Registration failed')
-          log.warn('AUTH', `register ✗ — ${message}`)
-          return { ok: false, error: message, details: err?.data }
+          const message = errorMessage(err, 'Failed to send OTP')
+          log.warn('AUTH', `startSignUpOtp ✗ — ${message}`)
+          return { ok: false, error: message }
         }
       },
     }),
