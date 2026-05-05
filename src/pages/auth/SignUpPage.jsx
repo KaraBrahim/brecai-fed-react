@@ -252,9 +252,10 @@ function OrgManagerForm({ onBack, onNext }) {
   })
   const [showPw, setShow] = useState(false)
   const [errors, setErrors] = useState({})
+  const [submitError, setSubmitError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  function set(key, val) { setF(p => ({ ...p, [key]: val })); setErrors(p => ({ ...p, [key]: '' })) }
+  function set(key, val) { setF(p => ({ ...p, [key]: val })); setErrors(p => ({ ...p, [key]: '' })); setSubmitError('') }
 
   function validate() {
     const e = {}
@@ -272,9 +273,9 @@ function OrgManagerForm({ onBack, onNext }) {
     const e2 = validate()
     if (Object.keys(e2).length) { setErrors(e2); return }
     setLoading(true)
-    await new Promise(r => setTimeout(r, 600))
+    const res = await onNext({ ...f, api_role: 'org_manager' })
     setLoading(false)
-    onNext({ ...f, api_role: 'org_manager' })
+    if (!res?.ok) setSubmitError(res?.error || 'Registration failed')
   }
 
   const ORG_TYPES = [
@@ -347,6 +348,15 @@ function OrgManagerForm({ onBack, onNext }) {
           <span>{loading ? 'Registering...' : 'Continue'}</span>
           {loading ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }} className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full" /> : <ArrowRight className="w-5 h-5" />}
         </motion.button>
+
+        <AnimatePresence>
+          {submitError && (
+            <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              className="text-[#F55486] text-xs font-semibold bg-pink-50 border border-pink-200 rounded-xl px-4 py-3">
+              {submitError}
+            </motion.p>
+          )}
+        </AnimatePresence>
       </form>
     </motion.div>
   )
@@ -358,9 +368,10 @@ function DoctorForm({ onBack, onNext }) {
   const [f, setF] = useState({ name: '', email: '', password: '', confirm: '', organization_id: '', invite_code: '' })
   const [showPw, setShow] = useState(false)
   const [errors, setErrors] = useState({})
+  const [submitError, setSubmitError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  function set(key, val) { setF(p => ({ ...p, [key]: val })); setErrors(p => ({ ...p, [key]: '' })) }
+  function set(key, val) { setF(p => ({ ...p, [key]: val })); setErrors(p => ({ ...p, [key]: '' })); setSubmitError('') }
 
   function applyInvite() {
     setF(p => ({
@@ -385,10 +396,10 @@ function DoctorForm({ onBack, onNext }) {
     const e2 = validate()
     if (Object.keys(e2).length) { setErrors(e2); return }
     setLoading(true)
-    await new Promise(r => setTimeout(r, 600))
-    setLoading(false)
     const org_label = DEMO_ORGS.find(o => String(o.id) === f.organization_id)?.name || 'My Organization'
-    onNext({ ...f, api_role: 'doctor', org_label })
+    const res = await onNext({ ...f, api_role: 'doctor', org_label })
+    setLoading(false)
+    if (!res?.ok) setSubmitError(res?.error || 'Registration failed')
   }
 
   return (
@@ -488,6 +499,15 @@ function DoctorForm({ onBack, onNext }) {
           <span>{loading ? 'Creating account...' : 'Continue'}</span>
           {loading ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }} className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full" /> : <ArrowRight className="w-5 h-5" />}
         </motion.button>
+
+        <AnimatePresence>
+          {submitError && (
+            <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              className="text-[#F55486] text-xs font-semibold bg-pink-50 border border-pink-200 rounded-xl px-4 py-3">
+              {submitError}
+            </motion.p>
+          )}
+        </AnimatePresence>
       </form>
     </motion.div>
   )
@@ -542,17 +562,18 @@ function OtpStep({ email, demoOtp, onBack }) {
         </div>
       </div>
 
-      {/* Demo OTP banner */}
-      <motion.div
-        initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-        className="flex items-center gap-3 mb-6 px-4 py-3 rounded-2xl border border-teal-200 bg-teal-50"
-      >
-        <span className="text-lg">⚡</span>
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-teal-700 mb-0.5">Demo Mode — Your OTP</p>
-          <p className="font-mono font-black text-xl text-teal-900 tracking-[0.2em]">{demoOtp}</p>
-        </div>
-      </motion.div>
+      {demoOtp && (
+        <motion.div
+          initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+          className="flex items-center gap-3 mb-6 px-4 py-3 rounded-2xl border border-teal-200 bg-teal-50"
+        >
+          <span className="text-lg">⚡</span>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-teal-700 mb-0.5">Demo Mode — Your OTP</p>
+            <p className="font-mono font-black text-xl text-teal-900 tracking-[0.2em]">{demoOtp}</p>
+          </div>
+        </motion.div>
+      )}
 
       <OtpInput value={code} onChange={v => { setCode(v); setError('') }} hasError={!!error} />
 
@@ -600,12 +621,13 @@ export default function SignUpPage() {
     setStep(2)
   }
 
-  function handleFormSubmit(formData) {
-    const res = register(formData)
+  async function handleFormSubmit(formData) {
+    const res = await register(formData)
     if (res.ok) {
       setOtpData({ email: res.email, otp: res.otp })
       setStep(3)
     }
+    return res
   }
 
   return (
