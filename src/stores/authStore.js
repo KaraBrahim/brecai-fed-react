@@ -82,12 +82,14 @@ export const useAuthStore = create(
       userRole: () => resolveUserRole(get().user),
 
       /* ── fetchUser ────────────────────────────────────── */
-      fetchUser: async () => {
-        // Prevent concurrent calls (React Strict Mode fires effects twice in dev)
-        if (get().isInitialized || get()._fetchingUser) return
+      // force=true bypasses the isInitialized guard without touching isInitialized,
+      // so the spinner never flashes mid-flow (used by verifyOtp after OTP success).
+      fetchUser: async ({ force = false } = {}) => {
+        if (!force && (get().isInitialized || get()._fetchingUser)) return
+        if (get()._fetchingUser) return  // still guard concurrent calls even when forced
         set({ _fetchingUser: true })
 
-        log.info('AUTH', `fetchUser → GET ${AUTH_ENDPOINTS.user}`)
+        log.info('AUTH', `fetchUser → GET ${AUTH_ENDPOINTS.user}${force ? ' (forced)' : ''}`)
         try {
           const data = await api.get(AUTH_ENDPOINTS.user)
           const role = resolveUserRole(data)
@@ -96,12 +98,16 @@ export const useAuthStore = create(
         } catch (err) {
           set({ _fetchingUser: false })
           if (err.isUnauthenticated) {
-            // 401 = no active session, perfectly normal on first load
             log.info('AUTH', 'fetchUser — no active session (401), setting guest state')
           } else {
             log.warn('AUTH', `fetchUser ✗ — backend unreachable (${err.message}), setting guest state`)
           }
-          set({ user: null, isAuthenticated: false, isInitialized: true })
+          if (!force) {
+            // Only clear auth on normal startup fetch, not after OTP (session cookie must be valid)
+            set({ user: null, isAuthenticated: false, isInitialized: true })
+          } else {
+            set({ isInitialized: true })
+          }
         }
       },
 
@@ -225,12 +231,18 @@ export const useAuthStore = create(
           set({ tempEmail: null, tempPhone: null, otpContext: null, otpMethods: null, otpMethod: null })
 
           if (res.status === 202) {
+            log.info('AUTH', 'verifyOtp — account pending approval (202)')
             return { ok: true, pendingApproval: true, data }
           }
 
-          set({ isInitialized: false })
-          await get().fetchUser()
-          return { ok: true, user: get().user, data }
+          // Fetch the real user from the API using the newly-issued session cookie.
+          // force=true keeps isInitialized=true so RootLayout never shows the spinner,
+          // which means OtpPage stays mounted and its navigate() call fires correctly.
+          log.info('AUTH', 'verifyOtp ✓ — fetching user with new session ...')
+          await get().fetchUser({ force: true })
+          const user = get().user
+          log.info('AUTH', `verifyOtp — session established for "${user?.name}" [${resolveUserRole(user)}]`)
+          return { ok: true, user, data }
         } catch (err) {
           const message = errorMessage(err, 'OTP verification failed')
           log.warn('AUTH', `verifyOtp ✗ — ${message}`)
