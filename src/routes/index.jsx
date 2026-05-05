@@ -6,14 +6,15 @@ import AuthLayout from '@/layouts/AuthLayout'
 import DashboardLayout from '@/layouts/DashboardLayout'
 
 // Guards
-import { GuestOnly, RequireAuth, CatchAll } from '@/routes/guards'
+import { GuestOnly, RequireAuth, RequireOtp, CatchAll } from '@/routes/guards'
 
 // Public
 import LandingPage from '@/pages/landing/LandingPage'
 
 // Auth
-import LoginPage from '@/pages/auth/LoginPage'
+import LoginPage  from '@/pages/auth/LoginPage'
 import SignUpPage from '@/pages/auth/SignUpPage'
+import OtpPage    from '@/pages/auth/OtpPage'
 
 // Doctor
 import DoctorInsights    from '@/pages/doctor/DoctorInsights'
@@ -67,6 +68,15 @@ export const router = createBrowserRouter([
         children: [
           { index: true,        element: <LoginPage /> },
           { path: 'signup',     element: <SignUpPage /> },
+        ],
+      },
+
+      // ── OTP (requiresOtp) ───────────────────────────────────
+      {
+        path: '/auth/otp',
+        element: <RequireOtp><AuthLayout /></RequireOtp>,
+        children: [
+          { index: true, element: <OtpPage /> },
         ],
       },
 
