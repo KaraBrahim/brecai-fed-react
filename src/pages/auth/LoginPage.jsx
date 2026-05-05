@@ -1,13 +1,11 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Eye, EyeOff, ArrowRight, Stethoscope,
-  Network, Building2, ShieldCheck, RotateCcw, ChevronLeft,
-  Mail, Sparkles,
+  Eye, EyeOff, ArrowRight, ChevronLeft,
+  Mail,
 } from 'lucide-react'
-import { useAuthStore, DEMO_ACCOUNTS, ROLE_HOME, ROLE_META } from '@/stores/authStore'
-import { RoleEnum } from '@/enums/roles'
+import { useAuthStore, ROLE_HOME } from '@/stores/authStore'
 import { cn } from '@/lib/utils'
 
 /* ── OTP Input ──────────────────────────────────── */
@@ -69,86 +67,24 @@ function OtpInput({ value, onChange, hasError }) {
   )
 }
 
-/* ── Countdown hook ─────────────────────────────── */
-function useCountdown(init = 60) {
-  const [s, setS] = useState(init)
-  const [active, setActive] = useState(true)
-  useEffect(() => {
-    if (!active || s <= 0) { setActive(false); return }
-    const t = setTimeout(() => setS(v => v - 1), 1000)
-    return () => clearTimeout(t)
-  }, [s, active])
-  return { seconds: s, done: !active, reset: () => { setS(init); setActive(true) } }
-}
-
-/* ── Role quick-access card ─────────────────────── */
-const ROLE_ICONS = {
-  doctor: Stethoscope, instructor: Network, org_manager: Building2, admin: ShieldCheck,
-  Doctor: Stethoscope, Instructor: Network, 'Org Admin': Building2, Platform: ShieldCheck,
-}
-
-function QuickCard({ account, onClick, busy }) {
-  const meta = ROLE_META[account.role] || ROLE_META.Platform
-  const Icon = ROLE_ICONS[account.role] || ShieldCheck
-  return (
-    <motion.button
-      onClick={() => onClick(account.role)}
-      whileHover={{ y: -3, scale: 1.02 }}
-      whileTap={{ scale: 0.97 }}
-      disabled={!!busy}
-      className="relative w-full text-left rounded-2xl overflow-hidden cursor-pointer focus:outline-none"
-      style={{
-        background: `linear-gradient(135deg, ${meta.gradFrom}, ${meta.gradTo})`,
-        boxShadow: `0 4px 20px ${meta.accent}33`,
-      }}
-    >
-      <div className="relative z-10 px-3.5 py-3 flex items-center gap-3">
-        <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(255,255,255,0.18)' }}>
-          {busy === account.role
-            ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.7, repeat: Infinity, ease: 'linear' }} className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
-            : <Icon style={{ width: 15, height: 15 }} className="text-white" />
-          }
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-white font-black text-[11px] uppercase tracking-wide leading-none mb-0.5">{meta.badge}</p>
-          <p className="text-white/65 text-[10px] font-medium truncate">{account.name}</p>
-        </div>
-        <ArrowRight className="w-3.5 h-3.5 text-white/50 shrink-0" />
-      </div>
-    </motion.button>
-  )
-}
-
 /* ── VIEWS ──────────────────────────────────────── */
 
 function SignInForm({ onOtpSent }) {
-  const { requestOtp } = useAuthStore()
+  const { login } = useAuthStore()
   const [email, setEmail] = useState('')
   const [pw, setPw]       = useState('')
   const [showPw, setShow] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [busy, setBusy]   = useState(null)
   const [error, setError] = useState('')
-  const { loginAs } = useAuthStore()
-  const navigate = useNavigate()
 
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
     setLoading(true)
-    await new Promise(r => setTimeout(r, 600))
-    const res = requestOtp(email, pw)
+    const res = await login(email, pw)
     setLoading(false)
     if (!res.ok) { setError(res.error); return }
-    onOtpSent({ email: res.email, otp: res.otp })
-  }
-
-  async function handleQuick(role) {
-    setBusy(role)
-    await new Promise(r => setTimeout(r, 500))
-    const user = loginAs(role)
-    if (user) navigate(ROLE_HOME[user.role] || '/app/doctor', { replace: true })
-    setBusy(null)
+    onOtpSent({ email: res.email })
   }
 
   return (
@@ -238,25 +174,6 @@ function SignInForm({ onOtpSent }) {
         </motion.button>
       </form>
 
-      {/* Quick access */}
-      <div className="mt-6">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="flex-1 h-px bg-slate-200" />
-          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
-            <Sparkles className="w-3 h-3" /> Quick Access
-          </span>
-          <div className="flex-1 h-px bg-slate-200" />
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          {DEMO_ACCOUNTS.map(acc => (
-            <QuickCard key={acc.role} account={acc} onClick={handleQuick} busy={busy} />
-          ))}
-        </div>
-        <p className="text-center text-[10px] text-slate-400 mt-2.5 font-medium">
-          All demo passwords are <span className="font-mono font-bold text-slate-600">demo</span>
-        </p>
-      </div>
-
       <p className="text-center text-sm text-slate-500 font-semibold mt-5">
         No account?{' '}
         <Link to="/auth/signup" className="text-[#0572B2] hover:underline font-bold">Create one →</Link>
@@ -265,13 +182,12 @@ function SignInForm({ onOtpSent }) {
   )
 }
 
-function OtpView({ email, demoOtp, onBack }) {
+function OtpView({ email, onBack }) {
   const navigate = useNavigate()
   const { verifyOtp } = useAuthStore()
   const [code, setCode]   = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const { seconds, done, reset } = useCountdown(60)
 
   async function handleVerify() {
     if (code.length < 6) return
@@ -306,20 +222,6 @@ function OtpView({ email, demoOtp, onBack }) {
         </p>
       </div>
 
-      {/* Demo banner */}
-      <motion.div
-        initial={{ opacity: 0, y: 4 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="flex items-center gap-2.5 mb-6 px-4 py-3 rounded-2xl border border-amber-200 bg-amber-50"
-      >
-        <span className="text-lg">⚡</span>
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-amber-700 mb-0.5">Demo Mode — Your OTP</p>
-          <p className="font-mono font-black text-xl text-amber-900 tracking-[0.2em]">{demoOtp}</p>
-        </div>
-      </motion.div>
-
       <OtpInput value={code} onChange={v => { setCode(v); setError('') }} hasError={!!error} />
 
       <AnimatePresence>
@@ -346,17 +248,10 @@ function OtpView({ email, demoOtp, onBack }) {
         }
       </motion.button>
 
-      {/* Resend */}
       <div className="mt-4 flex items-center justify-between">
         <button onClick={onBack} className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-slate-700 transition-colors">
           <ChevronLeft className="w-3.5 h-3.5" /> Back
         </button>
-        {done
-          ? <button onClick={() => { setCode(''); reset() }} className="flex items-center gap-1.5 text-xs font-bold text-[#0572B2] hover:underline">
-              <RotateCcw className="w-3 h-3" /> Resend code
-            </button>
-          : <span className="text-xs font-bold text-slate-400">Resend in <span className="text-slate-600 tabular-nums">{seconds}s</span></span>
-        }
       </div>
     </motion.div>
   )
@@ -372,7 +267,7 @@ export default function LoginPage() {
       <AnimatePresence mode="wait">
         {view === 'form'
           ? <SignInForm key="form" onOtpSent={data => { setOtpData(data); setView('otp') }} />
-          : <OtpView key="otp" email={otpData.email} demoOtp={otpData.otp} onBack={() => setView('form')} />
+          : <OtpView key="otp" email={otpData.email} onBack={() => setView('form')} />
         }
       </AnimatePresence>
     </div>

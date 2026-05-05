@@ -3,10 +3,10 @@ import { useNavigate, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Stethoscope, Building2, ArrowRight, ChevronLeft,
-  Eye, EyeOff, RotateCcw, Check, MapPin, Mail,
+  Eye, EyeOff, Check, MapPin, Mail,
   Phone, User as UserIcon,
 } from 'lucide-react'
-import { useAuthStore, DEMO_ORGS, ROLE_HOME } from '@/stores/authStore'
+import { useAuthStore, ROLE_HOME } from '@/stores/authStore'
 import { cn } from '@/lib/utils'
 
 /* ── Shared OTP Input ───────────────────────────── */
@@ -107,7 +107,7 @@ function Select({ children, ...props }) {
 }
 
 /* ── Step indicator ─────────────────────────────── */
-const STEP_LABELS = ['Role', 'Details', 'OTP', 'Verify']
+const STEP_LABELS = ['Role', 'Details', 'Verify']
 
 function StepBar({ step }) {
   return (
@@ -352,7 +352,6 @@ function OrgManagerForm({ onBack, onNext }) {
 
 /* ── Step 2b: Doctor form ───────────────────────── */
 function DoctorForm({ onBack, onNext }) {
-  const [inviteMode, setInviteMode] = useState(false)
   const [f, setF] = useState({ name: '', email: '', phone_number: '', password: '', confirm: '', organization_id: '', invite_code: '' })
   const [showPw, setShow] = useState(false)
   const [errors, setErrors] = useState({})
@@ -361,14 +360,6 @@ function DoctorForm({ onBack, onNext }) {
 
   function set(key, val) { setF(p => ({ ...p, [key]: val })); setErrors(p => ({ ...p, [key]: '' })); setSubmitError('') }
 
-  function applyInvite() {
-    setF(p => ({
-      ...p,
-      email: 'invited.doctor@chu-oran.dz',
-      organization_id: '1',
-    }))
-  }
-
   function validate() {
     const e = {}
     if (!f.name.trim()) e.name = 'Full name is required'
@@ -376,7 +367,7 @@ function DoctorForm({ onBack, onNext }) {
     if (!f.phone_number.trim()) e.phone_number = 'Phone number is required'
     if (f.password.length < 8) e.password = 'At least 8 characters'
     if (f.password !== f.confirm) e.confirm = 'Passwords do not match'
-    if (!inviteMode && !f.organization_id) e.organization_id = 'Select your organization'
+    if (!f.invite_code.trim() && !f.organization_id.trim()) e.organization_id = 'Organization ID is required (or provide an invitation code)'
     return e
   }
 
@@ -385,8 +376,7 @@ function DoctorForm({ onBack, onNext }) {
     const e2 = validate()
     if (Object.keys(e2).length) { setErrors(e2); return }
     setLoading(true)
-    const org_label = DEMO_ORGS.find(o => String(o.id) === f.organization_id)?.name || 'My Organization'
-    const res = await onNext({ ...f, api_role: 'doctor', org_label })
+    const res = await onNext({ ...f, api_role: 'doctor' })
     setLoading(false)
     if (!res?.ok) setSubmitError(res?.error || 'Registration failed')
   }
@@ -403,46 +393,13 @@ function DoctorForm({ onBack, onNext }) {
         </div>
       </div>
 
-      {/* Invite toggle */}
-      <div className="flex rounded-2xl border-2 border-slate-200 overflow-hidden mb-4 p-1 gap-1">
-        {[
-          { mode: false, label: 'Search organization' },
-          { mode: true,  label: 'Invitation link' },
-        ].map(opt => (
-          <button
-            key={String(opt.mode)}
-            type="button"
-            onClick={() => { setInviteMode(opt.mode); if (opt.mode) applyInvite() }}
-            className={cn(
-              'flex-1 py-2 rounded-xl text-[11px] font-black uppercase tracking-wide transition-all duration-200',
-              inviteMode === opt.mode
-                ? 'bg-[#0572B2] text-white shadow-md'
-                : 'text-slate-400 hover:text-slate-700'
-            )}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
-
       <form onSubmit={handleSubmit} className="space-y-3.5">
-        {inviteMode && (
-          <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
-            className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-blue-50 border border-blue-200">
-            <span className="text-base">🔗</span>
-            <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-widest text-[#0572B2] mb-0.5">Demo invitation applied</p>
-              <p className="text-xs text-slate-600 font-medium truncate">CHU Oran · email pre-filled</p>
-            </div>
-          </motion.div>
-        )}
-
         <Field label="Full name" error={errors.name}>
           <Input icon={UserIcon} value={f.name} onChange={e => set('name', e.target.value)} placeholder="Dr. Ahmed" />
         </Field>
 
         <Field label="Email address" error={errors.email}>
-          <Input icon={Mail} type="email" value={f.email} onChange={e => set('email', e.target.value)} placeholder="doctor@hospital.dz" readOnly={inviteMode} className={inviteMode ? 'opacity-70 cursor-not-allowed' : ''} />
+          <Input icon={Mail} type="email" value={f.email} onChange={e => set('email', e.target.value)} placeholder="doctor@hospital.dz" />
         </Field>
 
         <Field label="Phone number" error={errors.phone_number}>
@@ -463,24 +420,13 @@ function DoctorForm({ onBack, onNext }) {
           </Field>
         </div>
 
-        {!inviteMode && (
-          <Field label="Organization" error={errors.organization_id}>
-            <Select value={f.organization_id} onChange={e => set('organization_id', e.target.value)}>
-              <option value="">Select your organization…</option>
-              {DEMO_ORGS.map(o => (
-                <option key={o.id} value={o.id}>{o.name} — {o.city}</option>
-              ))}
-            </Select>
-          </Field>
-        )}
+        <Field label="Organization ID" error={errors.organization_id}>
+          <Input icon={Building2} value={f.organization_id} onChange={e => set('organization_id', e.target.value)} placeholder="e.g. 12" />
+        </Field>
 
-        {inviteMode && (
-          <Field label="Organization" error={errors.organization_id}>
-            <Select value={f.organization_id} onChange={e => set('organization_id', e.target.value)} disabled>
-              <option value="1">CHU Oran — Oran (from invite)</option>
-            </Select>
-          </Field>
-        )}
+        <Field label="Invitation code (optional)" error={errors.invite_code}>
+          <Input value={f.invite_code} onChange={e => set('invite_code', e.target.value)} placeholder="e.g. INV-XXXXXX" />
+        </Field>
 
         <motion.button
           type="submit"
@@ -505,159 +451,22 @@ function DoctorForm({ onBack, onNext }) {
     </motion.div>
   )
 }
-
-function maskEmail(email) {
-  const s = String(email || '').trim()
-  const [u, d] = s.split('@')
-  if (!u || !d) return s
-  const head = u.slice(0, 1)
-  const tail = u.slice(-1)
-  return `${head}***${tail}@${d}`
-}
-
-function maskPhone(phone) {
-  const digits = String(phone || '').replace(/\D/g, '')
-  if (digits.length <= 4) return String(phone || '')
-  const tail = digits.slice(-2)
-  return `*** *** ** ${tail}`
-}
-
-/* ── Step 3: OTP channel ────────────────────────── */
-function OtpChannelStep({ email, phone_number, onBack, onNext }) {
-  const { requestSignUpOtp } = useAuthStore()
-  const [channel, setChannel] = useState('phone')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  async function handleSend() {
-    setError('')
-    setLoading(true)
-    const res = await requestSignUpOtp({ channel, email, phone_number })
-    setLoading(false)
-    if (!res?.ok) { setError(res?.error || 'Failed to send code'); return }
-    onNext({
-      channel,
-      token: res.token,
-      demoOtp: res.demoOtp ?? null,
-      target: channel === 'phone' ? maskPhone(phone_number) : maskEmail(email),
-    })
-  }
-
-  return (
-    <motion.div key="otp-channel" initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}>
-      <div className="flex items-center gap-3 mb-8">
-        <button onClick={onBack} className="p-2 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors">
-          <ChevronLeft className="w-4 h-4" />
-        </button>
-        <div>
-          <h1 className="text-[42px] font-black tracking-[-0.04em] leading-[0.9] uppercase text-slate-900">
-            Choose<br />
-            <span style={{ WebkitTextFillColor: 'transparent', background: 'linear-gradient(135deg,#0BB592,#0572B2)', WebkitBackgroundClip: 'text' }}>OTP</span>
-            <span style={{ color: '#0BB592' }}>.</span>
-          </h1>
-          <p className="text-slate-500 text-sm font-semibold mt-2">Select where to receive your verification code</p>
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        {[
-          { key: 'phone', label: 'Phone number', icon: Phone, sub: phone_number ? maskPhone(phone_number) : 'Add a phone number first' },
-          { key: 'email', label: 'Email address', icon: Mail, sub: email ? maskEmail(email) : 'Add an email first' },
-        ].map(opt => {
-          const Icon = opt.icon
-          const active = channel === opt.key
-          const disabled = opt.key === 'phone' ? !phone_number : !email
-          return (
-            <button
-              key={opt.key}
-              type="button"
-              onClick={() => { if (!disabled) { setChannel(opt.key); setError('') } }}
-              disabled={disabled}
-              className={cn(
-                'w-full text-left rounded-2xl border-2 px-4 py-4 transition-all',
-                active ? 'border-[#0BB592] bg-teal-50/50' : 'border-slate-200 bg-slate-50 hover:bg-white',
-                disabled && 'opacity-50 cursor-not-allowed'
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <div className={cn('w-10 h-10 rounded-2xl flex items-center justify-center', active ? 'bg-[#0BB592] text-white' : 'bg-white border border-slate-200 text-slate-500')}>
-                  <Icon className="w-4 h-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-black uppercase tracking-widest text-slate-600">{opt.label}</p>
-                  <p className="text-sm font-semibold text-slate-900 truncate">{opt.sub}</p>
-                </div>
-                <div className={cn('w-5 h-5 rounded-full border-2 flex items-center justify-center', active ? 'border-[#0BB592] bg-[#0BB592]' : 'border-slate-300')}>
-                  {active && <div className="w-2 h-2 bg-white rounded-full" />}
-                </div>
-              </div>
-            </button>
-          )
-        })}
-      </div>
-
-      <AnimatePresence>
-        {error && (
-          <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            className="text-[#F55486] text-xs font-semibold bg-pink-50 border border-pink-200 rounded-xl px-4 py-3 mt-4">
-            {error}
-          </motion.p>
-        )}
-      </AnimatePresence>
-
-      <motion.button
-        onClick={handleSend}
-        disabled={loading || (channel === 'phone' ? !phone_number : !email)}
-        whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
-        className="w-full mt-5 flex items-center justify-between rounded-2xl px-6 py-4 text-[15px] font-black uppercase tracking-wide text-white transition-all disabled:opacity-40"
-        style={{ background: 'linear-gradient(135deg,#0BB592,#0572B2)', boxShadow: '0 6px 24px #0BB59244' }}
-      >
-        <span>{loading ? 'Sending...' : 'Send Code'}</span>
-        {loading ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }} className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full" /> : <ArrowRight className="w-5 h-5" />}
-      </motion.button>
-    </motion.div>
-  )
-}
-
-/* ── Step 4: OTP verify ─────────────────────────── */
-function OtpStep({ email, target, token, demoOtp, onBack, onTokenUpdate, channel, phone_number }) {
+/* ── Step 3: OTP verify ─────────────────────────── */
+function OtpStep({ email, onBack }) {
   const navigate = useNavigate()
-  const { verifySignUpOtp, requestSignUpOtp } = useAuthStore()
+  const { verifyOtp } = useAuthStore()
   const [code, setCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [seconds, setSeconds] = useState(60)
-  const [canResend, setCanResend] = useState(false)
-
-  useState(() => {
-    let s = 60
-    const interval = setInterval(() => {
-      s -= 1
-      setSeconds(s)
-      if (s <= 0) { setCanResend(true); clearInterval(interval) }
-    }, 1000)
-    return () => clearInterval(interval)
-  })
 
   async function handleVerify() {
     if (code.length < 6) return
     setError('')
     setLoading(true)
-    const res = await verifySignUpOtp({ token, otp: code })
+    const res = await verifyOtp(code)
     setLoading(false)
     if (!res.ok) { setError(res.error); return }
     navigate(ROLE_HOME[res.user?.role] || '/app/doctor', { replace: true })
-  }
-
-  async function handleResend() {
-    if (!canResend || loading) return
-    setError('')
-    setLoading(true)
-    const res = await requestSignUpOtp({ channel, email, phone_number })
-    setLoading(false)
-    if (!res?.ok) { setError(res?.error || 'Failed to resend code'); return }
-    onTokenUpdate({ token: res.token, demoOtp: res.demoOtp ?? null })
-    setCode('')
   }
 
   return (
@@ -669,29 +478,14 @@ function OtpStep({ email, target, token, demoOtp, onBack, onTokenUpdate, channel
         <div>
           <h1 className="text-[42px] font-black tracking-[-0.04em] leading-[0.9] uppercase text-slate-900">
             Verify<br />
-            <span style={{ WebkitTextFillColor: 'transparent', background: 'linear-gradient(135deg,#0BB592,#0572B2)', WebkitBackgroundClip: 'text' }}>
-              {channel === 'phone' ? 'Phone' : 'Email'}
-            </span>
+            <span style={{ WebkitTextFillColor: 'transparent', background: 'linear-gradient(135deg,#0BB592,#0572B2)', WebkitBackgroundClip: 'text' }}>Email</span>
             <span style={{ color: '#0BB592' }}>.</span>
           </h1>
           <p className="text-slate-500 text-sm font-semibold mt-2">
-            Code sent to <span className="text-slate-800 font-bold">{target || email}</span>
+            Enter the 6-digit code sent to <span className="text-slate-800 font-bold">{email}</span>
           </p>
         </div>
       </div>
-
-      {demoOtp && (
-        <motion.div
-          initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-          className="flex items-center gap-3 mb-6 px-4 py-3 rounded-2xl border border-teal-200 bg-teal-50"
-        >
-          <span className="text-lg">⚡</span>
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-teal-700 mb-0.5">Demo Mode — Your OTP</p>
-            <p className="font-mono font-black text-xl text-teal-900 tracking-[0.2em]">{demoOtp}</p>
-          </div>
-        </motion.div>
-      )}
 
       <OtpInput value={code} onChange={v => { setCode(v); setError('') }} hasError={!!error} />
 
@@ -714,15 +508,6 @@ function OtpStep({ email, target, token, demoOtp, onBack, onTokenUpdate, channel
         <span>{loading ? 'Verifying...' : 'Complete Sign-Up'}</span>
         {loading ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }} className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full" /> : <Check className="w-5 h-5" />}
       </motion.button>
-
-      <div className="mt-4 flex justify-end">
-        {canResend
-          ? <button onClick={handleResend} className="flex items-center gap-1.5 text-xs font-bold text-[#0572B2] hover:underline">
-              <RotateCcw className="w-3 h-3" /> Resend code
-            </button>
-          : <span className="text-xs font-bold text-slate-400">Resend in <span className="text-slate-600 tabular-nums">{seconds}s</span></span>
-        }
-      </div>
     </motion.div>
   )
 }
@@ -733,7 +518,6 @@ export default function SignUpPage() {
   const [step, setStep] = useState(1)
   const [role, setRole]   = useState(null)
   const [regData, setRegData] = useState(null)
-  const [otpData, setOtpData] = useState(null)
 
   function handleRoleSelect(api_role) {
     setRole(api_role)
@@ -743,8 +527,7 @@ export default function SignUpPage() {
   async function handleFormSubmit(formData) {
     const res = await register(formData)
     if (res.ok) {
-      setRegData({ email: res.email, phone_number: res.phone_number ?? formData.phone_number ?? null })
-      setOtpData(null)
+      setRegData({ email: res.email })
       setStep(3)
     }
     return res
@@ -764,25 +547,10 @@ export default function SignUpPage() {
           <DoctorForm key="s2b" onBack={() => setStep(1)} onNext={handleFormSubmit} />
         )}
         {step === 3 && regData && (
-          <OtpChannelStep
+          <OtpStep
             key="s3"
             email={regData.email}
-            phone_number={regData.phone_number}
             onBack={() => setStep(2)}
-            onNext={(data) => { setOtpData(data); setStep(4) }}
-          />
-        )}
-        {step === 4 && otpData && regData && (
-          <OtpStep
-            key={`s4-${otpData.token}`}
-            email={regData.email}
-            phone_number={regData.phone_number}
-            channel={otpData.channel}
-            target={otpData.target}
-            token={otpData.token}
-            demoOtp={otpData.demoOtp}
-            onBack={() => setStep(3)}
-            onTokenUpdate={({ token, demoOtp }) => setOtpData(p => ({ ...p, token, demoOtp }))}
           />
         )}
       </AnimatePresence>
