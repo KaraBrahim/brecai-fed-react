@@ -247,7 +247,7 @@ function StepRole({ onNext }) {
 /* ── Step 2a: Org Manager form ──────────────────── */
 function OrgManagerForm({ onBack, onNext }) {
   const [f, setF] = useState({
-    name: '', email: '', password: '', confirm: '',
+    name: '', email: '', phone_number: '', password: '', confirm: '',
     organization_name: '', organization_type: '', organization_address: '',
   })
   const [showPw, setShow] = useState(false)
@@ -261,6 +261,7 @@ function OrgManagerForm({ onBack, onNext }) {
     const e = {}
     if (!f.name.trim()) e.name = 'Full name is required'
     if (!f.email.match(/^[^@]+@[^@]+\.[^@]+$/)) e.email = 'Valid email required'
+    if (!f.phone_number.trim()) e.phone_number = 'Phone number is required'
     if (f.password.length < 8) e.password = 'At least 8 characters'
     if (f.password !== f.confirm) e.confirm = 'Passwords do not match'
     if (!f.organization_name.trim()) e.organization_name = 'Organization name is required'
@@ -304,6 +305,10 @@ function OrgManagerForm({ onBack, onNext }) {
 
         <Field label="Email address" error={errors.email}>
           <Input icon={Mail} type="email" value={f.email} onChange={e => set('email', e.target.value)} placeholder="ahmed@clinic.dz" />
+        </Field>
+
+        <Field label="Phone number" error={errors.phone_number}>
+          <Input icon={Phone} type="tel" value={f.phone_number} onChange={e => set('phone_number', e.target.value)} placeholder="+213 555 123 456" />
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
@@ -365,7 +370,7 @@ function OrgManagerForm({ onBack, onNext }) {
 /* ── Step 2b: Doctor form ───────────────────────── */
 function DoctorForm({ onBack, onNext }) {
   const [inviteMode, setInviteMode] = useState(false)
-  const [f, setF] = useState({ name: '', email: '', password: '', confirm: '', organization_id: '', invite_code: '' })
+  const [f, setF] = useState({ name: '', email: '', phone_number: '', password: '', confirm: '', organization_id: '', invite_code: '' })
   const [showPw, setShow] = useState(false)
   const [errors, setErrors] = useState({})
   const [submitError, setSubmitError] = useState('')
@@ -385,6 +390,7 @@ function DoctorForm({ onBack, onNext }) {
     const e = {}
     if (!f.name.trim()) e.name = 'Full name is required'
     if (!f.email.match(/^[^@]+@[^@]+\.[^@]+$/)) e.email = 'Valid email required'
+    if (!f.phone_number.trim()) e.phone_number = 'Phone number is required'
     if (f.password.length < 8) e.password = 'At least 8 characters'
     if (f.password !== f.confirm) e.confirm = 'Passwords do not match'
     if (!inviteMode && !f.organization_id) e.organization_id = 'Select your organization'
@@ -454,6 +460,10 @@ function DoctorForm({ onBack, onNext }) {
 
         <Field label="Email address" error={errors.email}>
           <Input icon={Mail} type="email" value={f.email} onChange={e => set('email', e.target.value)} placeholder="doctor@hospital.dz" readOnly={inviteMode} className={inviteMode ? 'opacity-70 cursor-not-allowed' : ''} />
+        </Field>
+
+        <Field label="Phone number" error={errors.phone_number}>
+          <Input icon={Phone} type="tel" value={f.phone_number} onChange={e => set('phone_number', e.target.value)} placeholder="+213 555 123 456" />
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
