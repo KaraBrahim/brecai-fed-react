@@ -83,11 +83,24 @@ export const useAuthStore = create(
 
       /* ── fetchUser ────────────────────────────────────── */
       fetchUser: async () => {
-        if (get().isInitialized) return
+        // Prevent concurrent calls (React Strict Mode fires effects twice in dev)
+        if (get().isInitialized || get()._fetchingUser) return
+        set({ _fetchingUser: true })
+
+        log.info('AUTH', `fetchUser → GET ${AUTH_ENDPOINTS.user}`)
         try {
           const data = await api.get(AUTH_ENDPOINTS.user)
-          set({ user: data, isAuthenticated: true, isInitialized: true })
-        } catch {
+          const role = resolveUserRole(data)
+          log.info('AUTH', `fetchUser ✓ — authenticated as "${data?.name}" [${role}]`)
+          set({ user: data, isAuthenticated: true, isInitialized: true, _fetchingUser: false })
+        } catch (err) {
+          set({ _fetchingUser: false })
+          if (err.isUnauthenticated) {
+            // 401 = no active session, perfectly normal on first load
+            log.info('AUTH', 'fetchUser — no active session (401), setting guest state')
+          } else {
+            log.warn('AUTH', `fetchUser ✗ — backend unreachable (${err.message}), setting guest state`)
+          }
           set({ user: null, isAuthenticated: false, isInitialized: true })
         }
       },
@@ -154,16 +167,28 @@ export const useAuthStore = create(
       /* ── sendOtp (step 2) ─────────────────────────────── */
       sendOtp: async (method) => {
         const email = get().tempEmail
+        const phone = get().tempPhone
         if (!email) return { ok: false, error: 'Session expired. Please start again.' }
+
+        log.info('AUTH', `sendOtp → method="${method}" email="${email}"`)
         try {
           await api.getCsrf()
-          await api.post(AUTH_ENDPOINTS.sendOtp, { email, method })
+          const body = { email, method, ...(phone ? { phone_number: phone } : {}) }
+          await api.post(AUTH_ENDPOINTS.sendOtp, body)
           localStorage.setItem('otp_method', method)
           set({ otpMethod: method })
+          log.info('AUTH', `sendOtp ✓ — OTP sent via ${method}`)
           return { ok: true }
         } catch (err) {
-          const message = errorMessage(err, 'Failed to send OTP')
-          log.warn('AUTH', `sendOtp ✗ — ${message}`)
+          const isServerError = err?.status >= 500
+          const isWhatsApp    = method === 'whatsapp'
+          let message = errorMessage(err, 'Failed to send OTP')
+
+          if (isServerError && isWhatsApp) {
+            message = 'WhatsApp delivery is currently unavailable. Please use email instead.'
+          }
+
+          log.warn('AUTH', `sendOtp ✗ — ${message} (HTTP ${err?.status})`)
           return { ok: false, error: message, details: err?.data, status: err?.status }
         }
       },

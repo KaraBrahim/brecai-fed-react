@@ -4,32 +4,9 @@ const BASE_URL = import.meta.env.VITE_API_URL || ''
 
 log.info('API', `Client initialised — base URL: "${BASE_URL || '(none — demo mode)'}"`)
 
-function redactValue(v) {
-  if (!v || typeof v !== 'object') return v
-  if (Array.isArray(v)) return v.map(redactValue)
-  const out = {}
-  for (const [k, val] of Object.entries(v)) {
-    const key = String(k).toLowerCase()
-    if (
-      key.includes('password') ||
-      key === 'otp' ||
-      key === 'code' ||
-      key.includes('token') ||
-      key.includes('secret') ||
-      key.includes('key')
-    ) {
-      out[k] = '[REDACTED]'
-    } else {
-      out[k] = redactValue(val)
-    }
-  }
-  return out
-}
-
 async function request(method, path, body) {
   const url = `${BASE_URL}${path}`
-  const safeBody = body !== undefined ? redactValue(body) : ''
-  log.debug('API', `→ ${method} ${url}`, safeBody)
+  log.debug('API', `→ ${method} ${url}`, body !== undefined ? body : '')
 
   const opts = {
     method,
@@ -49,10 +26,19 @@ async function request(method, path, body) {
   if (!res.ok) {
     let data
     try { data = await res.json() } catch { data = {} }
-    log.warn('API', `✗ ${method} ${url} — HTTP ${res.status}`, data)
+
     const err = new Error(data?.message || `HTTP ${res.status}`)
-    err.status = res.status
-    err.data = data
+    err.status  = res.status
+    err.data    = data
+
+    // 401 = not authenticated — not a real error, mark it so callers can handle it quietly
+    if (res.status === 401) {
+      err.isUnauthenticated = true
+      log.info('API', `→ ${method} ${url} — 401 Unauthenticated (no active session)`)
+    } else {
+      log.warn('API', `✗ ${method} ${url} — HTTP ${res.status}`, data)
+    }
+
     throw err
   }
 

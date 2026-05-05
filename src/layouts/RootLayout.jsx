@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { Outlet } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuthStore } from '@/stores/authStore'
@@ -19,8 +19,14 @@ function AppLoading() {
 export default function RootLayout() {
   const { isInitialized, fetchUser } = useAuthStore()
 
+  // Guard against React Strict Mode double-invoke (dev only: mount → unmount → remount)
+  const called = useRef(false)
+
   useEffect(() => {
-    log.info('ROOT', 'App mounted — initialising auth state (fetchUser) ...')
+    if (called.current) return
+    called.current = true
+
+    log.info('ROOT', 'App mounted — initialising auth state ...')
     fetchUser().then(() => {
       const { isAuthenticated, userRole } = useAuthStore.getState()
       log.info('ROOT', `Init complete — isAuthenticated=${isAuthenticated}, role="${userRole()}"`)
