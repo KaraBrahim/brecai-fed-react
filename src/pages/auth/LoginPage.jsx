@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowRight, Phone } from 'lucide-react'
+import { ArrowRight, Lock, Mail } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 
 function SignInForm() {
-  const { startLoginOtp } = useAuthStore()
-  const [phone, setPhone] = useState('')
+  const { loginWithEmailPassword, getRoleHome } = useAuthStore()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const navigate = useNavigate()
@@ -15,10 +16,10 @@ function SignInForm() {
     e.preventDefault()
     setError('')
     setLoading(true)
-    const res = await startLoginOtp(phone)
+    const res = await loginWithEmailPassword(email, password)
     setLoading(false)
     if (!res.ok) { setError(res.error); return }
-    navigate('/auth/otp')
+    navigate(getRoleHome(), { replace: true })
   }
 
   return (
@@ -43,17 +44,31 @@ function SignInForm() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div id="recaptcha-container" />
         <div>
-          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Phone number</label>
+          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Email</label>
           <div className="relative">
-            <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             <input
-              type="tel"
-              autoComplete="tel"
-              value={phone}
-              onChange={e => { setPhone(e.target.value); setError('') }}
-              placeholder="+213..."
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={e => { setEmail(e.target.value); setError('') }}
+              placeholder="you@domain.com"
+              className="w-full rounded-2xl border-2 border-slate-200 bg-slate-50 pl-11 pr-4 py-4 text-[15px] font-semibold text-slate-900 placeholder-slate-300 outline-none transition-all duration-200 focus:border-[#0572B2] focus:bg-white focus:ring-4 focus:ring-[#0572B2]/10"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Password</label>
+          <div className="relative">
+            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={e => { setPassword(e.target.value); setError('') }}
+              placeholder="Your password"
               className="w-full rounded-2xl border-2 border-slate-200 bg-slate-50 pl-11 pr-4 py-4 text-[15px] font-semibold text-slate-900 placeholder-slate-300 outline-none transition-all duration-200 focus:border-[#0572B2] focus:bg-white focus:ring-4 focus:ring-[#0572B2]/10"
             />
           </div>
@@ -76,7 +91,7 @@ function SignInForm() {
           className="w-full flex items-center justify-between gap-2 rounded-2xl px-6 py-4 text-[15px] font-black uppercase tracking-wide text-white transition-all duration-200 disabled:opacity-60"
           style={{ background: 'linear-gradient(135deg,#093A7A,#0572B2)', boxShadow: '0 6px 24px rgba(5,114,178,0.4)' }}
         >
-          <span>{loading ? 'Sending code...' : 'Send Code'}</span>
+          <span>{loading ? 'Signing in...' : 'Sign In'}</span>
           {loading
             ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }} className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full" />
             : <ArrowRight className="w-5 h-5" />

@@ -5,11 +5,15 @@ import log from '@/lib/logger'
 import { firebaseAuth } from '@/lib/firebase'
 import {
   RecaptchaVerifier,
+  EmailAuthProvider,
   PhoneAuthProvider,
+  linkWithCredential,
   onAuthStateChanged,
+  signInWithEmailAndPassword,
   signInWithCredential,
   signInWithPhoneNumber,
   signOut,
+  updateProfile,
 } from 'firebase/auth'
 
 /* ── Role helpers (UI display metadata, supports both API keys & display names) ── */
@@ -60,15 +64,7 @@ function errorMessage(err, fallback) {
 }
 
 function shouldDisableAppVerificationForTesting() {
-  const raw = String(import.meta.env.VITE_FIREBASE_PHONE_TEST_MODE || '').trim().toLowerCase()
-  return import.meta.env.DEV && (raw === 'true' || raw === '1' || raw === 'yes')
-}
-
-function shouldFallbackToTestMode(err) {
-  if (!import.meta.env.DEV) return false
-  if (shouldDisableAppVerificationForTesting()) return false
-  const message = String(err?.message || '')
-  return err?.code === 'auth/configuration-not-found' || message.includes('recaptchaParams')
+  return import.meta.env.DEV && import.meta.env.VITE_FIREBASE_PHONE_TEST_MODE === 'true'
 }
 
 /* ── Store ───────────────────────────────────────────────────── */
@@ -141,6 +137,41 @@ export const useAuthStore = create(
         })
       },
 
+      /* ── loginWithEmailPassword ───────────────────────── */
+      loginWithEmailPassword: async (email, password) => {
+        try {
+          const res = await signInWithEmailAndPassword(firebaseAuth, email, password)
+          const fbUser = res.user
+
+          let role = null
+          try {
+            const tokenResult = await fbUser.getIdTokenResult()
+            role = tokenResult?.claims?.role || tokenResult?.claims?.roles?.[0] || null
+          } catch {
+            role = null
+          }
+
+          const persisted = get().user
+          const name = persisted?.name || fbUser.displayName || fbUser.email || 'User'
+          const user = {
+            id: fbUser.uid,
+            name,
+            email: fbUser.email || persisted?.email || null,
+            phone_number: fbUser.phoneNumber || persisted?.phone_number || null,
+            role: role || persisted?.role || 'doctor',
+            org: persisted?.org || '',
+            initials: persisted?.initials || initialsFromName(name),
+          }
+
+          set({ user, isAuthenticated: true, isInitialized: true })
+          return { ok: true, user }
+        } catch (err) {
+          const message = errorMessage(err, 'Login failed')
+          log.warn('AUTH', `loginWithEmailPassword ✗ — ${message}`)
+          return { ok: false, error: message }
+        }
+      },
+
       /* ── startLoginOtp ─────────────────────────────────── */
       startLoginOtp: async (phone, recaptchaContainerId = 'recaptcha-container') => {
         try {
@@ -153,19 +184,9 @@ export const useAuthStore = create(
             existing.clear()
           }
 
-          let verifier = new RecaptchaVerifier(firebaseAuth, recaptchaContainerId, { size: 'invisible' })
-          let confirmation
-          try {
-            await verifier.render()
-            confirmation = await signInWithPhoneNumber(firebaseAuth, phone, verifier)
-          } catch (err) {
-            if (!shouldFallbackToTestMode(err)) throw err
-            firebaseAuth.settings.appVerificationDisabledForTesting = true
-            verifier.clear()
-            verifier = new RecaptchaVerifier(firebaseAuth, recaptchaContainerId, { size: 'invisible' })
-            await verifier.render()
-            confirmation = await signInWithPhoneNumber(firebaseAuth, phone, verifier)
-          }
+          const verifier = new RecaptchaVerifier(firebaseAuth, recaptchaContainerId, { size: 'invisible' })
+          await verifier.render()
+          const confirmation = await signInWithPhoneNumber(firebaseAuth, phone, verifier)
 
           localStorage.setItem('temp_phone', phone)
           localStorage.setItem('verification_id', confirmation.verificationId)
@@ -194,14 +215,7 @@ export const useAuthStore = create(
 
           const cred = PhoneAuthProvider.credential(verificationId, otp)
           const res = await signInWithCredential(firebaseAuth, cred)
-          const fbUser = res.user
-          let claimRole = null
-          try {
-            const tokenResult = await fbUser.getIdTokenResult()
-            claimRole = tokenResult?.claims?.role || tokenResult?.claims?.roles?.[0] || null
-          } catch {
-            claimRole = null
-          }
+          let fbUser = res.user
 
           let pending = get().pendingProfile
           if (!pending) {
@@ -211,6 +225,37 @@ export const useAuthStore = create(
             } catch {
               pending = null
             }
+          }
+
+          if (!pending?.email || !pending?.password) {
+            await signOut(firebaseAuth)
+            return { ok: false, error: 'Registration data missing. Please restart sign-up.' }
+          }
+
+          try {
+            const emailCred = EmailAuthProvider.credential(pending.email, pending.password)
+            const linked = await linkWithCredential(fbUser, emailCred)
+            fbUser = linked.user
+          } catch (err) {
+            const message = errorMessage(err, 'Failed to attach email credentials')
+            log.warn('AUTH', `verifyOtp link ✗ — ${message}`)
+            return { ok: false, error: message }
+          }
+
+          if (pending?.name) {
+            try {
+              await updateProfile(fbUser, { displayName: pending.name })
+            } catch {
+              null
+            }
+          }
+
+          let claimRole = null
+          try {
+            const tokenResult = await fbUser.getIdTokenResult()
+            claimRole = tokenResult?.claims?.role || tokenResult?.claims?.roles?.[0] || null
+          } catch {
+            claimRole = null
           }
 
           const name = pending?.name || get().user?.name || fbUser.displayName || fbUser.phoneNumber || 'User'
@@ -281,23 +326,17 @@ export const useAuthStore = create(
             existing.clear()
           }
 
-          let verifier = new RecaptchaVerifier(firebaseAuth, recaptchaContainerId, { size: 'invisible' })
-          let confirmation
-          try {
-            await verifier.render()
-            confirmation = await signInWithPhoneNumber(firebaseAuth, phone, verifier)
-          } catch (err) {
-            if (!shouldFallbackToTestMode(err)) throw err
-            firebaseAuth.settings.appVerificationDisabledForTesting = true
-            verifier.clear()
-            verifier = new RecaptchaVerifier(firebaseAuth, recaptchaContainerId, { size: 'invisible' })
-            await verifier.render()
-            confirmation = await signInWithPhoneNumber(firebaseAuth, phone, verifier)
-          }
+          const verifier = new RecaptchaVerifier(firebaseAuth, recaptchaContainerId, { size: 'invisible' })
+          await verifier.render()
+          const confirmation = await signInWithPhoneNumber(firebaseAuth, phone, verifier)
+
+          const persistedProfile = profile
+            ? Object.fromEntries(Object.entries(profile).filter(([k]) => k !== 'password'))
+            : null
 
           localStorage.setItem('temp_phone', phone)
           localStorage.setItem('verification_id', confirmation.verificationId)
-          localStorage.setItem('pending_profile', JSON.stringify(profile))
+          localStorage.setItem('pending_profile', JSON.stringify(persistedProfile))
 
           set({
             tempPhone: phone,
