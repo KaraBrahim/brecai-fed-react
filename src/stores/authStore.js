@@ -94,6 +94,12 @@ function genOtp() {
   return String(Math.floor(100000 + Math.random() * 900000))
 }
 
+function genToken() {
+  const c = typeof crypto !== 'undefined' ? crypto : null
+  if (c?.randomUUID) return c.randomUUID()
+  return `tok_${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`
+}
+
 function resolveUserRole(user) {
   if (!user) return null
   if (user?.roles?.length > 0) return user.roles[0].name
@@ -134,6 +140,8 @@ export const useAuthStore = create(
       isInitialized:   false,
       tempEmail:       localStorage.getItem('temp_email') || null,
       _pendingOtp:     null, // demo mode only, not persisted
+      _pendingOtpToken: null, // demo mode only, not persisted
+      _pendingOtpContext: null, // 'login' | 'signup'
 
       /* ── Computed helper (call as a function) ─────────── */
       userRole: () => resolveUserRole(get().user),
@@ -180,13 +188,13 @@ export const useAuthStore = create(
       /* ── verifyOtp ────────────────────────────────────── */
       verifyOtp: async (otp) => {
         const { tempEmail, _pendingOtp } = get()
-        log.info('AUTH', `verifyOtp → email="${tempEmail}" otp="${otp}"`)
+        log.info('AUTH', `verifyOtp → email="${tempEmail}"`)
 
         try {
           log.debug('AUTH', 'verifyOtp — posting to /api/verify-otp ...')
           await api.post('/api/verify-otp', { email: tempEmail, otp })
           localStorage.removeItem('temp_email')
-          set({ tempEmail: null, _pendingOtp: null, isInitialized: false })
+          set({ tempEmail: null, _pendingOtp: null, _pendingOtpToken: null, _pendingOtpContext: null, isInitialized: false })
           log.info('AUTH', 'verifyOtp ✓ — fetching user from API ...')
           await get().fetchUser()
           const user = get().user
@@ -195,12 +203,12 @@ export const useAuthStore = create(
         } catch (err) {
           log.warn('AUTH', `verifyOtp ✗ — API unavailable (${err.message}), trying demo verification`)
 
-          if (!tempEmail || !_pendingOtp) {
+          if (get()._pendingOtpContext !== 'login' || !tempEmail || !_pendingOtp) {
             log.error('AUTH', 'verifyOtp demo ✗ — no pending OTP in state (session expired?)')
             return { ok: false, error: 'Session expired. Please start again.' }
           }
           if (otp.trim() !== _pendingOtp) {
-            log.warn('AUTH', `verifyOtp demo ✗ — wrong code (entered="${otp}", expected="${_pendingOtp}")`)
+            log.warn('AUTH', 'verifyOtp demo ✗ — wrong code')
             return { ok: false, error: 'Incorrect code. Try again.' }
           }
           const found = DEMO_ACCOUNTS.find(
@@ -212,7 +220,7 @@ export const useAuthStore = create(
           }
           const { password: _p, ...user } = found
           localStorage.removeItem('temp_email')
-          set({ user, isAuthenticated: true, tempEmail: null, _pendingOtp: null })
+          set({ user, isAuthenticated: true, tempEmail: null, _pendingOtp: null, _pendingOtpToken: null, _pendingOtpContext: null })
           log.info('AUTH', `verifyOtp demo ✓ — session established for "${user.name}" [${user.role}]`)
           return { ok: true, user }
         }
@@ -236,7 +244,7 @@ export const useAuthStore = create(
           log.warn('AUTH', `logout — API unavailable (${err.message}), clearing local state only`)
         }
         localStorage.removeItem('temp_email')
-        set({ user: null, isAuthenticated: false, tempEmail: null, _pendingOtp: null })
+        set({ user: null, isAuthenticated: false, tempEmail: null, _pendingOtp: null, _pendingOtpToken: null, _pendingOtpContext: null })
         log.info('AUTH', 'logout ✓ — local auth state cleared')
       },
 
@@ -269,9 +277,9 @@ export const useAuthStore = create(
           const data = await api.post('/api/register', payload)
           const email = data?.email || payload.email
           localStorage.setItem('temp_email', email)
-          set({ tempEmail: email, _pendingOtp: null })
+          set({ tempEmail: email, _pendingOtp: null, _pendingOtpToken: null, _pendingOtpContext: null })
           log.info('AUTH', `register ✓ — created account for "${email}" (real API)`)
-          return { ok: true, email, otp: data?.otp ?? null, data }
+          return { ok: true, email, phone_number: payload.phone_number, data }
         } catch (err) {
           if (err?.status) {
             const message =
@@ -283,11 +291,59 @@ export const useAuthStore = create(
             return { ok: false, error: message, details: err?.data }
           }
           log.warn('AUTH', `register ✗ — API unavailable (${err.message}), falling back to demo mode`)
-          const otp = genOtp()
           const email = payload.email
           localStorage.setItem('temp_email', email)
-          set({ tempEmail: email, _pendingOtp: otp })
-          return { ok: true, email, otp, demo: true }
+          set({ tempEmail: email, _pendingOtp: null, _pendingOtpToken: null, _pendingOtpContext: null })
+          return { ok: true, email, phone_number: payload.phone_number, demo: true }
+        }
+      },
+
+      /* ── signUpOtp: request ───────────────────────────── */
+      requestSignUpOtp: async ({ channel, email, phone_number }) => {
+        log.info('AUTH', `requestSignUpOtp → channel="${channel}"`)
+        try {
+          await api.getCsrf()
+          const data = await api.post('/api/otp/request', { channel, email, phone_number, context: 'signup' })
+          const token = data?.token || data?.verification_token || data?.challenge_token || null
+          if (!token) return { ok: false, error: 'OTP request succeeded but no token was returned by the server.' }
+          set({ _pendingOtp: null, _pendingOtpToken: null, _pendingOtpContext: null })
+          return {
+            ok: true,
+            token,
+            expires_in: data?.expires_in ?? null,
+          }
+        } catch (err) {
+          log.warn('AUTH', `requestSignUpOtp ✗ — API unavailable (${err.message}), falling back to demo mode`)
+          const otp = genOtp()
+          const token = genToken()
+          set({ _pendingOtp: otp, _pendingOtpToken: token, _pendingOtpContext: 'signup' })
+          return { ok: true, token, demoOtp: otp, demo: true }
+        }
+      },
+
+      /* ── signUpOtp: verify ────────────────────────────── */
+      verifySignUpOtp: async ({ token, otp }) => {
+        log.info('AUTH', 'verifySignUpOtp → verifying')
+        try {
+          await api.getCsrf()
+          await api.post('/api/otp/verify', { token, otp, context: 'signup' })
+          set({ isInitialized: false, _pendingOtp: null, _pendingOtpToken: null, _pendingOtpContext: null })
+          await get().fetchUser()
+          const user = get().user
+          if (!user) return { ok: false, error: 'Verification succeeded but no session was established.' }
+          return { ok: true, user }
+        } catch (err) {
+          log.warn('AUTH', `verifySignUpOtp ✗ — API unavailable (${err.message}), trying demo verification`)
+          if (get()._pendingOtpContext !== 'signup' || !get()._pendingOtpToken || !get()._pendingOtp) {
+            return { ok: false, error: 'Session expired. Please request a new code.' }
+          }
+          if (token !== get()._pendingOtpToken) return { ok: false, error: 'Session expired. Please request a new code.' }
+          if (otp.trim() !== get()._pendingOtp) return { ok: false, error: 'Incorrect code. Try again.' }
+          const email = get().tempEmail
+          const found = DEMO_ACCOUNTS.find(u => u.email.toLowerCase() === String(email || '').toLowerCase()) || DEMO_ACCOUNTS[0]
+          const { password: _p, ...user } = found
+          set({ user, isAuthenticated: true, _pendingOtp: null, _pendingOtpToken: null, _pendingOtpContext: null })
+          return { ok: true, user }
         }
       },
 
@@ -298,13 +354,13 @@ export const useAuthStore = create(
           u => u.email.toLowerCase() === email.toLowerCase() && u.password === password
         )
         if (!found) {
-          log.warn('AUTH', `_demoRequestOtp ✗ — no match for "${email}" / "${password}"`)
+          log.warn('AUTH', `_demoRequestOtp ✗ — no match for "${email}"`)
           return { ok: false, error: 'Invalid email or password. Demo password is "demo".' }
         }
         const otp = genOtp()
         localStorage.setItem('temp_email', found.email)
-        set({ tempEmail: found.email, _pendingOtp: otp })
-        log.info('AUTH', `_demoRequestOtp ✓ — OTP for "${found.email}": ${otp}`)
+        set({ tempEmail: found.email, _pendingOtp: otp, _pendingOtpToken: null, _pendingOtpContext: 'login' })
+        log.info('AUTH', `_demoRequestOtp ✓ — OTP generated for "${found.email}"`)
         return { ok: true, email: found.email, otp }
       },
     }),
