@@ -5,7 +5,7 @@ import { ArrowRight, Lock, Mail } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 
 function SignInForm() {
-  const { loginWithEmailPassword, getRoleHome } = useAuthStore()
+  const { login } = useAuthStore()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -16,10 +16,10 @@ function SignInForm() {
     e.preventDefault()
     setError('')
     setLoading(true)
-    const res = await loginWithEmailPassword(email, password)
+    const res = await login(email, password)
     setLoading(false)
     if (!res.ok) { setError(res.error); return }
-    navigate(getRoleHome(), { replace: true })
+    navigate('/auth/otp')
   }
 
   return (
@@ -91,7 +91,7 @@ function SignInForm() {
           className="w-full flex items-center justify-between gap-2 rounded-2xl px-6 py-4 text-[15px] font-black uppercase tracking-wide text-white transition-all duration-200 disabled:opacity-60"
           style={{ background: 'linear-gradient(135deg,#093A7A,#0572B2)', boxShadow: '0 6px 24px rgba(5,114,178,0.4)' }}
         >
-          <span>{loading ? 'Signing in...' : 'Sign In'}</span>
+          <span>{loading ? 'Signing in...' : 'Continue'}</span>
           {loading
             ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }} className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full" />
             : <ArrowRight className="w-5 h-5" />

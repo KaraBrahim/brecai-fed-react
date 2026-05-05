@@ -1,20 +1,9 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import api from '@/lib/api'
+import { AUTH_ENDPOINTS } from '@/config/auth'
 import { ROLE_HOME_MAP } from '@/enums/roles'
 import log from '@/lib/logger'
-import { firebaseAuth } from '@/lib/firebase'
-import {
-  RecaptchaVerifier,
-  EmailAuthProvider,
-  PhoneAuthProvider,
-  linkWithCredential,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signInWithCredential,
-  signInWithPhoneNumber,
-  signOut,
-  updateProfile,
-} from 'firebase/auth'
 
 /* ── Role helpers (UI display metadata, supports both API keys & display names) ── */
 export const ROLE_HOME = ROLE_HOME_MAP
@@ -60,11 +49,12 @@ function initialsFromName(name) {
 }
 
 function errorMessage(err, fallback) {
-  return err?.message || fallback
-}
-
-function shouldDisableAppVerificationForTesting() {
-  return import.meta.env.DEV && import.meta.env.VITE_FIREBASE_PHONE_TEST_MODE === 'true'
+  return (
+    err?.data?.message ||
+    (typeof err?.data === 'string' ? err.data : null) ||
+    err?.message ||
+    fallback
+  )
 }
 
 /* ── Store ───────────────────────────────────────────────────── */
@@ -75,17 +65,18 @@ export const useAuthStore = create(
       user:            null,
       isAuthenticated: false,
       isInitialized:   false,
+      tempEmail:       localStorage.getItem('temp_email') || null,
       tempPhone:       localStorage.getItem('temp_phone') || null,
-      verificationId:  localStorage.getItem('verification_id') || null,
-      pendingProfile:  (() => {
+      otpContext:      localStorage.getItem('otp_context') || null,
+      otpMethods:      (() => {
         try {
-          const raw = localStorage.getItem('pending_profile')
+          const raw = localStorage.getItem('otp_methods')
           return raw ? JSON.parse(raw) : null
         } catch {
           return null
         }
       })(),
-      _recaptcha:      null,
+      otpMethod:       localStorage.getItem('otp_method') || null,
 
       /* ── Computed helper (call as a function) ─────────── */
       userRole: () => resolveUserRole(get().user),
@@ -93,200 +84,132 @@ export const useAuthStore = create(
       /* ── fetchUser ────────────────────────────────────── */
       fetchUser: async () => {
         if (get().isInitialized) return
-        await new Promise((resolve) => {
-          const unsub = onAuthStateChanged(
-            firebaseAuth,
-            async (fbUser) => {
-              if (!fbUser) {
-                set({ user: null, isAuthenticated: false, isInitialized: true })
-                unsub()
-                resolve()
-                return
-              }
-
-              let role = null
-              try {
-                const tokenResult = await fbUser.getIdTokenResult()
-                role = tokenResult?.claims?.role || tokenResult?.claims?.roles?.[0] || null
-              } catch {
-                role = null
-              }
-
-              const persisted = get().user
-              const name = persisted?.name || fbUser.displayName || fbUser.phoneNumber || 'User'
-              const user = {
-                id: fbUser.uid,
-                name,
-                email: persisted?.email || fbUser.email || null,
-                phone_number: fbUser.phoneNumber || get().tempPhone || null,
-                role: role || persisted?.role || 'doctor',
-                org: persisted?.org || '',
-                initials: persisted?.initials || initialsFromName(name),
-              }
-
-              set({ user, isAuthenticated: true, isInitialized: true })
-              unsub()
-              resolve()
-            },
-            () => {
-              set({ user: null, isAuthenticated: false, isInitialized: true })
-              unsub()
-              resolve()
-            }
-          )
-        })
-      },
-
-      /* ── loginWithEmailPassword ───────────────────────── */
-      loginWithEmailPassword: async (email, password) => {
         try {
-          const res = await signInWithEmailAndPassword(firebaseAuth, email, password)
-          const fbUser = res.user
-
-          let role = null
-          try {
-            const tokenResult = await fbUser.getIdTokenResult()
-            role = tokenResult?.claims?.role || tokenResult?.claims?.roles?.[0] || null
-          } catch {
-            role = null
-          }
-
-          const persisted = get().user
-          const name = persisted?.name || fbUser.displayName || fbUser.email || 'User'
-          const user = {
-            id: fbUser.uid,
-            name,
-            email: fbUser.email || persisted?.email || null,
-            phone_number: fbUser.phoneNumber || persisted?.phone_number || null,
-            role: role || persisted?.role || 'doctor',
-            org: persisted?.org || '',
-            initials: persisted?.initials || initialsFromName(name),
-          }
-
-          set({ user, isAuthenticated: true, isInitialized: true })
-          return { ok: true, user }
-        } catch (err) {
-          const message = errorMessage(err, 'Login failed')
-          log.warn('AUTH', `loginWithEmailPassword ✗ — ${message}`)
-          return { ok: false, error: message }
+          const data = await api.get(AUTH_ENDPOINTS.user)
+          set({ user: data, isAuthenticated: true, isInitialized: true })
+        } catch {
+          set({ user: null, isAuthenticated: false, isInitialized: true })
         }
       },
 
-      /* ── startLoginOtp ─────────────────────────────────── */
-      startLoginOtp: async (phone, recaptchaContainerId = 'recaptcha-container') => {
+      /* ── login (step 1) ───────────────────────────────── */
+      login: async (email, password, device_name = 'Web') => {
         try {
-          if (shouldDisableAppVerificationForTesting()) {
-            firebaseAuth.settings.appVerificationDisabledForTesting = true
-          }
+          await api.getCsrf()
+          const data = await api.post(AUTH_ENDPOINTS.login, { email, password, device_name })
+          const phone = data?.phone_number ?? null
+          const methods = phone ? ['email', 'whatsapp'] : ['email']
 
-          const existing = get()._recaptcha
-          if (existing) {
-            existing.clear()
-          }
-
-          const verifier = new RecaptchaVerifier(firebaseAuth, recaptchaContainerId, { size: 'invisible' })
-          await verifier.render()
-          const confirmation = await signInWithPhoneNumber(firebaseAuth, phone, verifier)
-
-          localStorage.setItem('temp_phone', phone)
-          localStorage.setItem('verification_id', confirmation.verificationId)
-          localStorage.removeItem('pending_profile')
+          localStorage.setItem('temp_email', email)
+          localStorage.setItem('temp_phone', phone || '')
+          localStorage.setItem('otp_context', 'login')
+          localStorage.setItem('otp_methods', JSON.stringify(methods))
 
           set({
+            tempEmail: email,
             tempPhone: phone,
-            verificationId: confirmation.verificationId,
-            pendingProfile: null,
-            _recaptcha: verifier,
+            otpContext: 'login',
+            otpMethods: methods,
+            otpMethod: null,
           })
 
+          return { ok: true, email, phone_number: phone, methods }
+        } catch (err) {
+          const message = errorMessage(err, 'Login failed')
+          log.warn('AUTH', `login ✗ — ${message}`)
+          return { ok: false, error: message, details: err?.data, status: err?.status }
+        }
+      },
+
+      /* ── register (step 1) ────────────────────────────── */
+      register: async (payload) => {
+        try {
+          await api.getCsrf()
+          const data = await api.post(AUTH_ENDPOINTS.register, payload)
+          const email = data?.email || payload?.email
+          const phone = data?.phone_number ?? payload?.phone_number ?? null
+          const methods = phone ? ['email', 'whatsapp'] : ['email']
+
+          localStorage.setItem('temp_email', email)
+          localStorage.setItem('temp_phone', phone || '')
+          localStorage.setItem('otp_context', 'register')
+          localStorage.setItem('otp_methods', JSON.stringify(methods))
+
+          set({
+            tempEmail: email,
+            tempPhone: phone,
+            otpContext: 'register',
+            otpMethods: methods,
+            otpMethod: null,
+          })
+
+          return { ok: true, email, phone_number: phone, methods, data }
+        } catch (err) {
+          const message = errorMessage(err, 'Registration failed')
+          log.warn('AUTH', `register ✗ — ${message}`)
+          return { ok: false, error: message, details: err?.data, status: err?.status }
+        }
+      },
+
+      /* ── sendOtp (step 2) ─────────────────────────────── */
+      sendOtp: async (method) => {
+        const email = get().tempEmail
+        if (!email) return { ok: false, error: 'Session expired. Please start again.' }
+        try {
+          await api.getCsrf()
+          await api.post(AUTH_ENDPOINTS.sendOtp, { email, method })
+          localStorage.setItem('otp_method', method)
+          set({ otpMethod: method })
           return { ok: true }
         } catch (err) {
           const message = errorMessage(err, 'Failed to send OTP')
-          log.warn('AUTH', `startLoginOtp ✗ — ${message}`)
-          return { ok: false, error: message }
+          log.warn('AUTH', `sendOtp ✗ — ${message}`)
+          return { ok: false, error: message, details: err?.data, status: err?.status }
         }
       },
 
-      /* ── verifyOtp ────────────────────────────────────── */
+      /* ── verifyOtp (step 3) ───────────────────────────── */
       verifyOtp: async (otp) => {
+        const email = get().tempEmail
+        const context = get().otpContext
+        if (!email || !context) return { ok: false, error: 'Session expired. Please start again.' }
         try {
-          const verificationId = get().verificationId || localStorage.getItem('verification_id')
-          if (!verificationId) return { ok: false, error: 'Session expired. Please request a new code.' }
-
-          const cred = PhoneAuthProvider.credential(verificationId, otp)
-          const res = await signInWithCredential(firebaseAuth, cred)
-          let fbUser = res.user
-
-          let pending = get().pendingProfile
-          if (!pending) {
-            try {
-              const raw = localStorage.getItem('pending_profile')
-              pending = raw ? JSON.parse(raw) : null
-            } catch {
-              pending = null
-            }
-          }
-
-          if (!pending?.email || !pending?.password) {
-            await signOut(firebaseAuth)
-            return { ok: false, error: 'Registration data missing. Please restart sign-up.' }
-          }
-
-          try {
-            const emailCred = EmailAuthProvider.credential(pending.email, pending.password)
-            const linked = await linkWithCredential(fbUser, emailCred)
-            fbUser = linked.user
-          } catch (err) {
-            const message = errorMessage(err, 'Failed to attach email credentials')
-            log.warn('AUTH', `verifyOtp link ✗ — ${message}`)
-            return { ok: false, error: message }
-          }
-
-          if (pending?.name) {
-            try {
-              await updateProfile(fbUser, { displayName: pending.name })
-            } catch {
-              null
-            }
-          }
-
-          let claimRole = null
-          try {
-            const tokenResult = await fbUser.getIdTokenResult()
-            claimRole = tokenResult?.claims?.role || tokenResult?.claims?.roles?.[0] || null
-          } catch {
-            claimRole = null
-          }
-
-          const name = pending?.name || get().user?.name || fbUser.displayName || fbUser.phoneNumber || 'User'
-          const user = {
-            id: fbUser.uid,
-            name,
-            email: pending?.email || get().user?.email || fbUser.email || null,
-            phone_number: fbUser.phoneNumber || get().tempPhone || null,
-            role: pending?.role || claimRole || get().user?.role || 'doctor',
-            org: pending?.org || get().user?.org || '',
-            initials: initialsFromName(name),
-          }
-
-          localStorage.removeItem('temp_phone')
-          localStorage.removeItem('verification_id')
-          localStorage.removeItem('pending_profile')
-
-          set({
-            user,
-            isAuthenticated: true,
-            tempPhone: null,
-            verificationId: null,
-            pendingProfile: null,
-            isInitialized: true,
+          await api.getCsrf()
+          const url = `${(import.meta.env.VITE_API_URL || '')}${AUTH_ENDPOINTS.verifyOtp}?context=${encodeURIComponent(context)}`
+          const res = await fetch(url, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ email, otp }),
           })
 
-          return { ok: true, user }
+          const text = await res.text()
+          const data = text ? JSON.parse(text) : null
+          if (!res.ok) {
+            const err = new Error(data?.message || `HTTP ${res.status}`)
+            err.status = res.status
+            err.data = data
+            throw err
+          }
+
+          localStorage.removeItem('temp_email')
+          localStorage.removeItem('temp_phone')
+          localStorage.removeItem('otp_context')
+          localStorage.removeItem('otp_methods')
+          localStorage.removeItem('otp_method')
+          set({ tempEmail: null, tempPhone: null, otpContext: null, otpMethods: null, otpMethod: null })
+
+          if (res.status === 202) {
+            return { ok: true, pendingApproval: true, data }
+          }
+
+          set({ isInitialized: false })
+          await get().fetchUser()
+          return { ok: true, user: get().user, data }
         } catch (err) {
           const message = errorMessage(err, 'OTP verification failed')
           log.warn('AUTH', `verifyOtp ✗ — ${message}`)
-          return { ok: false, error: message }
+          return { ok: false, error: message, details: err?.data, status: err?.status }
         }
       },
 
@@ -301,55 +224,34 @@ export const useAuthStore = create(
       /* ── logout ───────────────────────────────────────── */
       logout: async () => {
         try {
-          await signOut(firebaseAuth)
-        } catch {
-          null
+          await api.getCsrf()
+          await api.post(AUTH_ENDPOINTS.logout)
+        } catch (err) {
+          log.warn('AUTH', `logout ✗ — ${errorMessage(err, 'Logout failed')}`)
         }
+        localStorage.removeItem('temp_email')
         localStorage.removeItem('temp_phone')
-        localStorage.removeItem('verification_id')
-        localStorage.removeItem('pending_profile')
-        set({ user: null, isAuthenticated: false, tempPhone: null, verificationId: null, pendingProfile: null })
+        localStorage.removeItem('otp_context')
+        localStorage.removeItem('otp_methods')
+        localStorage.removeItem('otp_method')
+        set({
+          user: null,
+          isAuthenticated: false,
+          tempEmail: null,
+          tempPhone: null,
+          otpContext: null,
+          otpMethods: null,
+          otpMethod: null,
+        })
       },
 
-      /* ── startSignUpOtp ───────────────────────────────── */
-      startSignUpOtp: async (profile, recaptchaContainerId = 'recaptcha-container') => {
-        const phone = profile?.phone_number || profile?.phone || ''
-        if (!phone) return { ok: false, error: 'Phone number is required.' }
-
+      fetchOrganizationsPublic: async () => {
         try {
-          if (shouldDisableAppVerificationForTesting()) {
-            firebaseAuth.settings.appVerificationDisabledForTesting = true
-          }
-
-          const existing = get()._recaptcha
-          if (existing) {
-            existing.clear()
-          }
-
-          const verifier = new RecaptchaVerifier(firebaseAuth, recaptchaContainerId, { size: 'invisible' })
-          await verifier.render()
-          const confirmation = await signInWithPhoneNumber(firebaseAuth, phone, verifier)
-
-          const persistedProfile = profile
-            ? Object.fromEntries(Object.entries(profile).filter(([k]) => k !== 'password'))
-            : null
-
-          localStorage.setItem('temp_phone', phone)
-          localStorage.setItem('verification_id', confirmation.verificationId)
-          localStorage.setItem('pending_profile', JSON.stringify(persistedProfile))
-
-          set({
-            tempPhone: phone,
-            verificationId: confirmation.verificationId,
-            pendingProfile: profile,
-            _recaptcha: verifier,
-          })
-
-          return { ok: true }
+          const data = await api.get(AUTH_ENDPOINTS.organizationsPublic)
+          return { ok: true, data }
         } catch (err) {
-          const message = errorMessage(err, 'Failed to send OTP')
-          log.warn('AUTH', `startSignUpOtp ✗ — ${message}`)
-          return { ok: false, error: message }
+          const message = errorMessage(err, 'Failed to load organizations')
+          return { ok: false, error: message, details: err?.data, status: err?.status }
         }
       },
     }),

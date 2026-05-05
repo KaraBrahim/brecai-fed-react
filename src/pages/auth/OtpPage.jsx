@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowRight, ChevronLeft } from 'lucide-react'
@@ -68,11 +68,29 @@ function OtpInput({ value, onChange, hasError }) {
 /* ── Main OTP Page Component ────────────────────── */
 export default function OtpPage() {
   const navigate = useNavigate()
-  const { verifyOtp, tempPhone, getRoleHome } = useAuthStore()
+  const { verifyOtp, sendOtp, tempEmail, tempPhone, otpMethods, otpMethod, otpContext, getRoleHome } = useAuthStore()
   
   const [code, setCode]   = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [sent, setSent] = useState(false)
+  const [success, setSuccess] = useState('')
+
+  const methods = Array.isArray(otpMethods) && otpMethods.length ? otpMethods : ['email']
+  const selectedMethod = otpMethod || methods[0]
+
+  useEffect(() => {
+    let mounted = true
+    async function run() {
+      if (!tempEmail || sent) return
+      const res = await sendOtp(selectedMethod)
+      if (!mounted) return
+      if (!res.ok) setError(res.error)
+      else setSent(true)
+    }
+    run()
+    return () => { mounted = false }
+  }, [tempEmail, selectedMethod, sent, sendOtp])
 
   async function handleVerify() {
     if (code.length < 6) return
@@ -85,6 +103,11 @@ export default function OtpPage() {
         setLoading(false)
         return 
       }
+      if (res.pendingApproval) {
+        setLoading(false)
+        setSuccess('Your account is pending approval by your organization manager.')
+        return
+      }
       log.info('OTP', 'Verification successful, redirecting to home...')
       navigate(getRoleHome(), { replace: true })
     } catch (err) {
@@ -93,28 +116,53 @@ export default function OtpPage() {
     }
   }
 
+  async function handleResend() {
+    setError('')
+    const res = await sendOtp(selectedMethod)
+    if (!res.ok) setError(res.error)
+    else { setSent(true); setSuccess('') }
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, x: 30 }}
       animate={{ opacity: 1, x: 0 }}
       className="w-full max-w-sm mx-auto"
     >
-      {/* Bold title */}
       <div className="mb-8">
         <h1 className="text-[52px] font-black tracking-[-0.04em] leading-[0.88] uppercase text-slate-900">
           Check<br />
           <span style={{ WebkitTextFillColor: 'transparent', background: 'linear-gradient(135deg,#0BB592,#0572B2)', WebkitBackgroundClip: 'text' }}>
-            Phone
+            OTP
           </span>
           <span style={{ color: '#0BB592' }}>.</span>
         </h1>
         <p className="text-slate-500 text-sm font-semibold mt-3 leading-relaxed">
           Enter the 6-digit code sent to<br />
-          <span className="text-slate-800 font-bold">{tempPhone}</span>
+          <span className="text-slate-800 font-bold">{tempEmail}</span>
+        </p>
+        <p className="text-slate-400 text-xs font-semibold mt-2">
+          {otpContext === 'register' ? 'Registration verification' : 'Login verification'}
         </p>
       </div>
 
-      <OtpInput value={code} onChange={v => { setCode(v); setError('') }} hasError={!!error} />
+      <div className="flex gap-2 mb-4">
+        {methods.map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => { if (!loading) { sendOtp(m).then(r => { if (!r.ok) setError(r.error); else { setSent(true); setSuccess('') } }) } }}
+            className={cn(
+              'flex-1 rounded-2xl border-2 px-4 py-3 text-xs font-black uppercase tracking-wide transition-all',
+              selectedMethod === m ? 'border-[#0572B2] bg-blue-50 text-[#0572B2]' : 'border-slate-200 bg-slate-50 text-slate-500 hover:text-slate-800'
+            )}
+          >
+            {m}
+          </button>
+        ))}
+      </div>
+
+      <OtpInput value={code} onChange={v => { setCode(v); setError(''); setSuccess('') }} hasError={!!error} />
 
       <AnimatePresence>
         {error && (
@@ -124,16 +172,24 @@ export default function OtpPage() {
           </motion.p>
         )}
       </AnimatePresence>
+      <AnimatePresence>
+        {success && (
+          <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            className="text-[#0BB592] text-xs font-semibold bg-teal-50 border border-teal-200 rounded-xl px-4 py-3 mt-3">
+            {success}
+          </motion.p>
+        )}
+      </AnimatePresence>
 
       <motion.button
         onClick={handleVerify}
-        disabled={code.length < 6 || loading}
+        disabled={code.length < 6 || loading || !!success}
         whileHover={{ scale: 1.01 }}
         whileTap={{ scale: 0.98 }}
         className="w-full mt-5 flex items-center justify-between gap-2 rounded-2xl px-6 py-4 text-[15px] font-black uppercase tracking-wide text-white transition-all duration-200 disabled:opacity-40"
         style={{ background: 'linear-gradient(135deg,#0572B2,#0BB592)', boxShadow: '0 6px 24px rgba(11,181,146,0.35)' }}
       >
-        <span>{loading ? 'Verifying...' : 'Verify Code'}</span>
+        <span>{loading ? 'Verifying...' : success ? 'Pending' : 'Verify Code'}</span>
         {loading
           ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }} className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full" />
           : <ArrowRight className="w-5 h-5" />
@@ -141,12 +197,20 @@ export default function OtpPage() {
       </motion.button>
 
       {/* Footer Actions */}
-      <div className="mt-6 flex items-center justify-start">
+      <div className="mt-6 flex items-center justify-between">
         <button 
           onClick={() => navigate('/auth')} 
           className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-slate-700 transition-colors"
         >
           <ChevronLeft className="w-3.5 h-3.5" /> Back to Login
+        </button>
+        <button
+          type="button"
+          onClick={handleResend}
+          disabled={loading}
+          className="text-xs font-bold text-[#0572B2] hover:underline disabled:opacity-50"
+        >
+          {sent ? 'Resend code' : 'Send code'}
         </button>
       </div>
     </motion.div>

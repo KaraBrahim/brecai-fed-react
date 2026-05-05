@@ -515,7 +515,7 @@ function OtpStep({ email, onBack }) {
 /* ── Main export ─────────────────────────────────── */
 export default function SignUpPage() {
   const navigate = useNavigate()
-  const { startSignUpOtp } = useAuthStore()
+  const { register } = useAuthStore()
   const [step, setStep] = useState(1)
   const [role, setRole]   = useState(null)
 
@@ -525,23 +525,29 @@ export default function SignUpPage() {
   }
 
   async function handleFormSubmit(formData) {
-    const profile = {
-      role: formData.api_role ?? formData.role ?? role ?? 'doctor',
+    const payload = {
       name: formData.name,
       email: formData.email,
-      phone_number: formData.phone_number ?? formData.phone ?? null,
       password: formData.password,
-      org: formData.organization_name ?? formData.organization_id ?? '',
+      phone_number: formData.phone_number ?? formData.phone ?? null,
+      role: formData.api_role ?? formData.role ?? role ?? 'doctor',
+      organization_name: formData.organization_name,
+      organization_type: formData.organization_type,
+      organization_address: formData.organization_address,
+      plan_id: formData.plan_id ?? null,
+      latitude: formData.latitude,
+      longitude: formData.longitude,
+      organization_id: formData.organization_id,
+      invite_code: formData.invite_code,
     }
 
-    const res = await startSignUpOtp(profile)
+    const res = await register(payload)
     if (res.ok) navigate('/auth/otp')
     return res
   }
 
   return (
     <div className="w-full max-w-sm mx-auto">
-      <div id="recaptcha-container" />
       <StepBar step={step} />
       <AnimatePresence mode="wait">
         {step === 1 && (
