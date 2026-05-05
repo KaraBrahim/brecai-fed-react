@@ -454,7 +454,7 @@ function DoctorForm({ onBack, onNext }) {
 /* ── Step 3: OTP verify ─────────────────────────── */
 function OtpStep({ email, onBack }) {
   const navigate = useNavigate()
-  const { verifyOtp } = useAuthStore()
+  const { verifyOtp, getRoleHome } = useAuthStore()
   const [code, setCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -466,7 +466,7 @@ function OtpStep({ email, onBack }) {
     const res = await verifyOtp(code)
     setLoading(false)
     if (!res.ok) { setError(res.error); return }
-    navigate(ROLE_HOME[res.user?.role] || '/app/doctor', { replace: true })
+    navigate(getRoleHome(), { replace: true })
   }
 
   return (

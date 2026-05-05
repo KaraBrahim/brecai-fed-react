@@ -169,6 +169,13 @@ export const useAuthStore = create(
           const cred = PhoneAuthProvider.credential(verificationId, otp)
           const res = await signInWithCredential(firebaseAuth, cred)
           const fbUser = res.user
+          let claimRole = null
+          try {
+            const tokenResult = await fbUser.getIdTokenResult()
+            claimRole = tokenResult?.claims?.role || tokenResult?.claims?.roles?.[0] || null
+          } catch {
+            claimRole = null
+          }
 
           let pending = get().pendingProfile
           if (!pending) {
@@ -186,7 +193,7 @@ export const useAuthStore = create(
             name,
             email: pending?.email || get().user?.email || fbUser.email || null,
             phone_number: fbUser.phoneNumber || get().tempPhone || null,
-            role: pending?.role || get().user?.role || 'doctor',
+            role: pending?.role || claimRole || get().user?.role || 'doctor',
             org: pending?.org || get().user?.org || '',
             initials: initialsFromName(name),
           }
