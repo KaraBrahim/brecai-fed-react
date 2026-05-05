@@ -530,6 +530,7 @@ export default function SignUpPage() {
       name: formData.name,
       email: formData.email,
       phone_number: formData.phone_number ?? formData.phone ?? null,
+      password: formData.password,
       org: formData.organization_name ?? formData.organization_id ?? '',
     }
 
