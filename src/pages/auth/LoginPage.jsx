@@ -1,13 +1,11 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Eye, EyeOff, ArrowRight, Stethoscope,
-  Network, Building2, ShieldCheck, RotateCcw, ChevronLeft,
-  Mail, Sparkles,
+  Eye, EyeOff, ArrowRight, ChevronLeft,
+  Mail,
 } from 'lucide-react'
-import { useAuthStore, DEMO_ACCOUNTS, ROLE_HOME, ROLE_META } from '@/stores/authStore'
-import { RoleEnum } from '@/enums/roles'
+import { useAuthStore, ROLE_HOME } from '@/stores/authStore'
 import { cn } from '@/lib/utils'
 
 /* ── Role quick-access card ─────────────────────── */
@@ -56,7 +54,6 @@ function SignInForm() {
   const [pw, setPw]       = useState('')
   const [showPw, setShow] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [busy, setBusy]   = useState(null)
   const [error, setError] = useState('')
   const navigate = useNavigate()
 
@@ -163,25 +160,6 @@ function SignInForm() {
           }
         </motion.button>
       </form>
-
-      {/* Quick access */}
-      <div className="mt-6">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="flex-1 h-px bg-slate-200" />
-          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
-            <Sparkles className="w-3 h-3" /> Quick Access
-          </span>
-          <div className="flex-1 h-px bg-slate-200" />
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          {DEMO_ACCOUNTS.map(acc => (
-            <QuickCard key={acc.role} account={acc} onClick={handleQuick} busy={busy} />
-          ))}
-        </div>
-        <p className="text-center text-[10px] text-slate-400 mt-2.5 font-medium">
-          All demo passwords are <span className="font-mono font-bold text-slate-600">demo</span>
-        </p>
-      </div>
 
       <p className="text-center text-sm text-slate-500 font-semibold mt-5">
         No account?{' '}
