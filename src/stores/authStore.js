@@ -193,20 +193,30 @@ export const useAuthStore = create(
             { email, otp },
           )
 
-          // Clear the transient OTP session
+          // Clear localStorage keys immediately (safe — no component reads them synchronously).
+          // Do NOT update Zustand state yet: RequireOtp checks both isAuthenticated AND tempEmail.
+          // If we set tempEmail=null before isAuthenticated=true, RequireOtp briefly sees
+          // "no session + no tempEmail" and fires <Navigate to="/auth"> — the login flash.
           lsClear('temp_email', 'temp_phone', 'otp_context', 'otp_methods', 'otp_method')
-          set({ tempEmail: null, tempPhone: null, otpContext: null, otpMethods: null, otpMethod: null })
 
           // 202 = account registered but needs org-manager approval
           if (data?._status === 202 || data?.pending_approval) {
             log.info('AUTH', 'verifyOtp — account pending approval')
+            // Safe to clear store state now — we're staying on this page to show a message
+            set({ tempEmail: null, tempPhone: null, otpContext: null, otpMethods: null, otpMethod: null })
             return { ok: true, pendingApproval: true, data }
           }
 
           // Fetch authenticated user using the newly-issued session cookie.
-          // force=true prevents the spinner from flashing (OtpPage stays mounted).
+          // force=true keeps isInitialized=true so the global spinner never shows.
           log.info('AUTH', 'verifyOtp ✓ — fetching user with new session ...')
           await get().fetchUser({ force: true })
+
+          // NOW clear OTP transient state in the same tick as isAuthenticated=true is already set.
+          // RequireOtp will re-render and see isAuthenticated=true → redirect to role home.
+          // It never sees the "unauthenticated + no tempEmail" state that caused the login flash.
+          set({ tempEmail: null, tempPhone: null, otpContext: null, otpMethods: null, otpMethod: null })
+
           const user = get().user
           log.info('AUTH', `verifyOtp — session established for "${user?.name}" [${resolveUserRole(user)}]`)
           return { ok: true, user, data }
