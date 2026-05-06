@@ -228,7 +228,7 @@ export default function AuthLayout() {
             transition={{ delay: 0.85 }}
             className="flex gap-2 mt-6 flex-wrap justify-center"
           >
-            {['HIPAA Compliant', 'Federated Learning', 'SOC 2 Ready'].map(tag => (
+            {/* {['HIPAA Compliant', 'Federated Learning', 'SOC 2 Ready'].map(tag => (
               <span
                 key={tag}
                 className="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full"
@@ -236,7 +236,7 @@ export default function AuthLayout() {
               >
                 {tag}
               </span>
-            ))}
+            ))} */}
           </motion.div>
         </motion.div>
       </div>
