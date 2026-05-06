@@ -1,69 +1,73 @@
+/**
+ * BRECAI-FED · API client
+ *
+ * Thin wrapper over the axios instance in src/api/axios.js.
+ * That instance has withCredentials: true so every request
+ * automatically carries the HttpOnly session cookie that Laravel
+ * Sanctum sets after login/verifyOtp.
+ *
+ * All methods return the response data directly (not the full
+ * axios response) and throw a normalised error on failure so the
+ * rest of the app doesn't need to know about axios internals.
+ */
+import axiosInstance from '@/api/axios'
 import log from '@/lib/logger'
 
-const BASE_URL = import.meta.env.VITE_API_URL || ''
+function normaliseError(err) {
+  // Axios wraps HTTP errors in err.response; network failures have no response.
+  const status  = err?.response?.status
+  const data    = err?.response?.data ?? {}
+  const message = data?.message || err?.message || 'Request failed'
 
-log.info('API', `Client initialised — base URL: "${BASE_URL || '(none — demo mode)'}"`)
+  const out     = new Error(message)
+  out.status    = status
+  out.data      = data
+  out.isUnauthenticated = status === 401
+  return out
+}
 
-async function request(method, path, body) {
-  const url = `${BASE_URL}${path}`
-  log.debug('API', `→ ${method} ${url}`, body !== undefined ? body : '')
-
-  const opts = {
-    method,
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-  }
-  if (body !== undefined) opts.body = JSON.stringify(body)
-
-  let res
+async function request(method, path, body, config = {}) {
+  log.debug('API', `→ ${method.toUpperCase()} ${path}`, body ?? '')
   try {
-    res = await fetch(url, opts)
-  } catch (networkErr) {
-    log.warn('API', `✗ ${method} ${url} — network error (backend unreachable)`, networkErr.message)
-    throw networkErr
-  }
-
-  if (!res.ok) {
-    let data
-    try { data = await res.json() } catch { data = {} }
-
-    const err = new Error(data?.message || `HTTP ${res.status}`)
-    err.status  = res.status
-    err.data    = data
-
-    // 401 = not authenticated — not a real error, mark it so callers can handle it quietly
-    if (res.status === 401) {
-      err.isUnauthenticated = true
-      log.info('API', `→ ${method} ${url} — 401 Unauthenticated (no active session)`)
+    const res = await axiosInstance.request({
+      method,
+      url: path,
+      data: body,
+      ...config,
+    })
+    log.debug('API', `✓ ${method.toUpperCase()} ${path}`, res.data)
+    return res.data
+  } catch (err) {
+    const normalised = normaliseError(err)
+    if (normalised.isUnauthenticated) {
+      log.info('API', `→ ${method.toUpperCase()} ${path} — 401 Unauthenticated (no active session)`)
+    } else if (!err.response) {
+      log.warn('API', `✗ ${method.toUpperCase()} ${path} — network error (backend unreachable)`, err.message)
     } else {
-      log.warn('API', `✗ ${method} ${url} — HTTP ${res.status}`, data)
+      log.warn('API', `✗ ${method.toUpperCase()} ${path} — HTTP ${normalised.status}`, normalised.data)
     }
-
-    throw err
+    throw normalised
   }
-
-  const text = await res.text()
-  const parsed = text ? JSON.parse(text) : null
-  log.debug('API', `✓ ${method} ${url}`, parsed)
-  return parsed
 }
 
 const api = {
+  /** Fetch the Sanctum CSRF cookie — must be called before any mutating request */
   async getCsrf() {
-    const url = `${BASE_URL}/sanctum/csrf-cookie`
-    log.debug('API', `→ GET ${url} (CSRF cookie)`)
+    log.debug('API', '→ GET /sanctum/csrf-cookie (CSRF cookie)')
     try {
-      await fetch(url, { credentials: 'include' })
+      await axiosInstance.get('/sanctum/csrf-cookie')
       log.debug('API', '✓ CSRF cookie set')
-    } catch (e) {
-      log.warn('API', '✗ CSRF fetch failed (backend down?)', e.message)
-      throw e
+    } catch (err) {
+      log.warn('API', '✗ CSRF fetch failed', err.message)
+      throw normaliseError(err)
     }
   },
-  get:    (path)       => request('GET',    path),
-  post:   (path, body) => request('POST',   path, body),
-  put:    (path, body) => request('PUT',    path, body),
-  delete: (path)       => request('DELETE', path),
+
+  get:    (path, config)        => request('get',    path, undefined, config),
+  post:   (path, body, config)  => request('post',   path, body,      config),
+  put:    (path, body, config)  => request('put',    path, body,      config),
+  patch:  (path, body, config)  => request('patch',  path, body,      config),
+  delete: (path, config)        => request('delete', path, undefined, config),
 }
 
 export default api

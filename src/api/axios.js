@@ -1,14 +1,22 @@
-import axios from 'axios';
+import axios from 'axios'
+import log from '@/lib/logger'
 
-const api = axios.create({
-    baseURL: 'https://breast-cancer-detection-backend-main-p7c9cg.laravel.cloud', // 👈 Point to root (so we can hit /sanctum/csrf-cookie)
-    withCredentials: true, // 👈 CRITICAL: This allows cookies to travel
-    headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-    }
-});
+// In development the Vite dev-server proxy forwards /api/* and /sanctum/*
+// to the real backend, so we use a relative base URL — no CORS issue.
+// In production (Vercel) we point directly at the backend.
+const BASE_URL = import.meta.env.DEV
+  ? ''
+  : (import.meta.env.VITE_API_URL || 'https://breast-cancer-detection-backend-main-p7c9cg.laravel.cloud')
 
-// Note: We DELETED the interceptor. The browser handles the cookie automatically now!
+log.info('API', `Axios client — base URL: "${BASE_URL || '(relative — via dev proxy)'}"`)
 
-export default api;
+const instance = axios.create({
+  baseURL: BASE_URL,
+  withCredentials: true,   // sends HttpOnly session cookie on every request
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept':       'application/json',
+  },
+})
+
+export default instance
