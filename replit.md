@@ -46,13 +46,13 @@ Preferred communication style: Simple, everyday language.
 - `DashboardLayout` — sidebar navigation with role-based menu items
 - `AuthLayout` — login/registration wrapper
 
-**API Client** (`src/lib/api.js`):
-- Fetch-based API client with `credentials: 'include'` and CSRF cookie support
-- Base URL configurable via `VITE_API_URL` env variable
-- Used by auth store for real backend calls
+**API Client** — two-layer setup:
+- `src/api/axios.js` — axios instance with `withCredentials: true`; base URL is `''` (relative) in dev so the Vite proxy forwards requests, and `VITE_API_URL` in production.
+- `src/lib/api.js` — thin wrapper over the axios instance that normalises errors (`err.response.data` → `{ message, status, data, isUnauthenticated }`) and exposes `getCsrf()`, `get()`, `post()`, `put()`, `patch()`, `delete()`.
+- Vite dev-server proxy (`vite.config.js`) forwards `/api/*` and `/sanctum/*` to the real Laravel backend, eliminating CORS in local dev.
 
 **State Management**: Zustand 5 with `persist` middleware (localStorage). Three main stores:
-- `src/stores/authStore.js` — Full Vue-parity auth logic: `isInitialized`, `isAuthenticated`, `tempEmail` (localStorage bridge), `userRole()` getter (reads `user.roles[0].name || user.role`), `fetchUser()`, `login()`, `verifyOtp()`, `logout()`, `redirectBasedOnRole()`. Tries real API first, falls back to demo mode gracefully.
+- `src/stores/authStore.js` — Full auth logic: `isInitialized`, `isAuthenticated`, `tempEmail` (localStorage bridge), `userRole()` getter (reads `user.roles[0].name || user.role`), `fetchUser({ force })`, `login()`, `sendOtp()`, `verifyOtp()` (axios, not raw fetch), `logout()`. Real Laravel Sanctum backend via HttpOnly cookies.
 - `src/stores/patientStore.js` — Patient list with clinical biomarker data (ER, PR, HER2, Ki-67, tumor size, etc.)
 - `src/stores/reportStore.js` — Clinical reports with sign/draft status
 
@@ -88,13 +88,9 @@ Preferred communication style: Simple, everyday language.
 
 `@` resolves to `./src` (configured in `vite.config.js`). Import as `@/stores/authStore` etc.
 
-### No Backend / No Database
+### Backend Integration
 
-This is a fully client-side application. There is no API server, no database, and no authentication server. All "data" is either:
-1. Hardcoded seed arrays in store files and `adminSeed.js`
-2. Persisted to `localStorage` via Zustand's `persist` middleware
-
-The attached assets reference a Laravel backend API with registration/invitation flows — this is a planned integration, not yet implemented.
+Auth calls hit a real Laravel Sanctum backend at `https://breast-cancer-detection-backend-main-p7c9cg.laravel.cloud`. Session is cookie-based (HttpOnly) — no tokens stored in localStorage. All other data (patients, reports, admin views) is still seeded mock data in the frontend.
 
 ---
 
@@ -119,4 +115,4 @@ The attached assets reference a Laravel backend API with registration/invitation
 - Plus Jakarta Sans (weights 300–800)
 - JetBrains Mono (weights 400, 600, 700)
 
-**No external APIs are currently called at runtime.** The platform is entirely self-contained with mock data. Future integration with a Laravel backend API is planned (see attached assets for registration/invitation endpoint schemas).
+Auth API calls go to the real Laravel backend. All clinical data (patients, reports, admin views) is still seeded mock data. `axios` (v1) added as HTTP client dependency.
