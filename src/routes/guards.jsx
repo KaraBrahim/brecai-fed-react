@@ -58,14 +58,19 @@ export function RequireOtp({ children }) {
 
   if (isAuthenticated) {
     const home = getRoleHome()
+    console.log('1st isAuthenticated', isAuthenticated );
     log.info('GUARD', `RequireOtp — already authenticated [${userRole()}], redirecting to "${home}"`)
     return <Navigate to={home} replace />
   }
+  if (isAuthenticated) {
+    console.log('2st isAuthenticated', isAuthenticated);
+  return <Navigate to="/dashboard" replace />
+}
 
-  if (!tempEmail) {
-    log.warn('GUARD', 'RequireOtp — no pending OTP session, redirecting to /auth')
-    return <Navigate to="/auth" replace />
-  }
+
+if (!tempEmail) {
+  return <Navigate to="/auth" replace />
+}
 
   log.debug('GUARD', `RequireOtp ✓ — pending OTP session for "${tempEmail}", rendering OTP page`)
   return children
