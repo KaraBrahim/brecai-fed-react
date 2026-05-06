@@ -68,31 +68,26 @@ function OtpInput({ value, onChange, hasError }) {
 /* ── Main OTP Page Component ────────────────────── */
 export default function OtpPage() {
   const navigate = useNavigate()
-  const { verifyOtp, sendOtp, tempEmail, tempPhone, otpMethods, otpMethod, otpContext } = useAuthStore()
-  
-  const [code, setCode]   = useState('')
+  const { verifyOtp, sendOtp, tempEmail, otpContext } = useAuthStore()
+
+  const [code, setCode]       = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [sent, setSent] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [error, setError]     = useState('')
   const [success, setSuccess] = useState('')
 
-  const methods = Array.isArray(otpMethods) && otpMethods.length ? otpMethods : ['email']
-  const selectedMethod = otpMethod || methods[0]
-
-  // useRef persists across React Strict Mode's mount→unmount→remount cycle,
-  // preventing the initial auto-send from firing twice and sending duplicate emails.
+  // useRef persists across React Strict Mode's double-invoke cycle,
+  // preventing the initial auto-send from firing twice.
   const initialSendFired = useRef(false)
 
   useEffect(() => {
     if (!tempEmail || initialSendFired.current) return
     initialSendFired.current = true
 
-    sendOtp(selectedMethod).then(res => {
+    sendOtp().then(res => {
       if (!res.ok) {
         setError(res.error)
         initialSendFired.current = false // allow retry if it failed
-      } else {
-        setSent(true)
       }
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -104,33 +99,34 @@ export default function OtpPage() {
     setLoading(true)
     try {
       const res = await verifyOtp(code)
-      if (!res.ok) { 
-        setError(res.error) 
+      if (!res.ok) {
+        setError(res.error)
         setLoading(false)
-        return 
+        return
       }
       if (res.pendingApproval) {
         setLoading(false)
         setSuccess('Your account is pending approval by your organization manager.')
         return
       }
-      // Do NOT call navigate() here. verifyOtp already called fetchUser({ force: true })
-      // which sets isAuthenticated=true. The RequireOtp guard re-renders in the same pass
-      // and fires <Navigate to={roleHome} replace />. Calling navigate() here as well
-      // creates a second in-flight navigation that races with the guard's, causing a
-      // brief flash to the login page before the dashboard settles.
+      // Do NOT call navigate() here — the RequireOtp guard handles the redirect
+      // automatically when isAuthenticated becomes true. A second navigate() call
+      // would race with the guard's <Navigate> and cause a login-page flash.
       log.info('OTP', 'Verification successful — RequireOtp guard will redirect')
-    } catch (err) {
+    } catch {
       setError('An unexpected error occurred.')
       setLoading(false)
     }
   }
 
   async function handleResend() {
+    if (sending) return
     setError('')
-    const res = await sendOtp(selectedMethod)
+    setSending(true)
+    const res = await sendOtp()
+    setSending(false)
     if (!res.ok) setError(res.error)
-    else { setSent(true); setSuccess('') }
+    else setSuccess('Code resent to your email.')
   }
 
   return (
@@ -154,22 +150,6 @@ export default function OtpPage() {
         <p className="text-slate-400 text-xs font-semibold mt-2">
           {otpContext === 'register' ? 'Registration verification' : 'Login verification'}
         </p>
-      </div>
-
-      <div className="flex gap-2 mb-4">
-        {methods.map((m) => (
-          <button
-            key={m}
-            type="button"
-            onClick={() => { if (!loading) { sendOtp(m).then(r => { if (!r.ok) setError(r.error); else { setSent(true); setSuccess('') } }) } }}
-            className={cn(
-              'flex-1 rounded-2xl border-2 px-4 py-3 text-xs font-black uppercase tracking-wide transition-all',
-              selectedMethod === m ? 'border-[#0572B2] bg-blue-50 text-[#0572B2]' : 'border-slate-200 bg-slate-50 text-slate-500 hover:text-slate-800'
-            )}
-          >
-            {m}
-          </button>
-        ))}
       </div>
 
       <OtpInput value={code} onChange={v => { setCode(v); setError(''); setSuccess('') }} hasError={!!error} />
@@ -208,8 +188,8 @@ export default function OtpPage() {
 
       {/* Footer Actions */}
       <div className="mt-6 flex items-center justify-between">
-        <button 
-          onClick={() => navigate('/auth')} 
+        <button
+          onClick={() => navigate('/auth')}
           className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-slate-700 transition-colors"
         >
           <ChevronLeft className="w-3.5 h-3.5" /> Back to Login
@@ -217,10 +197,10 @@ export default function OtpPage() {
         <button
           type="button"
           onClick={handleResend}
-          disabled={loading}
+          disabled={loading || sending}
           className="text-xs font-bold text-[#0572B2] hover:underline disabled:opacity-50"
         >
-          {sent ? 'Resend code' : 'Send code'}
+          {sending ? 'Sending...' : 'Resend code'}
         </button>
       </div>
     </motion.div>

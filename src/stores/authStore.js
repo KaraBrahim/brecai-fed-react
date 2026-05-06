@@ -57,13 +57,7 @@ export const useAuthStore = create(
 
       // OTP-flow transient state — re-hydrated from localStorage on mount
       tempEmail:  localStorage.getItem('temp_email')   || null,
-      tempPhone:  localStorage.getItem('temp_phone')   || null,
       otpContext: localStorage.getItem('otp_context')  || null,
-      otpMethod:  localStorage.getItem('otp_method')   || null,
-      otpMethods: (() => {
-        try { const r = localStorage.getItem('otp_methods'); return r ? JSON.parse(r) : null }
-        catch { return null }
-      })(),
 
       /* ── Computed helper ──────────────────────────────── */
       userRole: () => resolveUserRole(get().user),
@@ -107,18 +101,14 @@ export const useAuthStore = create(
         log.info('AUTH', `login → "${email}"`)
         try {
           await api.getCsrf()
-          const data = await api.post(AUTH_ENDPOINTS.login, { email, password, device_name })
-          const phone   = data?.phone_number ?? null
-          const methods = phone ? ['email', 'whatsapp'] : ['email']
+          await api.post(AUTH_ENDPOINTS.login, { email, password, device_name })
 
           lsSet('temp_email',  email)
-          lsSet('temp_phone',  phone)
           lsSet('otp_context', 'login')
-          lsSet('otp_methods', methods)
 
-          set({ tempEmail: email, tempPhone: phone, otpContext: 'login', otpMethods: methods, otpMethod: null })
+          set({ tempEmail: email, otpContext: 'login' })
           log.info('AUTH', `login ✓ — OTP flow started for "${email}"`)
-          return { ok: true, email, phone_number: phone, methods }
+          return { ok: true, email }
         } catch (err) {
           const msg = errorMessage(err, 'Login failed')
           log.warn('AUTH', `login ✗ — ${msg}`)
@@ -131,19 +121,15 @@ export const useAuthStore = create(
         log.info('AUTH', `register → "${payload?.email}"`)
         try {
           await api.getCsrf()
-          const data    = await api.post(AUTH_ENDPOINTS.register, payload)
-          const email   = data?.email   || payload?.email
-          const phone   = data?.phone_number ?? payload?.phone_number ?? null
-          const methods = phone ? ['email', 'whatsapp'] : ['email']
+          const data  = await api.post(AUTH_ENDPOINTS.register, payload)
+          const email = data?.email || payload?.email
 
           lsSet('temp_email',  email)
-          lsSet('temp_phone',  phone)
           lsSet('otp_context', 'register')
-          lsSet('otp_methods', methods)
 
-          set({ tempEmail: email, tempPhone: phone, otpContext: 'register', otpMethods: methods, otpMethod: null })
+          set({ tempEmail: email, otpContext: 'register' })
           log.info('AUTH', `register ✓ — OTP flow started for "${email}"`)
-          return { ok: true, email, phone_number: phone, methods, data }
+          return { ok: true, email, data }
         } catch (err) {
           const msg = errorMessage(err, 'Registration failed')
           log.warn('AUTH', `register ✗ — ${msg}`)
@@ -151,26 +137,19 @@ export const useAuthStore = create(
         }
       },
 
-      /* ── sendOtp (step 2) ─────────────────────────────── */
-      sendOtp: async (method) => {
+      /* ── sendOtp (step 2) — email only ────────────────── */
+      sendOtp: async () => {
         const email = get().tempEmail
-        const phone = get().tempPhone
         if (!email) return { ok: false, error: 'Session expired. Please start again.' }
 
-        log.info('AUTH', `sendOtp → method="${method}" email="${email}"`)
+        log.info('AUTH', `sendOtp → email="${email}"`)
         try {
           await api.getCsrf()
-          const body = { email, method, ...(phone ? { phone_number: phone } : {}) }
-          await api.post(AUTH_ENDPOINTS.sendOtp, body)
-          lsSet('otp_method', method)
-          set({ otpMethod: method })
-          log.info('AUTH', `sendOtp ✓ — code sent via ${method}`)
+          await api.post(AUTH_ENDPOINTS.sendOtp, { email, method: 'email' })
+          log.info('AUTH', 'sendOtp ✓ — code sent via email')
           return { ok: true }
         } catch (err) {
-          let msg = errorMessage(err, 'Failed to send OTP')
-          if (err?.status >= 500 && method === 'whatsapp') {
-            msg = 'WhatsApp delivery is currently unavailable. Please use email instead.'
-          }
+          const msg = errorMessage(err, 'Failed to send OTP')
           log.warn('AUTH', `sendOtp ✗ — ${msg} (HTTP ${err?.status})`)
           return { ok: false, error: msg, details: err?.data, status: err?.status }
         }
@@ -197,13 +176,12 @@ export const useAuthStore = create(
           // Do NOT update Zustand state yet: RequireOtp checks both isAuthenticated AND tempEmail.
           // If we set tempEmail=null before isAuthenticated=true, RequireOtp briefly sees
           // "no session + no tempEmail" and fires <Navigate to="/auth"> — the login flash.
-          lsClear('temp_email', 'temp_phone', 'otp_context', 'otp_methods', 'otp_method')
+          lsClear('temp_email', 'otp_context')
 
           // 202 = account registered but needs org-manager approval
           if (data?._status === 202 || data?.pending_approval) {
             log.info('AUTH', 'verifyOtp — account pending approval')
-            // Safe to clear store state now — we're staying on this page to show a message
-            set({ tempEmail: null, tempPhone: null, otpContext: null, otpMethods: null, otpMethod: null })
+            set({ tempEmail: null, otpContext: null })
             return { ok: true, pendingApproval: true, data }
           }
 
@@ -212,10 +190,9 @@ export const useAuthStore = create(
           log.info('AUTH', 'verifyOtp ✓ — fetching user with new session ...')
           await get().fetchUser({ force: true })
 
-          // NOW clear OTP transient state in the same tick as isAuthenticated=true is already set.
-          // RequireOtp will re-render and see isAuthenticated=true → redirect to role home.
-          // It never sees the "unauthenticated + no tempEmail" state that caused the login flash.
-          set({ tempEmail: null, tempPhone: null, otpContext: null, otpMethods: null, otpMethod: null })
+          // Clear OTP state AFTER isAuthenticated=true is set so RequireOtp
+          // never sees the unauthenticated+no-tempEmail state that caused the login flash.
+          set({ tempEmail: null, otpContext: null })
 
           const user = get().user
           log.info('AUTH', `verifyOtp — session established for "${user?.name}" [${resolveUserRole(user)}]`)
@@ -245,9 +222,8 @@ export const useAuthStore = create(
         } catch (err) {
           log.warn('AUTH', `logout ✗ — ${errorMessage(err, 'Logout failed')} (clearing local state anyway)`)
         }
-        lsClear('temp_email', 'temp_phone', 'otp_context', 'otp_methods', 'otp_method')
-        set({ user: null, isAuthenticated: false, tempEmail: null, tempPhone: null,
-              otpContext: null, otpMethods: null, otpMethod: null })
+        lsClear('temp_email', 'otp_context')
+        set({ user: null, isAuthenticated: false, tempEmail: null, otpContext: null })
         log.info('AUTH', 'logout ✓ — local auth state cleared')
       },
 
