@@ -68,7 +68,7 @@ function OtpInput({ value, onChange, hasError }) {
 /* ── Main OTP Page Component ────────────────────── */
 export default function OtpPage() {
   const navigate = useNavigate()
-  const { verifyOtp, sendOtp, tempEmail, tempPhone, otpMethods, otpMethod, otpContext, getRoleHome } = useAuthStore()
+  const { verifyOtp, sendOtp, tempEmail, tempPhone, otpMethods, otpMethod, otpContext } = useAuthStore()
   
   const [code, setCode]   = useState('')
   const [loading, setLoading] = useState(false)
@@ -114,8 +114,12 @@ export default function OtpPage() {
         setSuccess('Your account is pending approval by your organization manager.')
         return
       }
-      log.info('OTP', 'Verification successful, redirecting to home...')
-      navigate(getRoleHome(), { replace: true })
+      // Do NOT call navigate() here. verifyOtp already called fetchUser({ force: true })
+      // which sets isAuthenticated=true. The RequireOtp guard re-renders in the same pass
+      // and fires <Navigate to={roleHome} replace />. Calling navigate() here as well
+      // creates a second in-flight navigation that races with the guard's, causing a
+      // brief flash to the login page before the dashboard settles.
+      log.info('OTP', 'Verification successful — RequireOtp guard will redirect')
     } catch (err) {
       setError('An unexpected error occurred.')
       setLoading(false)
