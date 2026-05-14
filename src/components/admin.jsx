@@ -985,20 +985,20 @@ export function SparkTile({ label, value, sub, icon: Icon, color = 'blue', trend
           </div>
         )}
       </div>
-      {trend.length > 0 && (
+      {/* {trend.length > 0 && (
         <div className="mt-4 flex items-end gap-1 h-10">
           {trend.map((v, i) => (
             <div key={i} className="flex-1 rounded-sm transition-all" style={{ height: `${(v / max) * 100}%`, background: c.bar, opacity: 0.5 + (i / trend.length) * 0.5 }} />
           ))}
         </div>
-      )}
-      {delta !== undefined && (
+      )} */}
+      {/* {delta !== undefined && (
         <div className="absolute top-3 right-3 inline-flex items-center gap-0.5 text-[10px] font-black px-1.5 py-0.5 rounded-md"
           style={{ background: delta >= 0 ? 'rgba(16,185,129,0.1)' : 'rgba(245,84,134,0.1)', color: delta >= 0 ? '#047857' : '#be185d' }}>
           {delta >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
           {Math.abs(delta)}%
         </div>
-      )}
+      )} */}
     </motion.div>
   )
 }
