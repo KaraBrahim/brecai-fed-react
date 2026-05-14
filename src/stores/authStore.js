@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import authApi from '@/api/api-client/auth'
-import { getAuthToken, setAuthToken } from '@/api/api-client/client'
+import { setAuthToken } from '@/api/api-client/client'
 import { ROLE_HOME_MAP } from '@/enums/roles'
 import log from '@/lib/logger'
 
@@ -27,17 +27,16 @@ function resolveUserRole(user) {
   return user?.role || null
 }
 
-/** Extract a human-readable message from an axios error */
 function errorMessage(err, fallback) {
   return (
     err?.response?.data?.message ||
     (typeof err?.response?.data === 'string' ? err.response.data : null) ||
+    err?.data?.message ||
     err?.message ||
     fallback
   )
 }
 
-/* ── localStorage helpers ────────────────────────────────────── */
 function lsSet(key, val) {
   if (val == null || val === '') localStorage.removeItem(key)
   else localStorage.setItem(key, String(val))
@@ -61,19 +60,15 @@ export const useAuthStore = create(
       userRole: () => resolveUserRole(get().user),
 
       /* ── fetchUser ────────────────────────────────────── */
-      // Called on app mount (RootLayout). Checks for a stored Bearer token
-      // and, if present, calls GET /api/auth/me to validate it and load the user.
-      // force=true bypasses the isInitialized guard (used after verifyOtp).
+      // Called on app mount. Hits GET /api/auth/me — the request automatically
+      // carries the HttpOnly session cookie (withCredentials:true) OR a Bearer
+      // token from localStorage if the backend issued one. A 401 means no active
+      // session; any other error is logged and treated as unauthenticated.
+      // force=true bypasses the isInitialized / _fetchingUser guards (used after
+      // verifyOtp when we already know authentication just succeeded).
       fetchUser: async ({ force = false } = {}) => {
         if (!force && (get().isInitialized || get()._fetchingUser)) return
         if (get()._fetchingUser) return
-
-        const token = getAuthToken()
-        if (!token) {
-          log.info('AUTH', 'fetchUser — no token in storage, guest state')
-          set({ user: null, isAuthenticated: false, isInitialized: true, _fetchingUser: false })
-          return
-        }
 
         set({ _fetchingUser: true })
         log.info('AUTH', `fetchUser → GET /api/auth/me${force ? ' (forced)' : ''}`)
@@ -84,21 +79,19 @@ export const useAuthStore = create(
           log.info('AUTH', `fetchUser ✓ — "${data?.name}" [${role}]`)
           set({ user: data, isAuthenticated: true, isInitialized: true, _fetchingUser: false })
         } catch (err) {
-          const status = err?.response?.status
+          const status = err?.response?.status ?? err?.status
           set({ _fetchingUser: false })
           if (status === 401) {
-            log.info('AUTH', 'fetchUser — token invalid/expired (401), clearing')
-            setAuthToken(null)
+            log.info('AUTH', 'fetchUser — no active session (401), guest state')
           } else {
-            log.warn('AUTH', `fetchUser ✗ — ${errorMessage(err, 'unknown error')}`)
+            log.warn('AUTH', `fetchUser ✗ — ${errorMessage(err, 'unknown error')} (HTTP ${status ?? 'network'})`)
           }
           set({ user: null, isAuthenticated: false, isInitialized: true })
         }
       },
 
       /* ── login (step 1) ───────────────────────────────── */
-      // POST /api/auth/login — validates credentials, triggers OTP flow.
-      // Returns { message, email, phone_number } on success (no token yet).
+      // POST /api/auth/login — validates credentials, backend sends OTP.
       login: async (email, password) => {
         log.info('AUTH', `login → "${email}"`)
         try {
@@ -118,13 +111,11 @@ export const useAuthStore = create(
       },
 
       /* ── register ─────────────────────────────────────── */
-      // POST /api/auth/register — creates account, server sends OTP automatically.
-      // payload shape mirrors auth.js JSDoc (name, email, password,
-      // password_confirmation, role, phone_number, organization_id, etc.)
+      // POST /api/auth/register — creates account. Backend sends OTP automatically.
       register: async (payload) => {
         log.info('AUTH', `register → "${payload?.email}"`)
         try {
-          const data  = await authApi.register({
+          const data = await authApi.register({
             ...payload,
             password_confirmation: payload.password_confirmation ?? payload.confirm ?? payload.password,
           })
@@ -143,8 +134,8 @@ export const useAuthStore = create(
         }
       },
 
-      /* ── sendOtp (step 2) ─────────────────────────────── */
-      // POST /api/auth/send-otp — sends code via email.
+      /* ── sendOtp ──────────────────────────────────────── */
+      // POST /api/auth/send-otp — dispatches a 6-digit code via email.
       sendOtp: async () => {
         const email = get().tempEmail
         if (!email) return { ok: false, error: 'Session expired. Please start again.' }
@@ -161,10 +152,16 @@ export const useAuthStore = create(
         }
       },
 
-      /* ── verifyOtp (step 3) ───────────────────────────── */
-      // POST /api/auth/verify-otp — validates the code.
-      // auth.js automatically stores the returned Bearer token via setAuthToken().
-      // After that we call auth.me() to load the full user object.
+      /* ── verifyOtp ────────────────────────────────────── */
+      // POST /api/auth/verify-otp → { message, user, token? }
+      //
+      // The response always includes the authenticated `user` object.
+      // If the backend also returns a Bearer `token` the api-client stores it
+      // automatically (setAuthToken). For cookie-based Sanctum backends the
+      // HttpOnly session cookie is already set by this response — no token needed.
+      //
+      // We set auth state directly from the response user so we never need a
+      // second round-trip to /api/auth/me just to read back what we already have.
       verifyOtp: async (otp) => {
         const email   = get().tempEmail
         const context = get().otpContext
@@ -184,16 +181,25 @@ export const useAuthStore = create(
             return { ok: true, pendingApproval: true, data }
           }
 
-          // Token is already stored by authApi.verifyOtp — now fetch the user
-          log.info('AUTH', 'verifyOtp ✓ — token stored, fetching user via /api/auth/me …')
-          await get().fetchUser({ force: true })
+          // Prefer the user object embedded in the response body.
+          // If absent (some backends omit it), fall back to a fresh /me call.
+          const user = data?.user ?? null
 
-          // Clear OTP state after isAuthenticated=true to avoid RequireOtp flash
-          set({ tempEmail: null, otpContext: null })
+          if (user) {
+            const role = resolveUserRole(user)
+            log.info('AUTH', `verifyOtp ✓ — session for "${user?.name}" [${role}]`)
+            // Set auth state atomically — clears OTP transient state at the same time
+            // so RequireOtp never sees the unauthenticated+no-tempEmail flash.
+            set({ user, isAuthenticated: true, isInitialized: true, tempEmail: null, otpContext: null })
+          } else {
+            // Fallback: backend didn't return user in response — fetch via /me.
+            // This also works for pure-cookie Sanctum (cookie is now set on this response).
+            log.info('AUTH', 'verifyOtp — no user in response, fetching via /api/auth/me …')
+            await get().fetchUser({ force: true })
+            set({ tempEmail: null, otpContext: null })
+          }
 
-          const user = get().user
-          log.info('AUTH', `verifyOtp — session established for "${user?.name}" [${resolveUserRole(user)}]`)
-          return { ok: true, user, data }
+          return { ok: true, user: get().user, data }
         } catch (err) {
           const msg = errorMessage(err, 'OTP verification failed')
           log.warn('AUTH', `verifyOtp ✗ — ${msg}`)
@@ -210,15 +216,12 @@ export const useAuthStore = create(
       },
 
       /* ── logout ───────────────────────────────────────── */
-      // POST /api/auth/logout — revokes the token server-side.
-      // authApi.logout() also calls setAuthToken(null) to clear localStorage.
       logout: async () => {
         log.info('AUTH', 'logout →')
         try {
           await authApi.logout()
-          log.info('AUTH', 'logout ✓ — server token revoked')
+          log.info('AUTH', 'logout ✓ — server session revoked')
         } catch (err) {
-          // Best-effort — clear local state regardless
           setAuthToken(null)
           log.warn('AUTH', `logout ✗ — ${errorMessage(err, 'Logout failed')} (local state cleared anyway)`)
         }
@@ -228,7 +231,6 @@ export const useAuthStore = create(
       },
 
       /* ── fetchOrganizationsPublic ──────────────────────── */
-      // GET /api/auth/organizations — no auth required.
       fetchOrganizationsPublic: async () => {
         try {
           const data = await authApi.getOrganizations()
