@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -11,61 +11,83 @@ import {
 } from 'recharts'
 import { AdminHero, MetricTile, StatusPill } from '@/components/admin'
 import { SectionCard, stagger } from '@/components/shared'
-import {
-  seedUsers, seedOrgs, seedExaminations, seedPredictions,
-  seedSubscriptions, seedPayments, seedAuditLogs, seedFederatedSites,
-} from '@/lib/adminSeed'
+import admin from '@/api/api-client/admin'
 
-const revenueSeries = [
-  { m: 'Nov', r: 9200 },  { m: 'Dec', r: 10100 }, { m: 'Jan', r: 12200 },
-  { m: 'Feb', r: 13800 }, { m: 'Mar', r: 15200 }, { m: 'Apr', r: 17200 },
-]
-const usageSeries = [
-  { d: 'Mon', preds: 124 }, { d: 'Tue', preds: 168 }, { d: 'Wed', preds: 142 },
-  { d: 'Thu', preds: 201 }, { d: 'Fri', preds: 187 }, { d: 'Sat', preds: 96 }, { d: 'Sun', preds: 73 },
-]
+function LoadingBar() {
+  return <div className="h-64 flex items-center justify-center"><div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-[#0572B2] animate-spin" /></div>
+}
 
 export default function AdminOverview() {
   const navigate = useNavigate()
-  const stats = useMemo(() => {
-    const totalUsers = seedUsers.length
-    const activeOrgs = seedOrgs.filter(o => o.status === 'active').length
-    const mrr = seedSubscriptions.reduce((s, x) => s + x.mrr, 0)
-    const totalPredictions = seedPredictions.length * 1230
-    const onlineSites = seedFederatedSites.filter(s => s.status === 'online').length
-    const flaggedExams = seedExaminations.filter(e => e.flagged).length
-    return { totalUsers, activeOrgs, mrr, totalPredictions, onlineSites, flaggedExams }
+
+  const [kpis, setKpis] = useState(null)
+  const [userGrowth, setUserGrowth] = useState([])
+  const [predOverTime, setPredOverTime] = useState([])
+  const [predResults, setPredResults] = useState(null)
+  const [recentLogs, setRecentLogs] = useState([])
+  const [topOrgs, setTopOrgs] = useState([])
+  const [modelPerf, setModelPerf] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchAll = async () => {
+      try {
+        const [kpisData, ugData, potData, prData, logsData, topOrgsData, modelPerfData] = await Promise.allSettled([
+          admin.insights.kpis(),
+          admin.insights.userGrowth(),
+          admin.insights.predictionsOverTime(),
+          admin.insights.predictionResults(),
+          admin.auditLogs.list({ page: 1 }),
+          admin.insights.topOrganizations(),
+          admin.insights.modelPerformance(),
+        ])
+        if (kpisData.status === 'fulfilled') setKpis(kpisData.value)
+        if (ugData.status === 'fulfilled') setUserGrowth(ugData.value || [])
+        if (potData.status === 'fulfilled') setPredOverTime(potData.value || [])
+        if (prData.status === 'fulfilled') setPredResults(prData.value)
+        if (logsData.status === 'fulfilled') setRecentLogs((logsData.value?.data || []).slice(0, 6))
+        if (topOrgsData.status === 'fulfilled') setTopOrgs(topOrgsData.value || [])
+        if (modelPerfData.status === 'fulfilled') setModelPerf(modelPerfData.value || [])
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchAll()
   }, [])
 
-  const subtypeMix = [
-    { name: 'Luminal A',     value: seedPredictions.filter(p => p.subtype === 'Luminal A').length,     color: '#0BB592' },
-    { name: 'Non-Luminal A', value: seedPredictions.filter(p => p.subtype !== 'Luminal A').length,     color: '#F55486' },
-  ]
+  const subtypeMix = predResults ? [
+    { name: 'Luminal A',     value: predResults.luminal_a,     color: '#0BB592' },
+    { name: 'Non-Luminal A', value: predResults.non_luminal_a, color: '#F55486' },
+  ] : []
 
-  const recentLogs = seedAuditLogs.slice(0, 6)
+  const userGrowthSeries = userGrowth.map(d => ({ m: d.month?.slice(0, 3) || d.month, r: d.count }))
+  const predSeries = predOverTime.slice(-7).map(d => ({ d: d.month?.slice(0, 3) || d.month, preds: d.total }))
 
   const quickActions = [
-    { label: 'Manage Users',        icon: Users,      to: '/app/admin/users',    color: 'blue' },
-    { label: 'Organizations',       icon: Building2,  to: '/app/admin/orgs',     color: 'teal' },
-    { label: 'AI Models',           icon: Brain,      to: '/app/admin/models',   color: 'pink' },
-    { label: 'Federated Registry',  icon: Network,    to: '/app/admin/federated',color: 'amber' },
+    { label: 'Manage Users',        icon: Users,      to: '/app/admin/users',         color: 'blue' },
+    { label: 'Organizations',       icon: Building2,  to: '/app/admin/orgs',          color: 'teal' },
+    { label: 'AI Models',           icon: Brain,      to: '/app/admin/models',        color: 'pink' },
+    { label: 'Federated Registry',  icon: Network,    to: '/app/admin/federated',     color: 'amber' },
     { label: 'Subscriptions',       icon: CreditCard, to: '/app/admin/subscriptions', color: 'blue' },
-    { label: 'Audit Logs',          icon: FileText,   to: '/app/admin/logs',     color: 'slate' },
+    { label: 'Audit Logs',          icon: FileText,   to: '/app/admin/logs',          color: 'slate' },
   ]
+
+  const activeModels = modelPerf.filter(m => m.status === 'completed').length
+  const latestRound = modelPerf.length > 0 ? `R-${String(Math.max(...modelPerf.map(m => m.round_number || 0))).padStart(2, '0')}` : '—'
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show">
       <AdminHero
         eyebrow="Platform Control · BRECAI-FED"
         title="Admin Command Center"
-        subtitle="Operate the federated network, govern access, and watch revenue, predictions, and security in one place."
+        subtitle="Operate the federated network, govern access, and watch predictions and security in one place."
         icon={LayoutDashboard}
         accent="blue"
         stats={[
-          { label: 'MRR',          value: ` DA${stats.mrr.toLocaleString()}`, sub: '+18% MoM' },
-          { label: 'Active Orgs',  value: stats.activeOrgs,                 sub: `${seedOrgs.length} total` },
-          { label: 'Live Sites',   value: `${stats.onlineSites}/${seedFederatedSites.length}`, sub: 'Federated' },
-          { label: 'Flags',        value: stats.flaggedExams,                sub: 'Need review' },
+          { label: 'Users',        value: kpis?.total_users ?? '—',         sub: 'Across all orgs' },
+          { label: 'Orgs',         value: kpis?.total_organizations ?? '—', sub: 'Registered' },
+          { label: 'FL Rounds',    value: kpis?.completed_fl_rounds ?? '—', sub: 'Completed' },
+          { label: 'Predictions',  value: kpis ? Number(kpis.total_predictions).toLocaleString() : '—', sub: 'All time' },
         ]}
       >
         <button onClick={() => navigate('/app/admin/users')} className="px-4 py-2 rounded-xl bg-white text-[#093A7A] text-xs font-black uppercase tracking-widest hover:bg-white/90 transition flex items-center gap-2">
@@ -78,72 +100,92 @@ export default function AdminOverview() {
 
       {/* KPI tiles */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-7">
-        <MetricTile label="Total users"    value={stats.totalUsers}                          sub="Across all orgs"      icon={Users}     color="blue"  accent={{ label: 'New (30d)', value: '+4' }} />
-        <MetricTile label="Predictions"    value={stats.totalPredictions.toLocaleString()}    sub="All-time inferences"  icon={Brain}     color="pink"  accent={{ label: 'Today',     value: '142' }} />
-        <MetricTile label="Live sites"     value={`${stats.onlineSites}/${seedFederatedSites.length}`} sub="Federated nodes"  icon={Network} color="teal" accent={{ label: 'Round',     value: 'R-08' }} />
-        <MetricTile label="MRR"            value={` DA${(stats.mrr / 1000).toFixed(1)}k`}      sub="Recurring revenue"    icon={CreditCard} color="amber" accent={{ label: 'Trend',     value: '+18%' }} />
+        <MetricTile label="Total users"    value={kpis?.total_users ?? '—'}                        sub="Across all orgs"     icon={Users}     color="blue"  accent={{ label: 'Active models', value: kpis?.active_models ?? '—' }} />
+        <MetricTile label="Predictions"    value={kpis ? Number(kpis.total_predictions).toLocaleString() : '—'} sub="All-time inferences" icon={Brain}     color="pink"  accent={{ label: 'Patients',  value: kpis?.total_patients ?? '—' }} />
+        <MetricTile label="FL Rounds"      value={kpis?.completed_fl_rounds ?? '—'}                sub="Completed rounds"    icon={Network}   color="teal"  accent={{ label: 'Latest',    value: latestRound }} />
+        <MetricTile label="Organizations"  value={kpis?.total_organizations ?? '—'}                sub="Participating orgs"  icon={Building2} color="amber" accent={{ label: 'Active models', value: kpis?.active_models ?? '—' }} />
       </div>
 
       {/* Charts row */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-7">
-        <SectionCard title="Recurring revenue" subtitle="Last 6 months · USD" icon={TrendingUp} iconColor="teal" className="xl:col-span-2">
-          <div className="h-64 px-4 pb-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={revenueSeries}>
-                <defs>
-                  <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%"  stopColor="#0572B2" stopOpacity={0.5} />
-                    <stop offset="100%" stopColor="#0572B2" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="m" tick={{ fontSize: 11, fontWeight: 700, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fontWeight: 700, fill: '#64748b' }} axisLine={false} tickLine={false} tickFormatter={v => ` DA${v/1000}k`} />
-                <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 12, fontWeight: 700 }} />
-                <Area type="monotone" dataKey="r" stroke="#0572B2" strokeWidth={3} fill="url(#revGrad)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+        <SectionCard title="User growth" subtitle="Monthly registrations" icon={TrendingUp} iconColor="teal" className="xl:col-span-2">
+          {loading ? <LoadingBar /> : (
+            <div className="h-64 px-4 pb-4">
+              {userGrowthSeries.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={userGrowthSeries}>
+                    <defs>
+                      <linearGradient id="ugGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%"   stopColor="#0572B2" stopOpacity={0.5} />
+                        <stop offset="100%" stopColor="#0572B2" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="m" tick={{ fontSize: 11, fontWeight: 700, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fontWeight: 700, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 12, fontWeight: 700 }} />
+                    <Area type="monotone" dataKey="r" name="New users" stroke="#0572B2" strokeWidth={3} fill="url(#ugGrad)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-slate-400 text-sm font-semibold">No growth data yet</div>
+              )}
+            </div>
+          )}
         </SectionCard>
 
-        <SectionCard title="Subtype mix" subtitle="Last 1k predictions" icon={Activity} iconColor="pink">
-          <div className="h-64 px-4 pb-4 flex">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={subtypeMix} dataKey="value" innerRadius={50} outerRadius={80} paddingAngle={4}>
-                  {subtypeMix.map((s, i) => <Cell key={i} fill={s.color} />)}
-                </Pie>
-                <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 12, fontWeight: 700 }} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="flex flex-col justify-center gap-3 pr-2">
-              {subtypeMix.map(s => (
-                <div key={s.name} className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: s.color }} />
-                  <div>
-                    <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">{s.name}</p>
-                    <p className="text-sm font-extrabold text-slate-900">{s.value}</p>
+        <SectionCard title="Subtype mix" subtitle="Prediction outcomes" icon={Activity} iconColor="pink">
+          {loading ? <LoadingBar /> : (
+            <div className="h-64 px-4 pb-4 flex">
+              {subtypeMix.length > 0 && (subtypeMix[0].value > 0 || subtypeMix[1].value > 0) ? (
+                <>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={subtypeMix} dataKey="value" innerRadius={50} outerRadius={80} paddingAngle={4}>
+                        {subtypeMix.map((s, i) => <Cell key={i} fill={s.color} />)}
+                      </Pie>
+                      <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 12, fontWeight: 700 }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="flex flex-col justify-center gap-3 pr-2">
+                    {subtypeMix.map(s => (
+                      <div key={s.name} className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ background: s.color }} />
+                        <div>
+                          <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">{s.name}</p>
+                          <p className="text-sm font-extrabold text-slate-900">{s.value?.toLocaleString() ?? 0}</p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                </div>
-              ))}
+                </>
+              ) : (
+                <div className="w-full flex items-center justify-center text-slate-400 text-sm font-semibold">No prediction data yet</div>
+              )}
             </div>
-          </div>
+          )}
         </SectionCard>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-7">
-        <SectionCard title="Weekly inference load" subtitle="Predictions issued this week" icon={Brain} iconColor="blue" className="xl:col-span-2">
-          <div className="h-56 px-4 pb-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={usageSeries}>
-                <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="d" tick={{ fontSize: 11, fontWeight: 700, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fontWeight: 700, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 12, fontWeight: 700 }} />
-                <Bar dataKey="preds" fill="#0BB592" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+        <SectionCard title="Predictions over time" subtitle="Monthly inference volume" icon={Brain} iconColor="blue" className="xl:col-span-2">
+          {loading ? <LoadingBar /> : (
+            <div className="h-56 px-4 pb-4">
+              {predSeries.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={predSeries}>
+                    <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="d" tick={{ fontSize: 11, fontWeight: 700, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fontWeight: 700, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 12, fontWeight: 700 }} />
+                    <Bar dataKey="preds" name="Predictions" fill="#0BB592" radius={[8, 8, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-slate-400 text-sm font-semibold">No prediction timeline yet</div>
+              )}
+            </div>
+          )}
         </SectionCard>
 
         <SectionCard title="System health" subtitle="Real-time" icon={ShieldCheck} iconColor="teal">
@@ -169,6 +211,25 @@ export default function AdminOverview() {
         </SectionCard>
       </div>
 
+      {/* Top organizations */}
+      {topOrgs.length > 0 && (
+        <SectionCard title="Top organizations by predictions" subtitle="Most active participants" icon={Building2} iconColor="blue" className="mb-7">
+          <div className="divide-y divide-slate-100">
+            {topOrgs.slice(0, 5).map((o, i) => (
+              <div key={o.organization_id} className="px-5 py-3 flex items-center gap-4 hover:bg-slate-50/60 transition">
+                <span className="font-mono text-xs font-black text-slate-400 w-6">#{i + 1}</span>
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#093A7A] to-[#0572B2] text-white font-black flex items-center justify-center text-xs shrink-0">
+                  {o.organization?.name?.slice(0, 2).toUpperCase() || '??'}
+                </div>
+                <span className="text-sm font-extrabold text-slate-900 flex-1 truncate">{o.organization?.name ?? `Org #${o.organization_id}`}</span>
+                <StatusPill tone="blue" dot={false}>{o.organization?.type}</StatusPill>
+                <span className="font-mono text-xs font-extrabold text-[#0BB592]">{Number(o.prediction_count).toLocaleString()} preds</span>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      )}
+
       {/* Quick actions */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-7">
         {quickActions.map(a => (
@@ -192,22 +253,32 @@ export default function AdminOverview() {
         ))}
       </div>
 
-      {/* Recent activity */}
+      {/* Recent audit activity */}
       <SectionCard title="Recent platform activity" subtitle="Live audit feed" icon={AlertTriangle} iconColor="amber">
-        <div className="divide-y divide-slate-100">
-          {recentLogs.map(l => (
-            <div key={l.id} className="px-5 py-3 flex items-center gap-4 hover:bg-slate-50/60 transition">
-              <StatusPill tone={
-                l.severity === 'critical' ? 'red' :
-                l.severity === 'warning' ? 'amber' : 'slate'
-              } dot={false}>{l.severity}</StatusPill>
-              <span className="font-mono text-[10px] font-bold text-slate-400 w-32 shrink-0 hidden sm:inline">{l.ts}</span>
-              <span className="text-xs font-extrabold text-slate-900 w-40 shrink-0 truncate">{l.action}</span>
-              <span className="text-xs text-slate-600 truncate flex-1">{l.detail}</span>
-              <span className="font-mono text-[10px] font-bold text-slate-400 hidden md:inline">{l.actor}</span>
-            </div>
-          ))}
-        </div>
+        {loading ? (
+          <div className="px-5 py-8 flex justify-center"><div className="w-6 h-6 rounded-full border-4 border-slate-200 border-t-[#0572B2] animate-spin" /></div>
+        ) : recentLogs.length > 0 ? (
+          <div className="divide-y divide-slate-100">
+            {recentLogs.map(l => (
+              <div key={l.id} className="px-5 py-3 flex items-center gap-4 hover:bg-slate-50/60 transition">
+                <span className="font-mono text-[10px] font-bold text-slate-400 w-36 shrink-0 hidden sm:inline">
+                  {new Date(l.created_at).toLocaleString()}
+                </span>
+                <StatusPill tone="slate" dot={false} className="shrink-0 hidden md:flex">
+                  {l.auditable_type?.split('\\').pop() ?? 'System'}
+                </StatusPill>
+                <span className="text-xs font-extrabold text-slate-900 w-44 shrink-0 truncate">{l.action}</span>
+                <span className="text-xs text-slate-600 truncate flex-1">
+                  {l.old_values || l.new_values ? 'Record modified' : 'Action performed'}
+                  {l.auditable_id ? ` · ID ${l.auditable_id}` : ''}
+                </span>
+                <span className="font-mono text-[10px] font-bold text-slate-400 hidden md:inline">{l.ip_address ?? '—'}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="px-5 py-8 text-center text-sm font-semibold text-slate-400">No audit activity yet</div>
+        )}
         <div className="px-5 py-3 border-t border-slate-100">
           <button onClick={() => navigate('/app/admin/logs')} className="text-xs font-black uppercase tracking-widest text-[#0572B2] hover:text-[#093A7A] transition flex items-center gap-1">
             See full audit log <ArrowRight className="w-3 h-3" />

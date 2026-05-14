@@ -1,49 +1,99 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { Building2, Plus, Edit3, Trash2, Globe2, Users, MapPin, Server } from 'lucide-react'
+import { Building2, Plus, Edit3, Trash2, Globe2, Users, MapPin, CheckCircle2, XCircle, PauseCircle } from 'lucide-react'
 import { MapHero, MetricTile, DataTable, StatusPill } from '@/components/admin'
 import { Btn, Modal, Field, inputClass, ConfirmDialog, Toast, stagger } from '@/components/shared'
-import { seedOrgs } from '@/lib/adminSeed'
+import admin from '@/api/api-client/admin'
+import api from '@/lib/api'
 
-const PLANS = ['Starter', 'Pro', 'Enterprise', 'Research', 'Internal']
+const ORG_TYPES = ['hospital', 'clinic', 'laboratory', 'radiology_center']
+const TYPE_LABELS = { hospital: 'Hospital', clinic: 'Clinic', laboratory: 'Laboratory', radiology_center: 'Radiology Center' }
+const STATUS_TONES = { active: 'teal', pending: 'amber', rejected: 'red', suspended: 'slate' }
 
 export default function OrgRegistry() {
-  const [orgs, setOrgs] = useState(seedOrgs)
+  const [orgs, setOrgs] = useState([])
+  const [meta, setMeta] = useState({ current_page: 1, last_page: 1, total: 0 })
+  const [page, setPage] = useState(1)
+  const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(null)
-  const [confirmDel, setConfirmDel] = useState(null)
+  const [confirmAction, setConfirmAction] = useState(null)
+  const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState({ open: false, message: '', tone: 'teal' })
-
-  const stats = useMemo(() => ({
-    total: orgs.length,
-    active: orgs.filter(o => o.status === 'active').length,
-    trial: orgs.filter(o => o.status === 'trial').length,
-    sites: orgs.reduce((s, o) => s + o.sites, 0),
-    users: orgs.reduce((s, o) => s + o.users, 0),
-    mrr: orgs.reduce((s, o) => s + o.mrr, 0),
-  }), [orgs])
 
   const showToast = (message, tone = 'teal') => setToast({ open: true, message, tone })
 
-  const openNew = () => setEditing({ id: '', name: '', city: '', country: 'Algeria', plan: 'Starter', sites: 1, users: 0, status: 'trial', joined: new Date().toISOString().slice(0, 10), mrr: 0 })
-  const openEdit = (o) => setEditing({ ...o })
-  const save = () => {
-    if (!editing.name) { showToast('Organization name is required', 'pink'); return }
-    if (editing.id) {
-      setOrgs(prev => prev.map(o => o.id === editing.id ? { ...editing, sites: Number(editing.sites), users: Number(editing.users), mrr: Number(editing.mrr) } : o))
-      showToast(`${editing.name} updated`, 'blue')
-    } else {
-      const id = `ORG-${String(orgs.length + 1).padStart(3, '0')}`
-      setOrgs(prev => [{ ...editing, id, sites: Number(editing.sites), users: Number(editing.users), mrr: Number(editing.mrr) }, ...prev])
-      showToast(`${editing.name} added`, 'teal')
+  const load = useCallback(async (p = 1) => {
+    setLoading(true)
+    try {
+      const res = await admin.organizations.list({ page: p })
+      setOrgs(res.data ?? [])
+      setMeta({ current_page: res.current_page, last_page: res.last_page, total: res.total })
+    } catch {
+      showToast('Failed to load organizations', 'pink')
+    } finally {
+      setLoading(false)
     }
-    setEditing(null)
-  }
-  const del = () => { setOrgs(prev => prev.filter(o => o.id !== confirmDel.id)); showToast(`${confirmDel.name} removed`, 'pink'); setConfirmDel(null) }
+  }, [])
 
-  const planTone = { Starter: 'slate', Pro: 'blue', Enterprise: 'teal', Research: 'pink', Internal: 'purple' }
+  useEffect(() => { load(page) }, [load, page])
+
+  const stats = {
+    total: meta.total,
+    active: orgs.filter(o => o.status === 'active').length,
+    pending: orgs.filter(o => o.status === 'pending').length,
+    suspended: orgs.filter(o => o.status === 'suspended').length,
+  }
+
+  const openNew = () => setEditing({ _new: true, name: '', type: 'hospital', contact_email: '', address: '' })
+  const openEdit = (o) => setEditing({ ...o, _new: false })
+
+  const save = async () => {
+    if (!editing.name) { showToast('Organization name is required', 'pink'); return }
+    setSaving(true)
+    try {
+      await api.getCsrf()
+      const payload = {
+        name: editing.name,
+        type: editing.type,
+        contact_email: editing.contact_email || undefined,
+        address: editing.address || undefined,
+      }
+      if (editing._new) {
+        await admin.organizations.create(payload)
+        showToast(`${editing.name} created`, 'teal')
+      } else {
+        await admin.organizations.update(editing.id, payload)
+        showToast(`${editing.name} updated`, 'blue')
+      }
+      setEditing(null)
+      load(page)
+    } catch (err) {
+      showToast(err?.response?.data?.message || 'Save failed', 'pink')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleConfirm = async () => {
+    if (!confirmAction) return
+    const { type, org } = confirmAction
+    try {
+      await api.getCsrf()
+      if (type === 'approve')  { await admin.organizations.approve(org.id);  showToast(`${org.name} approved`, 'teal') }
+      if (type === 'reject')   { await admin.organizations.reject(org.id);   showToast(`${org.name} rejected`, 'amber') }
+      if (type === 'suspend')  { await admin.organizations.suspend(org.id);  showToast(`${org.name} suspended`, 'amber') }
+      if (type === 'delete')   { await admin.organizations.delete(org.id);   showToast(`${org.name} removed`, 'pink') }
+      setConfirmAction(null)
+      load(page)
+    } catch (err) {
+      showToast(err?.response?.data?.message || 'Action failed', 'pink')
+      setConfirmAction(null)
+    }
+  }
 
   const columns = [
-    { key: 'name', label: 'Organization', sortable: true,
+    {
+      key: 'name', label: 'Organization', sortable: true,
       render: (o) => (
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#093A7A] to-[#0572B2] text-white font-black flex items-center justify-center shadow-md text-xs">
@@ -51,26 +101,65 @@ export default function OrgRegistry() {
           </div>
           <div className="min-w-0">
             <p className="font-extrabold text-slate-900 truncate">{o.name}</p>
-            <p className="text-[11px] font-semibold text-slate-500 flex items-center gap-1"><MapPin className="w-3 h-3" />{o.city}, {o.country}</p>
+            <p className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
+              <MapPin className="w-3 h-3" />{o.address || o.contact_email || '—'}
+            </p>
           </div>
         </div>
       ),
     },
-    { key: 'plan', label: 'Plan', sortable: true, render: (o) => <StatusPill tone={planTone[o.plan]}>{o.plan}</StatusPill> },
-    { key: 'sites', label: 'Sites', align: 'center', sortable: true, render: (o) => <span className="font-mono font-extrabold text-slate-900">{o.sites}</span> },
-    { key: 'users', label: 'Users', align: 'center', sortable: true, render: (o) => <span className="font-mono font-extrabold text-slate-900">{o.users}</span> },
-    { key: 'status', label: 'Status', sortable: true, render: (o) => <StatusPill tone={o.status === 'active' ? 'teal' : o.status === 'trial' ? 'amber' : 'slate'}>{o.status}</StatusPill> },
-    { key: 'mrr', label: 'MRR', align: 'right', sortable: true, render: (o) => <span className="font-mono font-extrabold text-[#0BB592]">${o.mrr.toLocaleString()}</span> },
-    { key: 'joined', label: 'Joined', sortable: true, render: (o) => <span className="font-mono text-[11px] font-semibold text-slate-500">{o.joined}</span> },
-    { key: '_actions', label: '', align: 'right',
+    {
+      key: 'type', label: 'Type', sortable: true,
+      render: (o) => <StatusPill tone="blue" dot={false}>{TYPE_LABELS[o.type] || o.type}</StatusPill>,
+    },
+    {
+      key: 'status', label: 'Status', sortable: true,
+      render: (o) => <StatusPill tone={STATUS_TONES[o.status] || 'slate'}>{o.status}</StatusPill>,
+    },
+    {
+      key: 'contact_email', label: 'Contact', sortable: true,
+      render: (o) => <span className="text-[11px] font-semibold text-slate-500 truncate block max-w-[180px]">{o.contact_email || '—'}</span>,
+    },
+    {
+      key: 'created_at', label: 'Joined', sortable: true,
+      render: (o) => <span className="font-mono text-[11px] font-semibold text-slate-500">{o.created_at ? new Date(o.created_at).toLocaleDateString() : '—'}</span>,
+    },
+    {
+      key: '_actions', label: '', align: 'right',
       render: (o) => (
         <div className="flex items-center justify-end gap-1.5">
-          <button onClick={() => openEdit(o)} title="Edit" className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-900 hover:border-slate-400 transition"><Edit3 className="w-3.5 h-3.5" /></button>
-          <button onClick={() => setConfirmDel(o)} title="Delete" className="w-8 h-8 rounded-lg border border-pink-100 bg-pink-50/40 flex items-center justify-center text-[#F55486] hover:bg-pink-50 transition"><Trash2 className="w-3.5 h-3.5" /></button>
+          {o.status === 'pending' && (
+            <>
+              <button onClick={() => setConfirmAction({ type: 'approve', org: o })} title="Approve" className="w-8 h-8 rounded-lg border border-teal-100 bg-teal-50/40 flex items-center justify-center text-[#0BB592] hover:bg-teal-50 transition">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+              </button>
+              <button onClick={() => setConfirmAction({ type: 'reject', org: o })} title="Reject" className="w-8 h-8 rounded-lg border border-pink-100 bg-pink-50/40 flex items-center justify-center text-[#F55486] hover:bg-pink-50 transition">
+                <XCircle className="w-3.5 h-3.5" />
+              </button>
+            </>
+          )}
+          {o.status === 'active' && (
+            <button onClick={() => setConfirmAction({ type: 'suspend', org: o })} title="Suspend" className="w-8 h-8 rounded-lg border border-amber-100 bg-amber-50/40 flex items-center justify-center text-amber-500 hover:bg-amber-50 transition">
+              <PauseCircle className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <button onClick={() => openEdit(o)} title="Edit" className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-900 hover:border-slate-400 transition">
+            <Edit3 className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={() => setConfirmAction({ type: 'delete', org: o })} title="Delete" className="w-8 h-8 rounded-lg border border-pink-100 bg-pink-50/40 flex items-center justify-center text-[#F55486] hover:bg-pink-50 transition">
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
         </div>
       ),
     },
   ]
+
+  const confirmMeta = {
+    approve: { title: 'Approve organization?', msg: (o) => `${o.name} will be activated and gain access to the platform.`,     label: 'Approve',  danger: false },
+    reject:  { title: 'Reject organization?',  msg: (o) => `${o.name}'s application will be rejected.`,                        label: 'Reject',   danger: true  },
+    suspend: { title: 'Suspend organization?', msg: (o) => `${o.name} and all its users will lose access immediately.`,          label: 'Suspend',  danger: true  },
+    delete:  { title: 'Remove organization?',  msg: (o) => `${o.name} will be permanently removed from the federation.`,        label: 'Remove',   danger: true  },
+  }
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show">
@@ -84,51 +173,97 @@ export default function OrgRegistry() {
           { x: 520, y: 90 }, { x: 600, y: 150 }, { x: 700, y: 110 }, { x: 380, y: 175 },
         ]}
         stats={[
-          { label: 'Active',   value: stats.active,   sub: `${stats.trial} trial` },
-          { label: 'Sites',    value: stats.sites,    sub: 'federated' },
-          { label: 'Seats',    value: stats.users,    sub: 'all roles' },
-          { label: 'MRR',      value: ` DA${(stats.mrr/1000).toFixed(1)}k`, sub: 'recurring' },
+          { label: 'Total',    value: meta.total,       sub: 'registered'     },
+          { label: 'Active',   value: stats.active,     sub: 'participating'  },
+          { label: 'Pending',  value: stats.pending,    sub: 'awaiting review' },
+          { label: 'Suspended', value: stats.suspended, sub: 'locked'         },
         ]}
       >
         <Btn variant="primary" onClick={openNew}><Plus className="w-4 h-4" /> Add organization</Btn>
-        <Btn variant="secondary" onClick={() => showToast('Directory exported', 'blue')}><Globe2 className="w-4 h-4" /> Export directory</Btn>
+        <Btn variant="secondary" onClick={() => showToast('Export coming soon', 'blue')}><Globe2 className="w-4 h-4" /> Export directory</Btn>
       </MapHero>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <MetricTile label="Organizations" value={stats.total} sub="Including trials" icon={Building2} color="blue" />
-        <MetricTile label="Federated sites" value={stats.sites} sub="Total nodes" icon={Server} color="teal" />
-        <MetricTile label="Seats provisioned" value={stats.users} sub="Across all orgs" icon={Users} color="pink" />
-        <MetricTile label="Total MRR" value={` DA${stats.mrr.toLocaleString()}`} sub="From paying orgs" icon={Globe2} color="amber" />
+        <MetricTile label="Organizations" value={meta.total}      sub="All registered" icon={Building2}  color="blue"  />
+        <MetricTile label="Active"        value={stats.active}    sub="Participating"  icon={CheckCircle2} color="teal" />
+        <MetricTile label="Pending"       value={stats.pending}   sub="Need review"    icon={Users}       color="amber" />
+        <MetricTile label="Suspended"     value={stats.suspended} sub="Locked"         icon={Globe2}      color="pink"  />
       </div>
 
-      <DataTable
-        columns={columns}
-        rows={orgs}
-        searchKeys={['name', 'city']}
-        filters={[
-          { key: 'plan',   label: 'plans',   options: PLANS.map(p => ({ value: p, label: p })) },
-          { key: 'status', label: 'status',  options: [{ value: 'active', label: 'Active' }, { value: 'trial', label: 'Trial' }] },
-        ]}
-      />
+      {loading ? (
+        <div className="bg-white rounded-2xl border border-slate-200 p-12 flex justify-center">
+          <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-[#0572B2] animate-spin" />
+        </div>
+      ) : (
+        <DataTable
+          columns={columns}
+          rows={orgs}
+          searchKeys={['name', 'contact_email', 'address']}
+          filters={[
+            { key: 'type',   label: 'type',   options: ORG_TYPES.map(t => ({ value: t, label: TYPE_LABELS[t] })) },
+            { key: 'status', label: 'status', options: [
+              { value: 'active',    label: 'Active'    },
+              { value: 'pending',   label: 'Pending'   },
+              { value: 'rejected',  label: 'Rejected'  },
+              { value: 'suspended', label: 'Suspended' },
+            ]},
+          ]}
+        />
+      )}
 
-      <Modal open={!!editing} onClose={() => setEditing(null)} title={editing?.id ? 'Edit organization' : 'Add organization'} size="md"
-        footer={<><Btn variant="secondary" onClick={() => setEditing(null)}>Cancel</Btn><Btn variant="primary" onClick={save}>{editing?.id ? 'Save' : 'Create'}</Btn></>}>
+      {meta.last_page > 1 && (
+        <div className="flex items-center justify-center gap-2 mt-4">
+          <Btn variant="secondary" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>Previous</Btn>
+          <span className="text-xs font-bold text-slate-500">Page {meta.current_page} of {meta.last_page}</span>
+          <Btn variant="secondary" onClick={() => setPage(p => Math.min(meta.last_page, p + 1))} disabled={page === meta.last_page}>Next</Btn>
+        </div>
+      )}
+
+      <Modal
+        open={!!editing}
+        onClose={() => setEditing(null)}
+        title={editing?._new ? 'Add organization' : 'Edit organization'}
+        size="md"
+        footer={<>
+          <Btn variant="secondary" onClick={() => setEditing(null)}>Cancel</Btn>
+          <Btn variant="primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : editing?._new ? 'Create' : 'Save'}</Btn>
+        </>}
+      >
         {editing && (
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Name" className="col-span-2"><input className={inputClass} value={editing.name} onChange={e => setEditing(s => ({ ...s, name: e.target.value }))} /></Field>
-            <Field label="City"><input className={inputClass} value={editing.city} onChange={e => setEditing(s => ({ ...s, city: e.target.value }))} /></Field>
-            <Field label="Country"><input className={inputClass} value={editing.country} onChange={e => setEditing(s => ({ ...s, country: e.target.value }))} /></Field>
-            <Field label="Plan"><select className={inputClass} value={editing.plan} onChange={e => setEditing(s => ({ ...s, plan: e.target.value }))}>{PLANS.map(p => <option key={p}>{p}</option>)}</select></Field>
-            <Field label="Status"><select className={inputClass} value={editing.status} onChange={e => setEditing(s => ({ ...s, status: e.target.value }))}><option value="active">Active</option><option value="trial">Trial</option></select></Field>
-            <Field label="Sites"><input type="number" className={inputClass} value={editing.sites} onChange={e => setEditing(s => ({ ...s, sites: e.target.value }))} /></Field>
-            <Field label="Users"><input type="number" className={inputClass} value={editing.users} onChange={e => setEditing(s => ({ ...s, users: e.target.value }))} /></Field>
-            <Field label="MRR (USD)"><input type="number" className={inputClass} value={editing.mrr} onChange={e => setEditing(s => ({ ...s, mrr: e.target.value }))} /></Field>
-            <Field label="Joined"><input type="date" className={inputClass} value={editing.joined} onChange={e => setEditing(s => ({ ...s, joined: e.target.value }))} /></Field>
+            <Field label="Name" className="col-span-2">
+              <input className={inputClass} value={editing.name} onChange={e => setEditing(s => ({ ...s, name: e.target.value }))} />
+            </Field>
+            <Field label="Type">
+              <select className={inputClass} value={editing.type} onChange={e => setEditing(s => ({ ...s, type: e.target.value }))}>
+                {ORG_TYPES.map(t => <option key={t} value={t}>{TYPE_LABELS[t]}</option>)}
+              </select>
+            </Field>
+            <Field label="Contact email">
+              <input type="email" className={inputClass} value={editing.contact_email || ''} onChange={e => setEditing(s => ({ ...s, contact_email: e.target.value }))} />
+            </Field>
+            <Field label="Address" className="col-span-2">
+              <input className={inputClass} value={editing.address || ''} onChange={e => setEditing(s => ({ ...s, address: e.target.value }))} placeholder="Full address" />
+            </Field>
           </div>
         )}
       </Modal>
 
-      <ConfirmDialog open={!!confirmDel} onClose={() => setConfirmDel(null)} onConfirm={del} title="Remove organization?" message={confirmDel ? `${confirmDel.name} will be removed from the federation. Their data nodes will go offline.` : ''} confirmLabel="Remove" danger />
+      {confirmAction && (() => {
+        const m = confirmMeta[confirmAction.type]
+        return (
+          <ConfirmDialog
+            open
+            onClose={() => setConfirmAction(null)}
+            onConfirm={handleConfirm}
+            title={m.title}
+            message={m.msg(confirmAction.org)}
+            confirmLabel={m.label}
+            danger={m.danger}
+          />
+        )
+      })()}
+
       <Toast open={toast.open} onClose={() => setToast(t => ({ ...t, open: false }))} message={toast.message} tone={toast.tone} />
     </motion.div>
   )
