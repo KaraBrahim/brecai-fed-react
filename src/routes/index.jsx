@@ -25,13 +25,22 @@ import ClinicalReports   from '@/pages/doctor/ClinicalReports'
 import XaiDeepDive       from '@/pages/doctor/XaiDeepDive'
 
 // Instructor
-import TrainingConsole from '@/pages/instructor/TrainingConsole'
-import ModelArchitect  from '@/pages/instructor/ModelArchitect'
-import AggregationLogs from '@/pages/instructor/AggregationLogs'
+import InstructorDashboard from '@/pages/instructor/InstructorDashboard'
+import TrainingConsole     from '@/pages/instructor/TrainingConsole'
+import ModelArchitect      from '@/pages/instructor/ModelArchitect'
+import AggregationLogs     from '@/pages/instructor/AggregationLogs'
+import ContributionsPanel  from '@/pages/instructor/ContributionsPanel'
 
 // Org Management
-import TeamRoster     from '@/pages/org/TeamRoster'
-import SiteCompliance from '@/pages/org/SiteCompliance'
+import OrgDashboard    from '@/pages/org/OrgDashboard'
+import OrgMembers      from '@/pages/org/OrgMembers'
+import OrgPatients     from '@/pages/org/OrgPatients'
+import OrgReports      from '@/pages/org/OrgReports'
+import OrgModels       from '@/pages/org/OrgModels'
+import OrgInvitations  from '@/pages/org/OrgInvitations'
+import OrgSubscription from '@/pages/org/OrgSubscription'
+import PendingApproval from '@/pages/org/PendingApproval'
+import SubscriptionGate from '@/pages/org/SubscriptionGate'
 
 // Admin
 import AdminOverview       from '@/pages/admin/AdminOverview'
@@ -98,13 +107,24 @@ export const router = createBrowserRouter([
           { path: 'doctor/xai',      element: <RequireAuth role={RoleEnum.DOCTOR}><XaiDeepDive /></RequireAuth> },
 
           // Instructor (role: instructor)
-          { path: 'instructor',           element: <RequireAuth role={RoleEnum.INSTRUCTOR}><TrainingConsole /></RequireAuth> },
-          { path: 'instructor/architect', element: <RequireAuth role={RoleEnum.INSTRUCTOR}><ModelArchitect /></RequireAuth> },
-          { path: 'instructor/logs',      element: <RequireAuth role={RoleEnum.INSTRUCTOR}><AggregationLogs /></RequireAuth> },
+          { path: 'instructor',                element: <RequireAuth role={RoleEnum.INSTRUCTOR}><InstructorDashboard /></RequireAuth> },
+          { path: 'instructor/training',       element: <RequireAuth role={RoleEnum.INSTRUCTOR}><TrainingConsole /></RequireAuth> },
+          { path: 'instructor/architect',      element: <RequireAuth role={RoleEnum.INSTRUCTOR}><ModelArchitect /></RequireAuth> },
+          { path: 'instructor/logs',           element: <RequireAuth role={RoleEnum.INSTRUCTOR}><AggregationLogs /></RequireAuth> },
+          { path: 'instructor/contributions',  element: <RequireAuth role={RoleEnum.INSTRUCTOR}><ContributionsPanel /></RequireAuth> },
 
           // Org Management (role: org_manager)
-          { path: 'org',            element: <RequireAuth role={RoleEnum.ORG_MANAGER}><TeamRoster /></RequireAuth> },
-          { path: 'org/compliance', element: <RequireAuth role={RoleEnum.ORG_MANAGER}><SiteCompliance /></RequireAuth> },
+          // Gate pages — rendered outside DashboardLayout (full-screen)
+          { path: 'org/pending',      element: <RequireAuth role={RoleEnum.ORG_MANAGER}><PendingApproval /></RequireAuth> },
+          { path: 'org/subscribe',    element: <RequireAuth role={RoleEnum.ORG_MANAGER}><SubscriptionGate /></RequireAuth> },
+          // Dashboard pages — only accessible after org approved + subscription active
+          { path: 'org',              element: <RequireAuth role={RoleEnum.ORG_MANAGER}><OrgDashboard /></RequireAuth> },
+          { path: 'org/members',      element: <RequireAuth role={RoleEnum.ORG_MANAGER}><OrgMembers /></RequireAuth> },
+          { path: 'org/patients',     element: <RequireAuth role={RoleEnum.ORG_MANAGER}><OrgPatients /></RequireAuth> },
+          { path: 'org/reports',      element: <RequireAuth role={RoleEnum.ORG_MANAGER}><OrgReports /></RequireAuth> },
+          { path: 'org/models',       element: <RequireAuth role={RoleEnum.ORG_MANAGER}><OrgModels /></RequireAuth> },
+          { path: 'org/invitations',  element: <RequireAuth role={RoleEnum.ORG_MANAGER}><OrgInvitations /></RequireAuth> },
+          { path: 'org/subscription', element: <RequireAuth role={RoleEnum.ORG_MANAGER}><OrgSubscription /></RequireAuth> },
 
           // Admin (role: admin)
           { path: 'admin',                element: <RequireAuth role={RoleEnum.ADMIN}><AdminOverview /></RequireAuth> },

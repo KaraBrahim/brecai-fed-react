@@ -5,7 +5,7 @@ import {
   Bell, Settings, ChevronLeft, Menu, X,
   Activity, LayoutDashboard, Users, FileText,
   CreditCard, Brain, BarChart3, ChevronDown,
-  LogOut, User,
+  LogOut, User, Mail,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import logo from '@/assets/logo.png'
@@ -22,14 +22,21 @@ const doctorNav = [
 ]
 
 const instructorNav = [
-  { label: 'Training Console', path: '/app/instructor',           icon: Network },
-  { label: 'Model Architect',  path: '/app/instructor/architect', icon: Brain },
-  { label: 'Aggregation Logs', path: '/app/instructor/logs',      icon: BarChart3 },
+  { label: 'Dashboard',        path: '/app/instructor',              icon: LayoutDashboard },
+  { label: 'Training Console', path: '/app/instructor/training',     icon: Network },
+  { label: 'Model Registry',   path: '/app/instructor/architect',    icon: Brain },
+  { label: 'Aggregation Logs', path: '/app/instructor/logs',         icon: BarChart3 },
+  { label: 'Contributions',    path: '/app/instructor/contributions', icon: Users },
 ]
 
 const orgNav = [
-  { label: 'Team Roster',    path: '/app/org',            icon: Users },
-  { label: 'Site Compliance',path: '/app/org/compliance', icon: ShieldCheck },
+  { label: 'Dashboard',    path: '/app/org',               icon: LayoutDashboard },
+  { label: 'Members',      path: '/app/org/members',       icon: Users },
+  { label: 'Patients',     path: '/app/org/patients',      icon: Activity },
+  { label: 'Reports',      path: '/app/org/reports',       icon: FileText },
+  { label: 'AI Models',    path: '/app/org/models',        icon: Brain },
+  { label: 'Invitations',  path: '/app/org/invitations',   icon: Mail },
+  { label: 'Subscription', path: '/app/org/subscription',  icon: CreditCard },
 ]
 
 const adminNav = [

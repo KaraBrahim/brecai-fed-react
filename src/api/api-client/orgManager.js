@@ -180,6 +180,38 @@ const orgManager = {
     },
   },
 
+  // ─── Invitations ─────────────────────────────────────────────────────────────
+  // NOTE: Backend InvitationController not yet wired in routes/api.php.
+  // These calls are ready for when the backend adds: POST/GET/DELETE /api/org/invitations
+
+  invitations: {
+    /**
+     * GET /api/org/invitations
+     * @returns {Promise<Array>}
+     */
+    list() {
+      return client.get('/org/invitations').then((r) => r.data);
+    },
+
+    /**
+     * POST /api/org/invitations
+     * @param {{ email: string, role: string }} data
+     * @returns {Promise<{message: string, invitation: object}>}
+     */
+    send(data) {
+      return client.post('/org/invitations', data).then((r) => r.data);
+    },
+
+    /**
+     * DELETE /api/org/invitations/:id
+     * @param {number} id
+     * @returns {Promise<{message: string}>}
+     */
+    revoke(id) {
+      return client.delete(`/org/invitations/${id}`).then((r) => r.data);
+    },
+  },
+
   // ─── Plans & Payments ────────────────────────────────────────────────────────
 
   payments: {
@@ -229,3 +261,4 @@ const orgManager = {
 };
 
 export default orgManager;
+
