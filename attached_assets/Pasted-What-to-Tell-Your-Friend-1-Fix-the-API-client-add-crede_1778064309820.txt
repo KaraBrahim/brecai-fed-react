@@ -1,0 +1,41 @@
+What to Tell Your Friend
+1. Fix the API client — add credentials: 'include'
+In his api.js / lib/api.js, every fetch/axios call must send cookies. Tell him to find where the API client is configured and add this:
+If using fetch:
+jsfetch(url, {
+  credentials: 'include', // ← THIS is what sends the cookie back
+  headers: { 'Content-Type': 'application/json' },
+})
+If using axios:
+jsconst api = axios.create({
+  baseURL: 'https://breast-cancer-detection-backend-main-p7c9cg.laravel.cloud',
+  withCredentials: true, // ← THIS is the axios equivalent
+})
+This one line is the root cause of the 401 after verifyOtp.
+
+2. Remove any localStorage token logic
+Since you're using HttpOnly cookies, he should not be storing or reading any token from localStorage. The browser handles the cookie automatically once credentials: 'include' is set. If there's any code like:
+jslocalStorage.setItem('token', ...)
+headers: { Authorization: Bearer ${localStorage.getItem('token')} }
+That should be deleted entirely.
+
+3. Fix the verifyOtp store method
+Looking at his store code, the verifyOtp function calls /api/verify-otp but then falls into the demo fallback on error. The real problem is the 401 on fetchUser. Once withCredentials: true is set, this flow should work:
+POST /api/verify-otp  →  backend sets auth_token cookie
+GET  /api/user        →  browser sends cookie automatically  →  200 ✓
+He doesn't need to change the store logic, just the API client.
+
+4. Make sure CSRF is handled
+In his login flow he already calls api.getCsrf() — make sure that call also uses withCredentials: true, because the CSRF cookie also needs to be sent back on subsequent requests.
+
+5. Your backend — one thing to verify
+Make sure your CORS config in config/cors.php has:
+php'supports_credentials' => true,
+'allowed_origins' => ['https://brecai-fed-react.vercel.app'],
+// NOT '*' — credentials don't work with wildcard origins
+And your SANCTUM_STATEFUL_DOMAINS env var should be:
+SANCTUM_STATEFUL_DOMAINS=brecai-fed-react.vercel.app
+
+Summary for your friend
+
+"The backend sends the auth token as an HttpOnly cookie (not in the response body). Your API client needs withCredentials: true (axios) or credentials: 'include' (fetch) on every request, otherwise the browser won't attach the cookie and you'll keep getting 401s. Don't read any token from localStorage — the browser handles the cookie automatically."

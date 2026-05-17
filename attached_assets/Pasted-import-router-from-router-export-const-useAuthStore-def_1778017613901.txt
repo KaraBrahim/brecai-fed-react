@@ -1,0 +1,81 @@
+import router from '../router';
+
+export const useAuthStore = defineStore('auth', {
+    state: () => ({
+        user: null,
+        isAuthenticated: false,
+        isInitialized: false,
+        tempEmail: localStorage.getItem('temp_email') || null,
+    }),
+
+    getters: {
+        // 🛡️ Fixed to correctly read the Spatie roles array from your JSON
+        userRole: (state) => {
+            if (state.user?.roles && state.user.roles.length > 0) {
+                return state.user.roles[0].name;
+            }
+            return state.user?.role || null;
+        },
+    },
+
+    actions: {
+        async login(email, password) {
+            try {
+                await api.get('/sanctum/csrf-cookie');
+                await api.post('/api/login', { email, password });
+
+                this.tempEmail = email;
+                localStorage.setItem('temp_email', email);
+
+                router.push('/verify-otp');
+            } catch (error) {
+                throw error;
+            }
+        },
+
+        async verifyOtp(otp) {
+            try {
+                await api.post('/api/verify-otp', {
+                    email: this.tempEmail,
+                    otp: otp
+                });
+
+                localStorage.removeItem('temp_email');
+                this.tempEmail = null;
+
+                // 1. Mark as not initialized so fetchUser runs fresh
+                this.isInitialized = false;
+
+                // 2. Fetch the user data (this sets this.user and this.isAuthenticated)
+                await this.fetchUser();
+
+                // 3. Force the redirect immediately based on the new role
+                this.redirectBasedOnRole();
+            } catch (error) {
+                throw error;
+            }
+        },
+
+        redirectBasedOnRole() {
+            const role = this.userRole;
+            console.log("Redirecting detected role:", role);
+
+            if (role === 'admin') router.push('/admin');
+            else if (role === 'org_manager') router.push('/manager');
+            else if (role === 'doctor') router.push('/doctor');
+            else if (role === 'instructor') router.push('/instructor');
+            else router.push('/');
+        },
+
+        async fetchUser() {
+            try {
+                const response = await api.get('/api/user');
+                this.user = response.data;
+                this.isAuthenticated = true;
+            } catch (error) {
+                this.user = null;
+                this.isAuthenticated = false;
+            } finally {
+                this.isInitialized = true;
+            }
+        },

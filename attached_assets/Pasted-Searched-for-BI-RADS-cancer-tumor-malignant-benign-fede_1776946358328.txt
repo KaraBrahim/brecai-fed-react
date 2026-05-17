@@ -1,0 +1,43 @@
+Searched for "BI-RADS|cancer|tumor|malignant|benign|federated|learning|aggregation|training|prediction"
+Viewed PredictionEngine.jsx:1-223
+Viewed XaiDeepDive.jsx:1-207
+
+I've compiled the **Complete Medical and Technical Context** for the BRECAI-FED project. This document bridges the clinical requirements with the underlying AI architecture and frontend implementation.
+
+### 🏥 Medical & Clinical Context: Breast Cancer Molecular Subtyping
+The platform is specifically designed for the **oncological diagnosis and prognosis of breast cancer** through digital pathology.
+
+*   **Primary Objective**: To identify the **Luminal A** molecular subtype.
+    *   **Luminal A Characteristics**: Estrogen-receptor positive (ER+), HER2 negative, and low levels of the protein Ki-67 (low proliferation). It generally has the most favorable prognosis and is highly responsive to hormonal therapy.
+*   **Key Biomarkers & Metadata**:
+    *   **ER/PR Expression**: The primary positive indicators for Luminal A.
+    *   **Ki-67 Index**: A proliferation marker; high levels push the diagnosis toward "Luminal B" or more aggressive types.
+    *   **HER2 Status**: HER2 amplification indicates a higher risk profile (Non-Luminal).
+    *   **Clinical Data**: Tumor size (mm) and Lymph node status (Sentinel Positive/Negative) are concatenated with AI slide analysis to refine the prognosis.
+*   **Clinical Workflow**:
+    1.  **Intake**: Pathologist uploads WSI (Whole Slide Image) patches.
+    2.  **Analysis**: AI predicts the subtype and provides a "Luminal A Probability" score.
+    3.  **XAI (Explainable AI)**: The clinician reviews **SHAP waterfall plots** (feature attribution) and **Grad-CAM heatmaps** (spatial attention on the slide) to verify the AI's "thought process."
+    4.  **Recommendation**: The system suggests a pathway (e.g., Endocrine/Hormonal Therapy for Luminal A vs. Escalated Chemotherapy for others).
+
+### 🤖 Technical Context: Federated AI Architecture
+The "FED" in BRECAI-FED refers to its **Federated Learning** backbone, which allows AI training across multiple medical institutions without sharing sensitive patient data.
+
+*   **AI Architecture**:
+    *   **Multi-modal Input**: A dual-branch neural network. Branch A processes **WSI patches** (Vision Transformer or CNN); Branch B processes **Clinical Metadata** (MLP).
+    *   **Federated Layer**: The UI indicates processing across **3 distinct sites**, implying a decentralized model where only weights/gradients are aggregated.
+    *   **XAI Layer**: Implements **SHAP** for tabular feature importance and **Grad-CAM** for computer vision interpretability.
+*   **Frontend Stack**:
+    *   **React 19 & Vite**: Utilizing the latest React concurrency features and ultra-fast HMR.
+    *   **Tailwind CSS 4**: Leveraging the new engine for high-density, performant layouts.
+    *   **Framer Motion 12**: Orchestrating complex "Clinical Vanguard" entrance animations and interactive probability visualizations.
+    *   **State Management**: **Zustand 5** for lightweight, global application state (user roles, patient context).
+    *   **Data Vis**: **Recharts 3** for high-performance radar and bar charts in the XAI lab.
+
+### 📂 Directory Context for the Next AI
+*   `src/pages/doctor/PredictionEngine.jsx`: Contains the core inference logic and therapy recommendation engine.
+*   `src/pages/doctor/XaiDeepDive.jsx`: The "Laboratory" view containing SHAP and Grad-CAM visualizations.
+*   `src/pages/instructor/`: Contains the (planned) Federated Learning monitoring console.
+*   `src/components/shared/`: Contains the "Bento-grid" design system (`SectionCard`, `Badge`, `Btn`).
+
+This should give any developer or AI a "God Mode" understanding of both the *why* (medical) and the *how* (technical) of the project.
