@@ -158,7 +158,8 @@ function useIsDesktop() {
 }
 
 function RoleBadge({ role }) {
-  const meta = ROLE_META[role] || ROLE_META.Platform
+  // Normalize role key — backend returns 'org_manager', display names like 'Org Admin' also supported
+  const meta = ROLE_META[role] || ROLE_META[role?.toLowerCase()] || ROLE_META.Platform
   return (
     <span
       className="hidden sm:inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border"
@@ -174,8 +175,8 @@ function RoleBadge({ role }) {
   )
 }
 
-function UserAvatar({ user, onClick, size = 9 }) {
-  const meta = ROLE_META[user?.role] || ROLE_META.Platform
+function UserAvatar({ user, roleKey, onClick, size = 9 }) {
+  const meta = ROLE_META[roleKey] || ROLE_META[user?.role] || ROLE_META.Platform
   return (
     <motion.button
       onClick={onClick}
@@ -200,6 +201,7 @@ export default function DashboardLayout() {
   const isDesktop = useIsDesktop()
   const { nav, grouped } = buildSideNav(location)
   const { user, logout } = useAuthStore()
+  const userRoleKey = useAuthStore(s => s.userRole())
 
   // Soft redirect handled by RequireAuth guard — no need for manual effect
 
@@ -210,7 +212,7 @@ export default function DashboardLayout() {
   }, [location.pathname])
 
   const sidebarVisible = isDesktop || sidebarOpen
-  const meta = ROLE_META[user?.role] || ROLE_META.Platform
+  const meta = ROLE_META[userRoleKey] || ROLE_META.Platform
 
   async function handleLogout() {
     await logout()
@@ -311,7 +313,7 @@ export default function DashboardLayout() {
 
           <div className="flex items-center gap-2 sm:gap-3">
             {/* Role badge */}
-            {user && <RoleBadge role={user.role} />}
+            {user && <RoleBadge role={userRoleKey} />}
 
             {/* System status */}
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-teal-50 border border-teal-200">
@@ -330,7 +332,7 @@ export default function DashboardLayout() {
 
             {/* User avatar + dropdown */}
             <div className="relative">
-              <UserAvatar user={user} onClick={() => setShowUserMenu(v => !v)} />
+              <UserAvatar user={user} roleKey={userRoleKey} onClick={() => setShowUserMenu(v => !v)} />
 
               <AnimatePresence>
                 {showUserMenu && (

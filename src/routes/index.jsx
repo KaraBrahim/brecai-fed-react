@@ -41,6 +41,7 @@ import OrgInvitations  from '@/pages/org/OrgInvitations'
 import OrgSubscription from '@/pages/org/OrgSubscription'
 import PendingApproval from '@/pages/org/PendingApproval'
 import SubscriptionGate from '@/pages/org/SubscriptionGate'
+import PaymentReturn from '@/pages/org/PaymentReturn'
 
 // Admin
 import AdminOverview       from '@/pages/admin/AdminOverview'
@@ -98,6 +99,12 @@ export const router = createBrowserRouter([
         path: '/app/org/subscribe',
         element: <RequireAuth role={RoleEnum.ORG_MANAGER}><SubscriptionGate /></RequireAuth>,
       },
+
+      // ── Chargily payment return pages — public (no auth required) ──
+      // Chargily redirects here after checkout. The page verifies subscription
+      // status and redirects to the correct place.
+      { path: '/payment/success', element: <PaymentReturn /> },
+      { path: '/payment/failure', element: <PaymentReturn /> },
 
       // ── App (requiresAuth) ───────────────────────────────────
       {

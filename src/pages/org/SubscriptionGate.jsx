@@ -67,9 +67,10 @@ export default function SubscriptionGate() {
         const res = await orgManager.payments.getStatus()
         if (res?.status === 'active') {
           clearInterval(interval)
-          // Refresh user to get updated subscription_status
+          // Refresh user so the guard sees the updated subscription_status
           await fetchUser({ force: true })
-          // Guard in DashboardLayout will now let them through
+          // Navigate to dashboard — guard will let them through now
+          navigate('/app/org', { replace: true })
         }
       } catch {
         // ignore polling errors
@@ -77,7 +78,7 @@ export default function SubscriptionGate() {
       setPollCount(c => c + 1)
     }, 3000)
     return () => clearInterval(interval)
-  }, [step, fetchUser])
+  }, [step, fetchUser, navigate])
 
   const handleSubscribe = async () => {
     if (!selPlan) return
@@ -106,6 +107,14 @@ export default function SubscriptionGate() {
   const handleManualCheck = async () => {
     setPolling(true)
     try {
+      // Check status directly first
+      const res = await orgManager.payments.getStatus()
+      if (res?.status === 'active') {
+        await fetchUser({ force: true })
+        navigate('/app/org', { replace: true })
+        return
+      }
+      // Not active yet — just refresh user and stay on gate
       await fetchUser({ force: true })
     } finally {
       setPolling(false)
