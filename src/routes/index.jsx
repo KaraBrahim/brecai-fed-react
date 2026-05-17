@@ -89,6 +89,16 @@ export const router = createBrowserRouter([
         ],
       },
 
+      // ── Org gate pages — full-screen, NO DashboardLayout ───
+      {
+        path: '/app/org/pending',
+        element: <RequireAuth role={RoleEnum.ORG_MANAGER}><PendingApproval /></RequireAuth>,
+      },
+      {
+        path: '/app/org/subscribe',
+        element: <RequireAuth role={RoleEnum.ORG_MANAGER}><SubscriptionGate /></RequireAuth>,
+      },
+
       // ── App (requiresAuth) ───────────────────────────────────
       {
         path: '/app',
@@ -113,11 +123,8 @@ export const router = createBrowserRouter([
           { path: 'instructor/logs',           element: <RequireAuth role={RoleEnum.INSTRUCTOR}><AggregationLogs /></RequireAuth> },
           { path: 'instructor/contributions',  element: <RequireAuth role={RoleEnum.INSTRUCTOR}><ContributionsPanel /></RequireAuth> },
 
-          // Org Management (role: org_manager)
-          // Gate pages — rendered outside DashboardLayout (full-screen)
-          { path: 'org/pending',      element: <RequireAuth role={RoleEnum.ORG_MANAGER}><PendingApproval /></RequireAuth> },
-          { path: 'org/subscribe',    element: <RequireAuth role={RoleEnum.ORG_MANAGER}><SubscriptionGate /></RequireAuth> },
-          // Dashboard pages — only accessible after org approved + subscription active
+          // Org Management (role: org_manager) — dashboard pages only
+          // Gate pages (/app/org/pending, /app/org/subscribe) are above, outside DashboardLayout
           { path: 'org',              element: <RequireAuth role={RoleEnum.ORG_MANAGER}><OrgDashboard /></RequireAuth> },
           { path: 'org/members',      element: <RequireAuth role={RoleEnum.ORG_MANAGER}><OrgMembers /></RequireAuth> },
           { path: 'org/patients',     element: <RequireAuth role={RoleEnum.ORG_MANAGER}><OrgPatients /></RequireAuth> },
