@@ -81,6 +81,8 @@ export default function OrgDashboard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    const controller = new AbortController()
+
     const fetchAll = async () => {
       try {
         const [dashRes, kpisRes, pgRes, potRes, prRes, lbRes] = await Promise.allSettled([
@@ -91,6 +93,7 @@ export default function OrgDashboard() {
           orgManager.insights.predictionResults(),
           orgManager.insights.doctorLeaderboard(),
         ])
+        if (controller.signal.aborted) return
         if (dashRes.status === 'fulfilled') setDashboard(dashRes.value)
         if (kpisRes.status === 'fulfilled') setKpis(kpisRes.value)
         if (pgRes.status === 'fulfilled')   setPatientGrowth(pgRes.value || [])
@@ -98,10 +101,11 @@ export default function OrgDashboard() {
         if (prRes.status === 'fulfilled')   setPredResults(prRes.value)
         if (lbRes.status === 'fulfilled')   setLeaderboard(lbRes.value || [])
       } finally {
-        setLoading(false)
+        if (!controller.signal.aborted) setLoading(false)
       }
     }
     fetchAll()
+    return () => controller.abort()
   }, [])
 
   const org = dashboard?.organization

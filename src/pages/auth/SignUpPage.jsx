@@ -232,13 +232,57 @@ function OrgManagerForm({ onBack, onNext }) {
   const [f, setF] = useState({
     name: '', email: '', phone_number: '', password: '', confirm: '',
     organization_name: '', organization_type: '', organization_address: '',
+    latitude: null, longitude: null,
   })
   const [showPw, setShow] = useState(false)
   const [errors, setErrors] = useState({})
   const [submitError, setSubmitError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [geocoding, setGeocoding] = useState(false)
+  const [mapSuggestions, setMapSuggestions] = useState([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const geocodeTimer = useRef(null)
 
   function set(key, val) { setF(p => ({ ...p, [key]: val })); setErrors(p => ({ ...p, [key]: '' })); setSubmitError('') }
+
+  // Nominatim geocoding (OpenStreetMap — free, no API key)
+  async function geocodeAddress(query) {
+    if (!query || query.length < 5) { setMapSuggestions([]); return }
+    setGeocoding(true)
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&addressdetails=1`,
+        { headers: { 'Accept-Language': 'en', 'User-Agent': 'BRECAI-FED/1.0' } }
+      )
+      const data = await res.json()
+      setMapSuggestions(data || [])
+      setShowSuggestions(true)
+    } catch {
+      setMapSuggestions([])
+    } finally {
+      setGeocoding(false)
+    }
+  }
+
+  function handleAddressChange(val) {
+    set('organization_address', val)
+    set('latitude', null)
+    set('longitude', null)
+    clearTimeout(geocodeTimer.current)
+    geocodeTimer.current = setTimeout(() => geocodeAddress(val), 600)
+  }
+
+  function selectSuggestion(s) {
+    setF(p => ({
+      ...p,
+      organization_address: s.display_name,
+      latitude: parseFloat(s.lat),
+      longitude: parseFloat(s.lon),
+    }))
+    setErrors(p => ({ ...p, organization_address: '' }))
+    setMapSuggestions([])
+    setShowSuggestions(false)
+  }
 
   function validate() {
     const e = {}
@@ -249,6 +293,7 @@ function OrgManagerForm({ onBack, onNext }) {
     if (f.password !== f.confirm) e.confirm = 'Passwords do not match'
     if (!f.organization_name.trim()) e.organization_name = 'Organization name is required'
     if (!f.organization_type) e.organization_type = 'Select an organization type'
+    if (!f.organization_address.trim()) e.organization_address = 'Address is required'
     return e
   }
 
@@ -320,8 +365,59 @@ function OrgManagerForm({ onBack, onNext }) {
                 {ORG_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
               </Select>
             </Field>
-            <Field label="Address (optional)">
-              <Input icon={MapPin} value={f.organization_address} onChange={e => set('organization_address', e.target.value)} placeholder="El Khroub, Constantine" />
+
+            {/* Address with Nominatim autocomplete */}
+            <Field label="Address" error={errors.organization_address}>
+              <div className="relative">
+                <div className="relative">
+                  <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <input
+                    value={f.organization_address}
+                    onChange={e => handleAddressChange(e.target.value)}
+                    onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                    onFocus={() => mapSuggestions.length > 0 && setShowSuggestions(true)}
+                    placeholder="Start typing your address…"
+                    className="w-full rounded-2xl border-2 border-slate-200 bg-slate-50 py-3.5 text-sm font-semibold text-slate-900 placeholder-slate-300 outline-none transition-all duration-200 focus:border-[#0BB592] focus:bg-white focus:ring-4 focus:ring-[#0BB592]/10 pl-11 pr-10"
+                  />
+                  {geocoding && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <div className="w-4 h-4 rounded-full border-2 border-slate-300 border-t-[#0BB592] animate-spin" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Suggestions dropdown */}
+                {showSuggestions && mapSuggestions.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden">
+                    {mapSuggestions.map((s, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onMouseDown={() => selectSuggestion(s)}
+                        className="w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0"
+                      >
+                        <p className="text-xs font-semibold text-slate-900 truncate">{s.display_name}</p>
+                        <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                          {parseFloat(s.lat).toFixed(4)}, {parseFloat(s.lon).toFixed(4)}
+                        </p>
+                      </button>
+                    ))}
+                    <div className="px-4 py-2 bg-slate-50 border-t border-slate-100">
+                      <p className="text-[9px] text-slate-400 font-medium">Powered by OpenStreetMap · Nominatim</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Coordinates confirmation */}
+              {f.latitude && f.longitude && (
+                <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-xl bg-teal-50 border border-teal-200">
+                  <MapPin className="w-3.5 h-3.5 text-[#0BB592] shrink-0" />
+                  <p className="text-[11px] font-semibold text-teal-700">
+                    Location pinned: {f.latitude.toFixed(5)}, {f.longitude.toFixed(5)}
+                  </p>
+                </div>
+              )}
             </Field>
           </div>
         </div>

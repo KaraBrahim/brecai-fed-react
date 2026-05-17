@@ -358,7 +358,7 @@ export default function DashboardLayout() {
                         </div>
                       </div>
                       <div className="mt-2">
-                        <RoleBadge role={user?.role} />
+                        <RoleBadge role={userRoleKey} />
                       </div>
                     </div>
 
