@@ -156,8 +156,9 @@ function ProfileModal({ open, onClose }) {
   const [error, setError]       = useState('')
   const [success, setSuccess]   = useState('')
   const [avatarPreview, setAvatarPreview] = useState(null)
+  const [avatarFile, setAvatarFile] = useState(null)
 
-  // Reset form when user changes
+  // Reset form when modal opens or user changes
   useEffect(() => {
     setName(user?.name || '')
     setEmail(user?.email || '')
@@ -165,38 +166,57 @@ function ProfileModal({ open, onClose }) {
     setError('')
     setSuccess('')
     setAvatarPreview(null)
+    setAvatarFile(null)
   }, [user, open])
 
-  const handleAvatarChange = async (e) => {
+  // avatarFile holds the File object chosen but NOT yet uploaded
+
+  const handleAvatarChange = (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-    // Preview
+    setAvatarFile(file)
+    // Show local preview only — do NOT upload yet
     const reader = new FileReader()
     reader.onload = (ev) => setAvatarPreview(ev.target.result)
     reader.readAsDataURL(file)
-    // Upload immediately
-    setUploading(true)
     setError('')
-    const res = await updateAvatar(file)
-    setUploading(false)
-    if (!res.ok) setError(res.error)
-    else setSuccess('Avatar updated!')
+    setSuccess('')
   }
 
   const handleSave = async (e) => {
     e.preventDefault()
     setError('')
     setSuccess('')
+    setSaving(true)
+
+    // 1. Upload avatar if a new file was chosen
+    if (avatarFile) {
+      setUploading(true)
+      const avatarRes = await updateAvatar(avatarFile)
+      setUploading(false)
+      if (!avatarRes.ok) {
+        setSaving(false)
+        setError(avatarRes.error)
+        return
+      }
+    }
+
+    // 2. Update profile fields if anything changed
     const payload = {}
     if (name.trim() && name !== user?.name) payload.name = name.trim()
     if (email.trim() && email !== user?.email) payload.email = email.trim()
     if (password) payload.password = password
-    if (!Object.keys(payload).length) { setError('No changes to save.'); return }
-    setSaving(true)
-    const res = await updateProfile(payload)
-    setSaving(false)
-    if (!res.ok) setError(res.error)
-    else { setSuccess('Profile updated!'); setPassword('') }
+
+    if (Object.keys(payload).length > 0) {
+      const res = await updateProfile(payload)
+      setSaving(false)
+      if (!res.ok) { setError(res.error); return }
+    } else {
+      setSaving(false)
+    }
+
+    // 3. Close modal on success
+    onClose()
   }
 
   if (!open) return null
@@ -318,7 +338,7 @@ function ProfileModal({ open, onClose }) {
                 disabled={saving}
                 className="flex-[2] py-2.5 rounded-xl bg-[#0572B2] text-white text-sm font-black hover:bg-[#0462a0] transition disabled:opacity-60 flex items-center justify-center gap-2"
               >
-                {saving ? <><div className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" /> Saving…</> : 'Save changes'}
+                {saving ? <><div className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" /> {uploading ? 'Uploading…' : 'Saving…'}</> : 'Save changes'}
               </button>
             </div>
           </form>
