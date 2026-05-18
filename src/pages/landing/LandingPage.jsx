@@ -592,47 +592,31 @@ function TrustBadges() {
    ════════════════════════════════════════════════════════════════════════ */
 function StackingCards() {
   const cards = [
-    { icon: Brain, title: "AI Subtyping", desc: "94%+ accuracy Luminal A detection via deep multi-modal learning.", color: P.blue, bg: "bg-blue-50" },
-    { icon: Radio, title: "Federated Training", desc: "Train across 30+ hospitals without centralizing patient data.", color: P.teal, bg: "bg-teal-50" },
-    { icon: Eye, title: "XAI Explainability", desc: "SHAP visual evidence for every clinical prediction made.", color: P.pink, bg: "bg-pink-50" },
-    { icon: FileText, title: "Clinical Reports", desc: "One-click regulatory-ready PDF generation with full evidence.", color: P.coral, bg: "bg-orange-50" },
-    { icon: Shield, title: "Enterprise Security", desc: "HIPAA, GDPR, SOC 2. Differential privacy. End-to-end encryption.", color: P.lavender, bg: "bg-violet-50" },
+    { icon: Brain,    title: "AI Subtyping",       desc: "94%+ accuracy Luminal A detection via deep multi-modal learning.",            color: P.blue,    bg: "bg-blue-50"   },
+    { icon: Radio,    title: "Federated Training",  desc: "Train across 30+ hospitals without centralizing patient data.",              color: P.teal,    bg: "bg-teal-50"   },
+    { icon: Eye,      title: "XAI Explainability",  desc: "SHAP visual evidence for every clinical prediction made.",                   color: P.pink,    bg: "bg-pink-50"   },
+    { icon: FileText, title: "Clinical Reports",    desc: "One-click regulatory-ready PDF generation with full evidence.",              color: P.coral,   bg: "bg-orange-50" },
+    { icon: Shield,   title: "Enterprise Security", desc: "HIPAA, GDPR, SOC 2. Differential privacy. End-to-end encryption.",          color: P.lavender, bg: "bg-violet-50" },
   ];
 
-  const sectionRef = useRef(null);
-  const [sectionTop, setSectionTop] = useState(0);
-  const { scrollY } = useScroll();
   const total = cards.length;
-  // Each card gets 1 full viewport of scroll
-  const cardScrollHeight = typeof window !== "undefined" ? window.innerHeight : 800;
-  const totalScrollHeight = total * cardScrollHeight;
+  const sectionRef = useRef(null);
 
-  // Measure where this section starts in the document
-  useEffect(() => {
-    const measure = () => {
-      if (sectionRef.current) {
-        setSectionTop(
-          sectionRef.current.getBoundingClientRect().top + window.scrollY
-        );
-      }
-    };
-    // Delay slightly so page layout is fully settled
-    const raf = requestAnimationFrame(measure);
-    window.addEventListener("resize", measure);
-    window.addEventListener("scroll", measure, { passive: true });
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", measure);
-      window.removeEventListener("scroll", measure);
-    };
-  }, []);
+  // useScroll with target — Framer Motion tracks the section position internally,
+  // so scrollYProgress goes 0→1 as the section scrolls from top-of-viewport to bottom.
+  const { scrollYProgress } = useScroll({
+    target: sectionRef,
+    offset: ["start start", "end end"],
+  });
 
   return (
     <section
       id="product"
       ref={sectionRef}
       className="relative"
-      style={{ backgroundColor: P.cream, height: `${totalScrollHeight + cardScrollHeight}px` }}
+      // Give each card its own viewport of scroll space, plus one extra so the last
+      // card can settle fully before the sticky container unsticks.
+      style={{ backgroundColor: P.cream, height: `${(total + 1) * 100}vh` }}
     >
       <div className="sticky top-0 h-screen overflow-hidden">
         <div className="relative w-full h-full">
@@ -644,26 +628,26 @@ function StackingCards() {
           </div>
 
           {cards.map((card, i) => {
-            // Card i enters when we've scrolled i * cardScrollHeight past sectionTop
-            const enterStart = sectionTop + i * cardScrollHeight;
-            const enterEnd = enterStart + cardScrollHeight * 0.5;
-            // Push-back: card shrinks as cards (i+1..n) arrive on top
-            const pushStart = enterEnd;
-            const pushEnd = sectionTop + (total - 1) * cardScrollHeight;
+            // Each card occupies an equal slice of [0, 1].
+            // Card i starts fading in at progress i/total and is fully visible by (i+0.4)/total.
+            const enterAt = i / total;
+            const fullAt  = (i + 0.4) / total;
+            // Card gets pushed back (scales down) while subsequent cards arrive.
+            const pushAt   = fullAt;
+            const pushEnd  = (total - 1 + 0.4) / total;
             const targetScale = 1 - (total - 1 - i) * 0.045;
 
             return (
-              <Card
+              <StackCard
                 key={card.title}
                 card={card}
-                scrollY={scrollY}
-                enterStart={enterStart}
-                enterEnd={enterEnd}
-                pushStart={pushStart}
+                scrollYProgress={scrollYProgress}
+                enterAt={enterAt}
+                fullAt={fullAt}
+                pushAt={pushAt}
                 pushEnd={pushEnd}
                 targetScale={targetScale}
                 index={i}
-                total={total}
                 isLast={i === total - 1}
               />
             );
@@ -674,14 +658,13 @@ function StackingCards() {
   );
 }
 
-function Card({ card, scrollY, enterStart, enterEnd, pushStart, pushEnd, targetScale, index, total, isLast }) {
-  const opacity = useTransform(scrollY, [enterStart, enterEnd], [0, 1]);
-  const y = useTransform(scrollY, [enterStart, enterEnd], [80, 0]);
-  const scale = useTransform(
-    scrollY,
-    isLast || pushStart >= pushEnd ? [pushStart, pushStart + 1] : [pushStart, pushEnd],
-    [1, isLast ? 1 : targetScale]
-  );
+function StackCard({ card, scrollYProgress, enterAt, fullAt, pushAt, pushEnd, targetScale, index, isLast }) {
+  const opacity = useTransform(scrollYProgress, [enterAt, fullAt], [0, 1]);
+  const y       = useTransform(scrollYProgress, [enterAt, fullAt], [60, 0]);
+  // Last card never scales down; guard against pushAt === pushEnd to avoid degenerate range.
+  const scaleRange  = (!isLast && pushAt < pushEnd) ? [pushAt, pushEnd] : [0, 1];
+  const scaleOutput = (!isLast && pushAt < pushEnd) ? [1, targetScale]  : [1, 1];
+  const scale = useTransform(scrollYProgress, scaleRange, scaleOutput);
 
   return (
     <div
@@ -700,7 +683,7 @@ function Card({ card, scrollY, enterStart, enterEnd, pushStart, pushEnd, targetS
           opacity,
           y,
           scale,
-          width: "min(85vw, 600px)",
+          width: "min(88vw, 620px)",
           willChange: "transform, opacity",
           pointerEvents: "auto",
         }}
