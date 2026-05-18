@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import {
   Mail, Send, Trash2, Clock, CheckCircle2,
-  XCircle, Plus, UserPlus, AlertTriangle,
+  XCircle, Plus, UserPlus, AlertTriangle, Lock,
 } from 'lucide-react'
 import { StatusPill } from '@/components/admin'
 import { Btn, Modal, Field, inputClass, ConfirmDialog, Toast, SectionCard, stagger } from '@/components/shared'
@@ -57,11 +57,6 @@ function InviteHero({ stats, children }) {
   )
 }
 
-const INVITE_ROLES = [
-  { value: 'doctor',     label: 'Doctor',     desc: 'Clinical access — can run AI predictions' },
-  { value: 'instructor', label: 'Instructor',  desc: 'FL access — can manage federated training rounds' },
-]
-
 const STATUS_TONE  = { pending: 'amber', accepted: 'teal', expired: 'red', revoked: 'slate' }
 const STATUS_LABEL = { pending: 'Pending', accepted: 'Accepted', expired: 'Expired', revoked: 'Revoked' }
 const STATUS_ICON  = { pending: Clock, accepted: CheckCircle2, expired: XCircle, revoked: XCircle }
@@ -71,6 +66,11 @@ export default function OrgInvitations() {
   const [loading, setLoading] = useState(true)
   const [apiUnavailable, setApiUnavailable] = useState(false)
 
+  // Plan state
+  const [plan, setPlan] = useState(null)
+  const [activeDoctorCount, setActiveDoctorCount] = useState(0)
+  const [planLoading, setPlanLoading] = useState(true)
+
   const [showSend, setShowSend] = useState(false)
   const [form, setForm] = useState({ email: '', role: 'doctor' })
   const [sending, setSending] = useState(false)
@@ -79,13 +79,34 @@ export default function OrgInvitations() {
   const [toast, setToast] = useState({ open: false, message: '', tone: 'teal' })
   const showToast = (message, tone = 'teal') => setToast({ open: true, message, tone })
 
+  // Derived plan permissions
+  const canInviteInstructor = plan?.instructor_allowed === true
+  const canInviteDoctor = !plan || plan.max_doctors === -1 || activeDoctorCount < plan.max_doctors
+  const canSendInvitation = form.role === 'instructor' ? canInviteInstructor : canInviteDoctor
+
+  const INVITE_ROLES = [
+    {
+      value: 'doctor',
+      label: 'Doctor',
+      desc: 'Clinical access — can run AI predictions',
+      disabled: false,
+    },
+    {
+      value: 'instructor',
+      label: 'Instructor',
+      desc: canInviteInstructor
+        ? 'FL access — can manage federated training rounds'
+        : 'Your plan does not include instructor access',
+      disabled: !canInviteInstructor,
+    },
+  ]
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
       const data = await orgManager.invitations.list()
       setInvitations(Array.isArray(data) ? data : data?.data || [])
     } catch (err) {
-      // 404 means backend route not yet wired — show placeholder state
       if (err?.response?.status === 404 || err?.response?.status === 405) {
         setApiUnavailable(true)
       }
@@ -94,11 +115,40 @@ export default function OrgInvitations() {
     }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  const loadPlan = useCallback(async () => {
+    setPlanLoading(true)
+    try {
+      const data = await orgManager.getDashboard()
+      setPlan(data?.plan ?? null)
+      // Count active doctors from members if available, otherwise use kpis
+      const activeDoctors = data?.kpis?.active_doctors ?? 0
+      setActiveDoctorCount(activeDoctors)
+    } catch {
+      // Plan info unavailable — allow all actions
+    } finally {
+      setPlanLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    load()
+    loadPlan()
+  }, [load, loadPlan])
 
   const handleSend = async () => {
     if (!form.email) { showToast('Email is required', 'pink'); return }
     if (!form.email.includes('@')) { showToast('Enter a valid email address', 'pink'); return }
+
+    // Client-side plan guard
+    if (form.role === 'instructor' && !canInviteInstructor) {
+      showToast('Your plan does not allow inviting instructors. Please upgrade.', 'pink')
+      return
+    }
+    if (form.role === 'doctor' && !canInviteDoctor) {
+      showToast(`Doctor limit reached (${activeDoctorCount}/${plan?.max_doctors}). Please upgrade your plan.`, 'pink')
+      return
+    }
+
     setSending(true)
     try {
       await orgManager.invitations.send(form)
@@ -139,6 +189,12 @@ export default function OrgInvitations() {
     return new Date(inv.expires_at) > new Date() ? 'pending' : 'expired'
   }
 
+  // Doctor limit warning
+  const doctorLimitReached = plan && plan.max_doctors !== -1 && activeDoctorCount >= plan.max_doctors
+  const doctorLimitWarning = doctorLimitReached
+    ? `Doctor limit reached (${activeDoctorCount}/${plan.max_doctors}). Upgrade your plan to invite more doctors.`
+    : null
+
   return (
     <motion.div variants={stagger} initial="hidden" animate="show">
       <InviteHero
@@ -150,11 +206,25 @@ export default function OrgInvitations() {
       >
         <button
           onClick={() => setShowSend(true)}
-          className="px-4 py-2 rounded-xl bg-white text-indigo-700 text-xs font-black uppercase tracking-widest hover:bg-white/90 transition flex items-center gap-2"
+          disabled={doctorLimitReached && form.role === 'doctor'}
+          className="px-4 py-2 rounded-xl bg-white text-indigo-700 text-xs font-black uppercase tracking-widest hover:bg-white/90 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Send className="w-3.5 h-3.5" /> Send Invitation
         </button>
       </InviteHero>
+
+      {/* Doctor limit warning */}
+      {doctorLimitWarning && (
+        <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 flex items-start gap-3">
+          <div className="w-8 h-8 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center shrink-0 mt-0.5">
+            <AlertTriangle className="w-4 h-4 text-amber-600" />
+          </div>
+          <div>
+            <p className="text-sm font-extrabold text-amber-900">Doctor limit reached</p>
+            <p className="text-xs text-amber-700 font-medium mt-0.5 leading-relaxed">{doctorLimitWarning}</p>
+          </div>
+        </div>
+      )}
 
       {/* Instructor note */}
       <div className="mb-6 rounded-2xl border border-indigo-200 bg-indigo-50 px-5 py-4 flex items-start gap-3">
@@ -165,6 +235,9 @@ export default function OrgInvitations() {
           <p className="text-sm font-extrabold text-indigo-900">Instructor accounts require an invitation</p>
           <p className="text-xs text-indigo-700 font-medium mt-0.5 leading-relaxed">
             The <strong>Instructor</strong> role cannot self-register. You must send an invitation with role set to "Instructor". The recipient will receive a link to create their account with FL access pre-assigned.
+            {!canInviteInstructor && plan && (
+              <span className="ml-1 text-amber-700 font-bold">Your current plan does not include instructor access.</span>
+            )}
           </p>
         </div>
       </div>
@@ -271,7 +344,12 @@ export default function OrgInvitations() {
         size="sm"
         footer={<>
           <Btn variant="secondary" onClick={() => { setShowSend(false); setForm({ email: '', role: 'doctor' }) }}>Cancel</Btn>
-          <Btn variant="primary" onClick={handleSend} disabled={sending} className="bg-indigo-600 hover:bg-indigo-700">
+          <Btn
+            variant="primary"
+            onClick={handleSend}
+            disabled={sending || !canSendInvitation}
+            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             {sending ? 'Sending…' : <><Send className="w-4 h-4" /> Send Invitation</>}
           </Btn>
         </>}
@@ -291,24 +369,53 @@ export default function OrgInvitations() {
                 <button
                   key={r.value}
                   type="button"
-                  onClick={() => setForm(f => ({ ...f, role: r.value }))}
-                  className={`rounded-xl border-2 p-3 text-left transition-all ${
-                    form.role === r.value
-                      ? 'border-indigo-500 bg-indigo-50'
-                      : 'border-slate-200 bg-white hover:border-slate-300'
+                  disabled={r.disabled}
+                  onClick={() => !r.disabled && setForm(f => ({ ...f, role: r.value }))}
+                  title={r.disabled ? "Your plan doesn't include instructor access" : undefined}
+                  className={`rounded-xl border-2 p-3 text-left transition-all relative ${
+                    r.disabled
+                      ? 'border-slate-100 bg-slate-50 opacity-60 cursor-not-allowed'
+                      : form.role === r.value
+                        ? 'border-indigo-500 bg-indigo-50'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
                   }`}
                 >
-                  <p className={`text-xs font-black ${form.role === r.value ? 'text-indigo-700' : 'text-slate-900'}`}>{r.label}</p>
+                  {r.disabled && (
+                    <Lock className="absolute top-2 right-2 w-3 h-3 text-slate-400" />
+                  )}
+                  <p className={`text-xs font-black ${
+                    r.disabled ? 'text-slate-400' : form.role === r.value ? 'text-indigo-700' : 'text-slate-900'
+                  }`}>{r.label}</p>
                   <p className="text-[10px] text-slate-500 font-medium mt-0.5 leading-tight">{r.desc}</p>
                 </button>
               ))}
             </div>
           </Field>
-          {form.role === 'instructor' && (
+
+          {/* Doctor limit warning in modal */}
+          {form.role === 'doctor' && doctorLimitReached && (
+            <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2.5 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-amber-700 font-semibold leading-relaxed">
+                Doctor limit reached ({activeDoctorCount}/{plan?.max_doctors}). Upgrade your plan to invite more doctors.
+              </p>
+            </div>
+          )}
+
+          {form.role === 'instructor' && canInviteInstructor && (
             <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2.5 flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
               <p className="text-xs text-amber-700 font-semibold leading-relaxed">
                 Instructor accounts have access to federated learning management. Only invite trusted data scientists.
+              </p>
+            </div>
+          )}
+
+          {form.role === 'instructor' && !canInviteInstructor && (
+            <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2.5 flex items-start gap-2">
+              <Lock className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+              <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+                Your plan doesn't include instructor access. Please upgrade your plan to invite instructors.
               </p>
             </div>
           )}

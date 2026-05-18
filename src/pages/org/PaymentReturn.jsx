@@ -1,16 +1,16 @@
 /**
  * PaymentReturn.jsx
  *
- * Chargily redirects here after checkout (success or failure).
- * The backend PaymentController sets:
- *   success_url = FRONTEND_URL + '/payment/success'
- *   failure_url = FRONTEND_URL + '/payment/failure'
+ * Chargily redirects the checkout TAB here after payment.
  *
- * This page:
- *  1. Shows a brief "Verifying payment…" screen
- *  2. Calls fetchUser({ force: true }) to get the latest subscription_status
- *  3. If subscription is now active → navigate to /app/org (guard lets them through)
- *  4. If not yet active → navigate to /app/org/subscribe (gate page, keeps polling)
+ * Strategy — cross-tab communication via localStorage:
+ *  1. This page verifies the subscription status
+ *  2. Writes a signal to localStorage: { status, ts }
+ *  3. The parent tab (SubscriptionGate) listens via 'storage' event and reacts
+ *  4. This tab closes itself automatically
+ *
+ * If the parent tab is gone (user closed it), this page falls back to
+ * navigating normally.
  */
 import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -19,41 +19,76 @@ import { CheckCircle2, XCircle, RefreshCw } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import orgManager from '@/api/api-client/orgManager'
 
+// Key used for cross-tab signalling
+export const PAYMENT_SIGNAL_KEY = 'brecai_payment_result'
+
 export default function PaymentReturn() {
   const navigate  = useNavigate()
   const location  = useLocation()
   const { fetchUser, isAuthenticated } = useAuthStore()
 
   const isSuccess = location.pathname.includes('success')
-  const [status, setStatus] = useState('checking') // 'checking' | 'active' | 'pending' | 'error'
+  const [status, setStatus] = useState('checking')
 
   useEffect(() => {
     const verify = async () => {
-      // If not authenticated at all, go to login
       if (!isAuthenticated) {
+        // Not logged in — just close or go to login
+        try { window.close() } catch {}
         navigate('/auth', { replace: true })
         return
       }
 
       try {
-        // 1. Refresh the user object so subscription_status is up to date
         await fetchUser({ force: true })
-
-        // 2. Also directly check subscription status endpoint
         const res = await orgManager.payments.getStatus()
 
         if (res?.status === 'active') {
           setStatus('active')
-          // Short delay so user sees the success state, then go to dashboard
-          setTimeout(() => navigate('/app/org', { replace: true }), 1800)
+
+          // ── Signal the parent tab ──────────────────────────────────────────
+          // Write to localStorage — the parent tab's 'storage' event fires
+          // immediately in all other tabs on the same origin.
+          localStorage.setItem(PAYMENT_SIGNAL_KEY, JSON.stringify({
+            status: 'active',
+            ts: Date.now(),
+          }))
+
+          // Give the parent tab ~600ms to react, then close this tab
+          setTimeout(() => {
+            try {
+              window.close()
+            } catch {
+              // window.close() only works if this tab was opened by script.
+              // If it fails (user opened it manually), navigate normally.
+              navigate('/app/org', { replace: true })
+            }
+          }, 1200)
+
         } else {
-          // Payment webhook may not have fired yet — send back to gate which polls
           setStatus('pending')
-          setTimeout(() => navigate('/app/org/subscribe', { replace: true }), 2500)
+
+          // Signal parent to keep polling
+          localStorage.setItem(PAYMENT_SIGNAL_KEY, JSON.stringify({
+            status: 'pending',
+            ts: Date.now(),
+          }))
+
+          setTimeout(() => {
+            try { window.close() } catch {}
+            navigate('/app/org/subscribe', { replace: true })
+          }, 2000)
         }
       } catch {
         setStatus('error')
-        setTimeout(() => navigate('/app/org/subscribe', { replace: true }), 3000)
+        localStorage.setItem(PAYMENT_SIGNAL_KEY, JSON.stringify({
+          status: 'error',
+          ts: Date.now(),
+        }))
+        setTimeout(() => {
+          try { window.close() } catch {}
+          navigate('/app/org/subscribe', { replace: true })
+        }, 2500)
       }
     }
 
@@ -88,7 +123,9 @@ export default function PaymentReturn() {
               <CheckCircle2 className="w-8 h-8 text-[#0BB592]" />
             </motion.div>
             <h2 className="text-xl font-black text-slate-900 mb-2">Payment confirmed!</h2>
-            <p className="text-sm text-slate-500 font-medium">Your subscription is now active. Redirecting to your dashboard…</p>
+            <p className="text-sm text-slate-500 font-medium">
+              Your subscription is active. This tab will close automatically.
+            </p>
           </>
         )}
 
@@ -97,8 +134,8 @@ export default function PaymentReturn() {
             <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto mb-5">
               <RefreshCw className="w-8 h-8 text-amber-500 animate-spin" />
             </div>
-            <h2 className="text-xl font-black text-slate-900 mb-2">Processing payment…</h2>
-            <p className="text-sm text-slate-500 font-medium">Payment received. Waiting for confirmation — redirecting you back to check status.</p>
+            <h2 className="text-xl font-black text-slate-900 mb-2">Processing…</h2>
+            <p className="text-sm text-slate-500 font-medium">Payment received. Closing this tab and updating your dashboard.</p>
           </>
         )}
 
@@ -110,7 +147,7 @@ export default function PaymentReturn() {
             <h2 className="text-xl font-black text-slate-900 mb-2">
               {isSuccess ? 'Verification failed' : 'Payment not completed'}
             </h2>
-            <p className="text-sm text-slate-500 font-medium">Redirecting you back to try again…</p>
+            <p className="text-sm text-slate-500 font-medium">Closing this tab and returning you to the payment page.</p>
           </>
         )}
       </motion.div>

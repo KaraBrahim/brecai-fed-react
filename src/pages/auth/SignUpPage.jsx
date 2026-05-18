@@ -1,13 +1,14 @@
 import { useState, useRef, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Stethoscope, Building2, ArrowRight, ChevronLeft,
   Eye, EyeOff, Check, MapPin, Mail,
-  Phone, User as UserIcon,
+  Phone, User as UserIcon, CheckCircle2,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { cn } from '@/lib/utils'
+import auth from '@/api/api-client/auth'
 
 /* ── Shared OTP Input ───────────────────────────── */
 function OtpInput({ value, onChange, hasError }) {
@@ -448,6 +449,9 @@ function OrgManagerForm({ onBack, onNext }) {
 
 /* ── Step 2b: Doctor form ───────────────────────── */
 function DoctorForm({ onBack, onNext }) {
+  const [searchParams] = useSearchParams()
+  const invitationToken = searchParams.get('token')
+
   const [f, setF] = useState({
     name: '', email: '', phone_number: '', password: '', confirm: '',
     organization_id: '',
@@ -457,16 +461,42 @@ function DoctorForm({ onBack, onNext }) {
   const [submitError, setSubmitError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  // Organization search
+  // Invitation state
+  const [inviteLoading, setInviteLoading] = useState(!!invitationToken)
+  const [inviteData, setInviteData] = useState(null)
+  const [inviteError, setInviteError] = useState('')
+
+  // Organization search (only shown when no invitation token)
   const [orgs, setOrgs] = useState([])
-  const [orgsLoading, setOrgsLoading] = useState(true)
+  const [orgsLoading, setOrgsLoading] = useState(!invitationToken)
   const [orgSearch, setOrgSearch] = useState('')
   const [showOrgDropdown, setShowOrgDropdown] = useState(false)
   const [selectedOrg, setSelectedOrg] = useState(null)
   const orgSearchTimer = useRef(null)
 
-  // Load all active orgs on mount
+  // Validate invitation token on mount
   useEffect(() => {
+    if (!invitationToken) return
+    setInviteLoading(true)
+    auth.validateInvitation(invitationToken)
+      .then(data => {
+        if (data.valid) {
+          setInviteData(data)
+          setF(p => ({ ...p, email: data.email }))
+        } else {
+          setInviteError(data.message || 'Invalid invitation link.')
+        }
+      })
+      .catch(err => {
+        const msg = err?.response?.data?.message || 'This invitation link is invalid or has expired.'
+        setInviteError(msg)
+      })
+      .finally(() => setInviteLoading(false))
+  }, [invitationToken])
+
+  // Load all active orgs on mount (only when no invitation)
+  useEffect(() => {
+    if (invitationToken) return
     fetch(`${import.meta.env.VITE_API_URL}/api/auth/organizations`)
       .then(r => r.json())
       .then(data => {
@@ -475,7 +505,7 @@ function DoctorForm({ onBack, onNext }) {
       })
       .catch(() => {})
       .finally(() => setOrgsLoading(false))
-  }, [])
+  }, [invitationToken])
 
   const filteredOrgs = orgSearch.trim().length > 0
     ? orgs.filter(o =>
@@ -503,11 +533,14 @@ function DoctorForm({ onBack, onNext }) {
   function validate() {
     const e = {}
     if (!f.name.trim()) e.name = 'Full name is required'
-    if (!f.email.match(/^[^@]+@[^@]+\.[^@]+$/)) e.email = 'Valid email required'
     if (!f.phone_number.trim()) e.phone_number = 'Phone number is required'
     if (f.password.length < 8) e.password = 'At least 8 characters'
     if (f.password !== f.confirm) e.confirm = 'Passwords do not match'
-    if (!f.organization_id) e.organization_id = 'Select your organization'
+    // Only validate email and org when no invitation token
+    if (!invitationToken) {
+      if (!f.email.match(/^[^@]+@[^@]+\.[^@]+$/)) e.email = 'Valid email required'
+      if (!f.organization_id) e.organization_id = 'Select your organization'
+    }
     return e
   }
 
@@ -516,7 +549,11 @@ function DoctorForm({ onBack, onNext }) {
     const e2 = validate()
     if (Object.keys(e2).length) { setErrors(e2); return }
     setLoading(true)
-    const res = await onNext({ ...f, api_role: 'doctor' })
+    const payload = { ...f, api_role: 'doctor' }
+    if (invitationToken) {
+      payload.invitation_token = invitationToken
+    }
+    const res = await onNext(payload)
     setLoading(false)
     if (!res?.ok) setSubmitError(res?.error || 'Registration failed')
   }
@@ -525,30 +562,70 @@ function DoctorForm({ onBack, onNext }) {
     clinic: '🏥', hospital: '🏨', laboratory: '🔬', radiology_center: '📡',
   }
 
+  // Loading state while validating invitation
+  if (inviteLoading) {
+    return (
+      <motion.div key="invite-loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center justify-center py-16 gap-4">
+        <div className="w-10 h-10 rounded-full border-4 border-slate-200 border-t-[#0572B2] animate-spin" />
+        <p className="text-sm font-semibold text-slate-500">Validating invitation…</p>
+      </motion.div>
+    )
+  }
+
+  // Error state for invalid/expired invitation
+  if (invitationToken && inviteError) {
+    return (
+      <motion.div key="invite-error" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="text-center py-10">
+        <div className="w-14 h-14 rounded-2xl bg-pink-50 border border-pink-200 flex items-center justify-center mx-auto mb-4">
+          <Mail className="w-6 h-6 text-[#F55486]" />
+        </div>
+        <h2 className="text-xl font-black text-slate-900 mb-2">Invitation Invalid</h2>
+        <p className="text-sm text-slate-500 font-medium mb-6">{inviteError}</p>
+        <Link to="/auth/signup" className="text-[#0572B2] font-bold text-sm hover:underline">Register without invitation →</Link>
+      </motion.div>
+    )
+  }
+
   return (
     <motion.div key="doctor-form" initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}>
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={onBack} className="p-2 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors">
-          <ChevronLeft className="w-4 h-4" />
-        </button>
+        {!invitationToken && (
+          <button onClick={onBack} className="p-2 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors">
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+        )}
         <div>
           <p className="text-[10px] font-black uppercase tracking-widest text-[#0572B2] mb-0.5">Doctor / Clinician</p>
           <h2 className="text-2xl font-black tracking-tight text-slate-900">Create Account</h2>
         </div>
       </div>
 
-      {/* Pending approval notice */}
-      <div className="mb-4 rounded-2xl bg-blue-50 border border-blue-200 px-4 py-3 flex items-start gap-3">
-        <div className="w-7 h-7 rounded-lg bg-blue-100 border border-blue-200 flex items-center justify-center shrink-0 mt-0.5">
-          <Stethoscope className="w-3.5 h-3.5 text-[#0572B2]" />
+      {/* Invitation banner or pending approval notice */}
+      {inviteData ? (
+        <div className="mb-4 rounded-2xl bg-teal-50 border border-teal-200 px-4 py-3 flex items-start gap-3">
+          <div className="w-7 h-7 rounded-lg bg-teal-100 border border-teal-200 flex items-center justify-center shrink-0 mt-0.5">
+            <CheckCircle2 className="w-3.5 h-3.5 text-[#0BB592]" />
+          </div>
+          <div>
+            <p className="text-xs font-black text-teal-800">You've been invited to join {inviteData.organization?.name}</p>
+            <p className="text-[11px] text-teal-700 font-medium mt-0.5 leading-relaxed">
+              Your account will be pre-approved — no waiting for manager approval needed.
+            </p>
+          </div>
         </div>
-        <div>
-          <p className="text-xs font-black text-[#0572B2]">Account requires approval</p>
-          <p className="text-[11px] text-blue-700 font-medium mt-0.5 leading-relaxed">
-            After registration, your account will be inactive until the Organization Manager approves your identity. You'll receive an email once approved.
-          </p>
+      ) : (
+        <div className="mb-4 rounded-2xl bg-blue-50 border border-blue-200 px-4 py-3 flex items-start gap-3">
+          <div className="w-7 h-7 rounded-lg bg-blue-100 border border-blue-200 flex items-center justify-center shrink-0 mt-0.5">
+            <Stethoscope className="w-3.5 h-3.5 text-[#0572B2]" />
+          </div>
+          <div>
+            <p className="text-xs font-black text-[#0572B2]">Account requires approval</p>
+            <p className="text-[11px] text-blue-700 font-medium mt-0.5 leading-relaxed">
+              After registration, your account will be inactive until the Organization Manager approves your identity. You'll receive an email once approved.
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-3.5">
         <Field label="Full name" error={errors.name}>
@@ -556,7 +633,15 @@ function DoctorForm({ onBack, onNext }) {
         </Field>
 
         <Field label="Email address" error={errors.email}>
-          <Input icon={Mail} type="email" value={f.email} onChange={e => set('email', e.target.value)} placeholder="doctor@hospital.dz" />
+          <Input
+            icon={Mail}
+            type="email"
+            value={inviteData ? inviteData.email : f.email}
+            onChange={e => !inviteData && set('email', e.target.value)}
+            placeholder="doctor@hospital.dz"
+            disabled={!!inviteData}
+            className={inviteData ? 'opacity-70 cursor-not-allowed bg-slate-100' : ''}
+          />
         </Field>
 
         <Field label="Phone number" error={errors.phone_number}>
@@ -577,83 +662,97 @@ function DoctorForm({ onBack, onNext }) {
           </Field>
         </div>
 
-        {/* Organization searchable dropdown */}
-        <Field label="Organization" error={errors.organization_id}>
-          <div className="relative">
+        {/* Organization — pre-filled from invitation or searchable dropdown */}
+        {inviteData ? (
+          <Field label="Organization">
             <div className="relative">
-              <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none z-10" />
+              <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
               <input
-                value={orgSearch}
-                onChange={e => { setOrgSearch(e.target.value); setShowOrgDropdown(true); if (!e.target.value) clearOrg() }}
-                onFocus={() => setShowOrgDropdown(true)}
-                onBlur={() => setTimeout(() => setShowOrgDropdown(false), 200)}
-                placeholder={orgsLoading ? 'Loading organizations…' : 'Search your organization…'}
-                disabled={orgsLoading}
-                className={cn(
-                  'w-full rounded-2xl border-2 bg-slate-50 py-3.5 text-sm font-semibold text-slate-900 placeholder-slate-300 outline-none transition-all duration-200 pl-11 pr-10',
-                  selectedOrg
-                    ? 'border-[#0BB592] bg-teal-50/30 focus:ring-4 focus:ring-[#0BB592]/10'
-                    : errors.organization_id
-                      ? 'border-[#F55486] bg-red-50/30'
-                      : 'border-slate-200 focus:border-[#0BB592] focus:bg-white focus:ring-4 focus:ring-[#0BB592]/10'
-                )}
+                value={inviteData.organization?.name || ''}
+                disabled
+                className="w-full rounded-2xl border-2 border-slate-200 bg-slate-100 py-3.5 text-sm font-semibold text-slate-600 outline-none pl-11 pr-4 cursor-not-allowed opacity-70"
               />
-              {orgsLoading && (
-                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  <div className="w-4 h-4 rounded-full border-2 border-slate-300 border-t-[#0572B2] animate-spin" />
+            </div>
+          </Field>
+        ) : (
+          /* Organization searchable dropdown */
+          <Field label="Organization" error={errors.organization_id}>
+            <div className="relative">
+              <div className="relative">
+                <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none z-10" />
+                <input
+                  value={orgSearch}
+                  onChange={e => { setOrgSearch(e.target.value); setShowOrgDropdown(true); if (!e.target.value) clearOrg() }}
+                  onFocus={() => setShowOrgDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowOrgDropdown(false), 200)}
+                  placeholder={orgsLoading ? 'Loading organizations…' : 'Search your organization…'}
+                  disabled={orgsLoading}
+                  className={cn(
+                    'w-full rounded-2xl border-2 bg-slate-50 py-3.5 text-sm font-semibold text-slate-900 placeholder-slate-300 outline-none transition-all duration-200 pl-11 pr-10',
+                    selectedOrg
+                      ? 'border-[#0BB592] bg-teal-50/30 focus:ring-4 focus:ring-[#0BB592]/10'
+                      : errors.organization_id
+                        ? 'border-[#F55486] bg-red-50/30'
+                        : 'border-slate-200 focus:border-[#0BB592] focus:bg-white focus:ring-4 focus:ring-[#0BB592]/10'
+                  )}
+                />
+                {orgsLoading && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <div className="w-4 h-4 rounded-full border-2 border-slate-300 border-t-[#0572B2] animate-spin" />
+                  </div>
+                )}
+                {selectedOrg && !orgsLoading && (
+                  <button type="button" onClick={clearOrg}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-slate-200 hover:bg-slate-300 flex items-center justify-center text-slate-500 transition-colors text-xs font-black">
+                    ×
+                  </button>
+                )}
+              </div>
+
+              {/* Dropdown */}
+              {showOrgDropdown && !orgsLoading && (
+                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden max-h-56 overflow-y-auto">
+                  {filteredOrgs.length === 0 ? (
+                    <div className="px-4 py-6 text-center text-sm text-slate-400 font-semibold">
+                      {orgSearch ? 'No organizations match your search' : 'No approved organizations yet'}
+                    </div>
+                  ) : filteredOrgs.map(org => (
+                    <button
+                      key={org.id}
+                      type="button"
+                      onMouseDown={() => selectOrg(org)}
+                      className={cn(
+                        'w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors border-b border-slate-100 last:border-0 flex items-center gap-3',
+                        selectedOrg?.id === org.id && 'bg-teal-50'
+                      )}
+                    >
+                      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#0572B2] to-[#0BB592] text-white flex items-center justify-center text-sm shrink-0">
+                        {ORG_TYPE_ICONS[org.type] || '🏥'}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-extrabold text-slate-900 truncate">{org.name}</p>
+                        <p className="text-[10px] font-semibold text-slate-400 capitalize">{org.type?.replace('_', ' ')}</p>
+                      </div>
+                      {selectedOrg?.id === org.id && (
+                        <Check className="w-4 h-4 text-[#0BB592] shrink-0" />
+                      )}
+                    </button>
+                  ))}
                 </div>
               )}
-              {selectedOrg && !orgsLoading && (
-                <button type="button" onClick={clearOrg}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-slate-200 hover:bg-slate-300 flex items-center justify-center text-slate-500 transition-colors text-xs font-black">
-                  ×
-                </button>
-              )}
             </div>
 
-            {/* Dropdown */}
-            {showOrgDropdown && !orgsLoading && (
-              <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden max-h-56 overflow-y-auto">
-                {filteredOrgs.length === 0 ? (
-                  <div className="px-4 py-6 text-center text-sm text-slate-400 font-semibold">
-                    {orgSearch ? 'No organizations match your search' : 'No approved organizations yet'}
-                  </div>
-                ) : filteredOrgs.map(org => (
-                  <button
-                    key={org.id}
-                    type="button"
-                    onMouseDown={() => selectOrg(org)}
-                    className={cn(
-                      'w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors border-b border-slate-100 last:border-0 flex items-center gap-3',
-                      selectedOrg?.id === org.id && 'bg-teal-50'
-                    )}
-                  >
-                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#0572B2] to-[#0BB592] text-white flex items-center justify-center text-sm shrink-0">
-                      {ORG_TYPE_ICONS[org.type] || '🏥'}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-extrabold text-slate-900 truncate">{org.name}</p>
-                      <p className="text-[10px] font-semibold text-slate-400 capitalize">{org.type?.replace('_', ' ')}</p>
-                    </div>
-                    {selectedOrg?.id === org.id && (
-                      <Check className="w-4 h-4 text-[#0BB592] shrink-0" />
-                    )}
-                  </button>
-                ))}
+            {/* Selected org confirmation */}
+            {selectedOrg && (
+              <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-xl bg-teal-50 border border-teal-200">
+                <Check className="w-3.5 h-3.5 text-[#0BB592] shrink-0" />
+                <p className="text-[11px] font-semibold text-teal-700">
+                  Joining <span className="font-black">{selectedOrg.name}</span> — your account will need approval from their manager.
+                </p>
               </div>
             )}
-          </div>
-
-          {/* Selected org confirmation */}
-          {selectedOrg && (
-            <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-xl bg-teal-50 border border-teal-200">
-              <Check className="w-3.5 h-3.5 text-[#0BB592] shrink-0" />
-              <p className="text-[11px] font-semibold text-teal-700">
-                Joining <span className="font-black">{selectedOrg.name}</span> — your account will need approval from their manager.
-              </p>
-            </div>
-          )}
-        </Field>
+          </Field>
+        )}
 
         <motion.button
           type="submit"
@@ -742,9 +841,13 @@ function OtpStep({ email, onBack }) {
 /* ── Main export ─────────────────────────────────── */
 export default function SignUpPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { register } = useAuthStore()
-  const [step, setStep] = useState(1)
-  const [role, setRole]   = useState(null)
+  const invitationToken = searchParams.get('token')
+
+  // If invitation token present, skip role selection and go straight to doctor form
+  const [step, setStep] = useState(invitationToken ? 2 : 1)
+  const [role, setRole]   = useState(invitationToken ? 'doctor' : null)
 
   function handleRoleSelect(api_role) {
     setRole(api_role)
@@ -766,6 +869,11 @@ export default function SignUpPage() {
       longitude: formData.longitude,
       organization_id: formData.organization_id,
       invite_code: formData.invite_code,
+    }
+
+    // Pass invitation_token if present (invited doctor flow)
+    if (formData.invitation_token) {
+      payload.invitation_token = formData.invitation_token
     }
 
     const res = await register(payload)

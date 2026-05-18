@@ -16,6 +16,7 @@ import LoginPage  from '@/pages/auth/LoginPage'
 import SignUpPage from '@/pages/auth/SignUpPage'
 import OtpPage    from '@/pages/auth/OtpPage'
 import PendingPage from '@/pages/auth/PendingPage'
+import InstructorInvitePage from '@/pages/auth/InstructorInvitePage'
 
 // Doctor
 import DoctorInsights    from '@/pages/doctor/DoctorInsights'
@@ -95,6 +96,12 @@ export const router = createBrowserRouter([
       {
         path: '/auth/pending',
         element: <PendingPage />,
+      },
+
+      // ── Instructor invite registration — public, no auth required ──
+      {
+        path: '/auth/invite/:token',
+        element: <InstructorInvitePage />,
       },
 
       // ── Org gate pages — full-screen, NO DashboardLayout ───

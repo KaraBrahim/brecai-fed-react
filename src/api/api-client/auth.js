@@ -112,6 +112,16 @@ const auth = {
   me() {
     return client.get('/auth/me').then((r) => r.data);
   },
+
+  /**
+   * Validate an invitation token (public endpoint).
+   * GET /api/auth/invitation/{token}
+   * @param {string} token
+   * @returns {Promise<{valid: boolean, email?: string, role?: string, organization?: object, expires_at?: string}>}
+   */
+  validateInvitation(token) {
+    return client.get(`/auth/invitation/${token}`).then((r) => r.data);
+  },
 };
 
 export default auth;

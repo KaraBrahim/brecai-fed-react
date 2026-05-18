@@ -8,6 +8,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import orgManager from '@/api/api-client/orgManager'
+import { PAYMENT_SIGNAL_KEY } from './PaymentReturn'
 
 /* ── Duration options (mirrors simulation) ─────────────────────────────────── */
 const DURATIONS = [
@@ -67,9 +68,7 @@ export default function SubscriptionGate() {
         const res = await orgManager.payments.getStatus()
         if (res?.status === 'active') {
           clearInterval(interval)
-          // Refresh user so the guard sees the updated subscription_status
           await fetchUser({ force: true })
-          // Navigate to dashboard — guard will let them through now
           navigate('/app/org', { replace: true })
         }
       } catch {
@@ -78,6 +77,38 @@ export default function SubscriptionGate() {
       setPollCount(c => c + 1)
     }, 3000)
     return () => clearInterval(interval)
+  }, [step, fetchUser, navigate])
+
+  // ── Cross-tab signal listener ──────────────────────────────────────────────
+  // When the Chargily checkout tab (PaymentReturn) writes to localStorage,
+  // this handler fires immediately in this tab — no polling delay needed.
+  useEffect(() => {
+    if (step !== 'checkout') return
+
+    const handleStorageSignal = async (e) => {
+      if (e.key !== PAYMENT_SIGNAL_KEY || !e.newValue) return
+      try {
+        const signal = JSON.parse(e.newValue)
+        // Ignore stale signals (older than 30s)
+        if (Date.now() - signal.ts > 30_000) return
+
+        if (signal.status === 'active') {
+          // Payment confirmed — refresh user and go to dashboard
+          await fetchUser({ force: true })
+          navigate('/app/org', { replace: true })
+        } else if (signal.status === 'pending') {
+          // Keep polling — the checkout tab already closed itself
+          setPollCount(c => c + 1)
+        }
+        // Clean up the signal
+        localStorage.removeItem(PAYMENT_SIGNAL_KEY)
+      } catch {
+        // ignore parse errors
+      }
+    }
+
+    window.addEventListener('storage', handleStorageSignal)
+    return () => window.removeEventListener('storage', handleStorageSignal)
   }, [step, fetchUser, navigate])
 
   const handleSubscribe = async () => {
@@ -355,15 +386,15 @@ export default function SubscriptionGate() {
 
               <h2 className="text-xl font-black text-slate-900 mb-3">Complete Your Payment</h2>
               <p className="text-slate-500 text-sm leading-relaxed mb-8">
-                We've opened the Chargily payment page in a new tab. Complete the transaction there — this page will update automatically once payment is confirmed.
+                We've opened the Chargily payment page in a new tab. Complete the transaction there — <strong className="text-slate-700">that tab will close automatically</strong> and this page will update instantly once payment is confirmed.
               </p>
 
               {/* Polling indicator */}
               <div className="rounded-2xl bg-slate-50 border border-slate-200 px-5 py-4 mb-6 flex items-center gap-3">
                 <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
                 <p className="text-xs text-slate-600 font-semibold text-left">
-                  Waiting for payment confirmation… checking every 3 seconds
-                  {pollCount > 0 && <span className="text-slate-400 ml-1">({pollCount} checks)</span>}
+                  Listening for payment confirmation…
+                  {pollCount > 0 && <span className="text-slate-400 ml-1">(also polling every 3s as backup)</span>}
                 </p>
               </div>
 
