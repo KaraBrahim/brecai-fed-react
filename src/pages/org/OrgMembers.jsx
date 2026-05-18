@@ -1,11 +1,27 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { Users, UserCheck, UserX, Trash2, ShieldCheck, Clock, AlertTriangle } from 'lucide-react'
-import { GlassHero, SparkTile, DataTable, StatusPill, Avatar } from '@/components/admin'
+import { GlassHero, SparkTile, DataTable, StatusPill } from '@/components/admin'
 import { Btn, ConfirmDialog, Toast, SectionCard, stagger } from '@/components/shared'
 import orgManager from '@/api/api-client/orgManager'
+import { useT } from '@/stores/i18nStore'
+
+/* Photo-aware member avatar — shows photo if available, else initials */
+function MemberAvatar({ member }) {
+  const colors = ['from-[#0572B2] to-[#093A7A]', 'from-[#0BB592] to-[#0572B2]', 'from-[#F55486] to-[#7a1d59]', 'from-amber-400 to-amber-600', 'from-violet-400 to-violet-700']
+  const idx = (member?.name || '').charCodeAt(0) % colors.length
+  const initials = (member?.name || '?').split(' ').map(s => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()
+  return (
+    <div className={`w-9 h-9 shrink-0 rounded-xl bg-gradient-to-br text-white font-black flex items-center justify-center shadow-sm text-xs overflow-hidden ${colors[idx]}`}>
+      {member?.avatar
+        ? <img src={member.avatar} alt={member.name} className="w-full h-full object-cover" />
+        : initials}
+    </div>
+  )
+}
 
 export default function OrgMembers() {
+  const t = useT()
   const [members, setMembers] = useState([])
   const [meta, setMeta] = useState({ current_page: 1, last_page: 1, total: 0 })
   const [page, setPage] = useState(1)
@@ -58,10 +74,10 @@ export default function OrgMembers() {
 
   const columns = [
     {
-      key: 'name', label: 'Member', sortable: true,
+      key: 'name', label: t('orgMembers.member'), sortable: true,
       render: (m) => (
         <div className="flex items-center gap-3 min-w-0">
-          <Avatar name={m.name} />
+          <MemberAvatar member={m} />
           <div className="min-w-0">
             <p className="font-extrabold text-slate-900 truncate">{m.name}</p>
             <p className="text-[11px] font-semibold text-slate-500 truncate">{m.email}</p>
@@ -70,30 +86,30 @@ export default function OrgMembers() {
       ),
     },
     {
-      key: 'role', label: 'Role', sortable: true,
+      key: 'role', label: t('orgMembers.role'), sortable: true,
       render: (m) => {
         const r = roleName(m)
         const tone = r === 'doctor' ? 'blue' : r === 'instructor' ? 'purple' : 'slate'
-        const label = r === 'doctor' ? 'Doctor' : r === 'org_manager' ? 'Org Admin' : r
+        const label = r === 'doctor' ? t('orgMembers.doctor') : r === 'org_manager' ? t('orgMembers.orgAdmin') : r
         return <StatusPill tone={tone}>{label}</StatusPill>
       },
     },
     {
-      key: 'is_active', label: 'Status', sortable: true,
+      key: 'is_active', label: t('orgMembers.status'), sortable: true,
       render: (m) => m.is_active
-        ? <StatusPill tone="teal">Active</StatusPill>
-        : <StatusPill tone="amber"><Clock className="w-3 h-3" /> Pending</StatusPill>,
+        ? <StatusPill tone="teal">{t('orgMembers.statusActive')}</StatusPill>
+        : <StatusPill tone="amber"><Clock className="w-3 h-3" /> {t('orgMembers.statusPending')}</StatusPill>,
     },
     {
-      key: 'examinations_count', label: 'Exams', align: 'center', sortable: true,
+      key: 'examinations_count', label: t('orgMembers.exams'), align: 'center', sortable: true,
       render: (m) => <StatusPill tone="blue" dot={false}>{m.examinations_count ?? 0}</StatusPill>,
     },
     {
-      key: 'reports_count', label: 'Reports', align: 'center', sortable: true,
+      key: 'reports_count', label: t('orgMembers.reports'), align: 'center', sortable: true,
       render: (m) => <StatusPill tone="teal" dot={false}>{m.reports_count ?? 0}</StatusPill>,
     },
     {
-      key: 'created_at', label: 'Joined', sortable: true,
+      key: 'created_at', label: t('orgMembers.joined'), sortable: true,
       render: (m) => <span className="font-mono text-[11px] font-semibold text-slate-500">{m.created_at ? new Date(m.created_at).toLocaleDateString() : '—'}</span>,
     },
     {
@@ -102,17 +118,17 @@ export default function OrgMembers() {
         <div className="flex items-center justify-end gap-1.5">
           {!m.is_active ? (
             <button onClick={(e) => { e.stopPropagation(); setConfirmAction({ type: 'approve', member: m }) }}
-              title="Approve" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-teal-200 bg-teal-50/60 text-[#0BB592] text-xs font-bold hover:bg-teal-50 transition">
-              <UserCheck className="w-3.5 h-3.5" /> Approve
+              title={t('orgMembers.approve')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-teal-200 bg-teal-50/60 text-[#0BB592] text-xs font-bold hover:bg-teal-50 transition">
+              <UserCheck className="w-3.5 h-3.5" /> {t('orgMembers.approve')}
             </button>
           ) : (
             <button onClick={(e) => { e.stopPropagation(); setConfirmAction({ type: 'deactivate', member: m }) }}
-              title="Deactivate" className="w-8 h-8 rounded-lg border border-amber-100 bg-amber-50/40 flex items-center justify-center text-amber-500 hover:bg-amber-50 transition">
+              title={t('orgMembers.deactivate')} className="w-8 h-8 rounded-lg border border-amber-100 bg-amber-50/40 flex items-center justify-center text-amber-500 hover:bg-amber-50 transition">
               <UserX className="w-3.5 h-3.5" />
             </button>
           )}
           <button onClick={(e) => { e.stopPropagation(); setConfirmAction({ type: 'remove', member: m }) }}
-            title="Remove" className="w-8 h-8 rounded-lg border border-pink-100 bg-pink-50/40 flex items-center justify-center text-[#F55486] hover:bg-pink-50 transition">
+            title={t('orgMembers.remove')} className="w-8 h-8 rounded-lg border border-pink-100 bg-pink-50/40 flex items-center justify-center text-[#F55486] hover:bg-pink-50 transition">
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -121,30 +137,30 @@ export default function OrgMembers() {
   ]
 
   const confirmMeta = {
-    approve:    { title: 'Approve member?',    msg: (m) => `${m.name} will be granted access to the platform immediately.`, label: 'Approve',    danger: false },
-    deactivate: { title: 'Deactivate member?', msg: (m) => `${m.name} will lose access immediately.`,                        label: 'Deactivate', danger: true  },
-    remove:     { title: 'Remove member?',     msg: (m) => `${m.name} will be removed from your organization.`,              label: 'Remove',     danger: true  },
+    approve:    { title: t('orgMembers.approve') + '?',    msg: (m) => `${m.name} will be granted access to the platform immediately.`, label: t('orgMembers.approve'),    danger: false },
+    deactivate: { title: t('orgMembers.deactivate') + '?', msg: (m) => `${m.name} will lose access immediately.`,                        label: t('orgMembers.deactivate'), danger: true  },
+    remove:     { title: t('orgMembers.remove') + '?',     msg: (m) => `${m.name} will be removed from your organization.`,              label: t('orgMembers.remove'),     danger: true  },
   }
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show">
       <GlassHero
-        eyebrow="Identity & Access"
-        title="Team Members"
-        subtitle="Manage your organization's doctors and staff. Approve pending accounts and control access."
+        eyebrow={t('orgMembers.eyebrow')}
+        title={t('orgMembers.title')}
+        subtitle={t('orgMembers.subtitle')}
         icon={Users}
         avatars={members.slice(0, 5).map(m => m.name)}
         stats={[
-          { label: 'Total',   value: meta.total,      sub: 'all roles'  },
-          { label: 'Active',  value: stats.active,    sub: 'online'     },
-          { label: 'Pending', value: stats.pending,   sub: 'awaiting'   },
+          { label: t('orgMembers.total'),   value: meta.total,      sub: t('orgMembers.allRoles')   },
+          { label: t('orgMembers.active'),  value: stats.active,    sub: t('orgMembers.online')     },
+          { label: t('orgMembers.pending'), value: stats.pending,   sub: t('orgMembers.awaiting')   },
         ]}
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-        <SparkTile label="Total members" value={meta.total}     sub="All roles"    icon={Users}       color="amber" trend={[2,3,3,4,5,5,6,7,7]} />
-        <SparkTile label="Active"        value={stats.active}   sub="Have access"  icon={UserCheck}   color="teal"  trend={[1,2,2,3,3,4,4,5,5]} />
-        <SparkTile label="Pending"       value={stats.pending}  sub="Need approval" icon={Clock}      color="amber" trend={[1,1,1,1,1,1,1,1,1]} />
+        <SparkTile label={t('orgMembers.totalMembers')} value={meta.total}     sub={t('orgMembers.allRoles')}    icon={Users}       color="amber" trend={[2,3,3,4,5,5,6,7,7]} />
+        <SparkTile label={t('orgMembers.active')}       value={stats.active}   sub={t('orgMembers.haveAccess')}  icon={UserCheck}   color="teal"  trend={[1,2,2,3,3,4,4,5,5]} />
+        <SparkTile label={t('orgMembers.pending')}      value={stats.pending}  sub={t('orgMembers.needApproval')} icon={Clock}      color="amber" trend={[1,1,1,1,1,1,1,1,1]} />
       </div>
 
       {/* Pending approval banner */}
@@ -156,15 +172,15 @@ export default function OrgMembers() {
             </div>
             <div className="flex-1">
               <p className="text-sm font-extrabold text-amber-900">
-                {pendingMembers.length} member{pendingMembers.length > 1 ? 's' : ''} waiting for your approval
+                {pendingMembers.length} {t('orgMembers.waitingApproval')}
               </p>
-              <p className="text-[11px] text-amber-700 font-medium">These doctors registered and verified their email — approve them to grant platform access.</p>
+              <p className="text-[11px] text-amber-700 font-medium">{t('orgMembers.waitingDesc')}</p>
             </div>
           </div>
           <div className="divide-y divide-amber-100">
             {pendingMembers.map(m => (
               <div key={m.id} className="px-5 py-3.5 flex items-center gap-3 hover:bg-amber-100/40 transition">
-                <Avatar name={m.name} />
+                <MemberAvatar member={m} />
                 <div className="flex-1 min-w-0">
                   <p className="font-extrabold text-slate-900 text-sm truncate">{m.name}</p>
                   <p className="text-[11px] font-semibold text-slate-500 truncate">{m.email}</p>
@@ -177,7 +193,7 @@ export default function OrgMembers() {
                     onClick={() => setConfirmAction({ type: 'approve', member: m })}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#0572B2] to-[#0BB592] text-white text-xs font-black hover:opacity-90 transition shadow-sm"
                   >
-                    <UserCheck className="w-3.5 h-3.5" /> Approve
+                    <UserCheck className="w-3.5 h-3.5" /> {t('orgMembers.approve')}
                   </button>
                   <button
                     onClick={() => setConfirmAction({ type: 'remove', member: m })}
@@ -202,17 +218,17 @@ export default function OrgMembers() {
           rows={members}
           searchKeys={['name', 'email']}
           filters={[
-            { key: 'is_active', label: 'status', options: [{ value: 'true', label: 'Active' }, { value: 'false', label: 'Pending' }] },
+            { key: 'is_active', label: t('orgMembers.status'), options: [{ value: 'true', label: t('orgMembers.statusActive') }, { value: 'false', label: t('orgMembers.statusPending') }] },
           ]}
-          emptyMessage="No members found."
+          emptyMessage={t('orgMembers.noMembers')}
         />
       )}
 
       {meta.last_page > 1 && (
         <div className="flex items-center justify-center gap-2 mt-4">
-          <Btn variant="secondary" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>Previous</Btn>
-          <span className="text-xs font-bold text-slate-500">Page {meta.current_page} of {meta.last_page}</span>
-          <Btn variant="secondary" onClick={() => setPage(p => Math.min(meta.last_page, p + 1))} disabled={page === meta.last_page}>Next</Btn>
+          <Btn variant="secondary" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>{t('common.back')}</Btn>
+          <span className="text-xs font-bold text-slate-500">{meta.current_page} / {meta.last_page}</span>
+          <Btn variant="secondary" onClick={() => setPage(p => Math.min(meta.last_page, p + 1))} disabled={page === meta.last_page}>{t('common.next')}</Btn>
         </div>
       )}
 
