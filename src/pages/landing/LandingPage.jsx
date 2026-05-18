@@ -46,10 +46,11 @@ function CustomCursor() {
   const [trail, setTrail] = useState([]);
   const [isHovering, setIsHovering] = useState(false);
 
+  const trailCounter = useRef(0);
   useEffect(() => {
     const onMove = (e) => {
       setPos({ x: e.clientX, y: e.clientY });
-      setTrail((prev) => [...prev.slice(-15), { x: e.clientX, y: e.clientY, id: Date.now() }]);
+      setTrail((prev) => [...prev.slice(-15), { x: e.clientX, y: e.clientY, id: ++trailCounter.current }]);
     };
     const onOver = (e) => {
       if (e.target.closest("a, button, [data-magnetic]")) setIsHovering(true);
