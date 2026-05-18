@@ -283,7 +283,7 @@ export default function OrgDashboard() {
                     <Area type="monotone" dataKey="count" name="New patients" stroke="#d97706" strokeWidth={2.5} fill="url(#pgGrad)" dot={{ fill: '#d97706', r: 3, strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
                   </AreaChart>
                 </ResponsiveContainer>
-              ) : <div className="h-full flex items-center justify-center text-slate-400 text-sm font-semibold">No patient data yet</div>}
+              ) : <div className="h-full flex items-center justify-center text-slate-400 text-sm font-semibold">{t('orgDashboard.noPatientData')}</div>}
             </div>
           )}
         </SectionCard>
@@ -313,7 +313,7 @@ export default function OrgDashboard() {
                     ))}
                   </div>
                 </div>
-              ) : <div className="h-full flex items-center justify-center text-slate-400 text-sm font-semibold">No prediction data yet</div>}
+              ) : <div className="h-full flex items-center justify-center text-slate-400 text-sm font-semibold">{t('orgDashboard.noPredData')}</div>}
             </div>
           )}
         </SectionCard>
@@ -343,7 +343,7 @@ export default function OrgDashboard() {
                     <Bar dataKey="failed"    name="Failed"    fill="#F55486" radius={[4, 4, 0, 0]} maxBarSize={20} />
                   </ComposedChart>
                 </ResponsiveContainer>
-              ) : <div className="h-full flex items-center justify-center text-slate-400 text-sm font-semibold">No prediction timeline yet</div>}
+              ) : <div className="h-full flex items-center justify-center text-slate-400 text-sm font-semibold">{t('orgDashboard.noTimeline')}</div>}
             </div>
           )}
         </SectionCard>
@@ -373,7 +373,7 @@ export default function OrgDashboard() {
                 )
               })}
             </div>
-          ) : <div className="px-5 py-8 text-center text-sm font-semibold text-slate-400">No activity yet</div>}
+          ) : <div className="px-5 py-8 text-center text-sm font-semibold text-slate-400">{t('orgDashboard.noActivity')}</div>}
         </SectionCard>
       </div>
 
@@ -396,7 +396,7 @@ export default function OrgDashboard() {
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
-              ) : <div className="h-full flex items-center justify-center text-slate-400 text-sm font-semibold">No age data yet</div>}
+              ) : <div className="h-full flex items-center justify-center text-slate-400 text-sm font-semibold">{t('orgDashboard.noAgeData')}</div>}
             </div>
           )}
         </SectionCard>
@@ -417,7 +417,7 @@ export default function OrgDashboard() {
                     <Bar dataKey="missing"  name="Missing"  fill="#e2e8f0" radius={[4, 4, 0, 0]} maxBarSize={28} />
                   </BarChart>
                 </ResponsiveContainer>
-              ) : <div className="h-full flex items-center justify-center text-slate-400 text-sm font-semibold">No receptor data yet</div>}
+              ) : <div className="h-full flex items-center justify-center text-slate-400 text-sm font-semibold">{t('orgDashboard.noReceptorData')}</div>}
             </div>
           )}
         </SectionCard>
@@ -437,7 +437,7 @@ export default function OrgDashboard() {
                     <Tooltip content={<ChartTooltip />} />
                   </RadarChart>
                 </ResponsiveContainer>
-              ) : <div className="h-full flex items-center justify-center text-slate-400 text-sm font-semibold">No receptor data yet</div>}
+              ) : <div className="h-full flex items-center justify-center text-slate-400 text-sm font-semibold">{t('orgDashboard.noReceptorData')}</div>}
             </div>
           )}
         </SectionCard>

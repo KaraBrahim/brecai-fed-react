@@ -370,6 +370,9 @@ function RoleBadge({ role }) {
 function UserAvatar({ user, roleKey, onClick, size = 9 }) {
   const meta = ROLE_META[roleKey] || ROLE_META[user?.role] || ROLE_META.Platform
   const avatarSrc = user?.avatar || null
+  const initials = user?.name
+    ? user.name.split(' ').map(s => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()
+    : null
   return (
     <motion.button
       onClick={onClick}
@@ -381,7 +384,7 @@ function UserAvatar({ user, roleKey, onClick, size = 9 }) {
     >
       {avatarSrc
         ? <img src={avatarSrc} alt="avatar" className="w-full h-full object-cover" />
-        : (user?.initials || <User className="w-4 h-4" />)
+        : (initials || <User className="w-4 h-4" />)
       }
     </motion.button>
   )
@@ -494,7 +497,7 @@ export default function DashboardLayout() {
                 style={{ background: `linear-gradient(135deg, ${meta.gradFrom}, ${meta.gradTo})` }}>
                 {user.avatar
                   ? <img src={user.avatar} alt="avatar" className="w-full h-full object-cover" />
-                  : user.initials}
+                  : (user.name ? user.name.split(' ').map(s => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() : '?')}
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-bold text-slate-800 truncate">{user.name}</p>
@@ -625,7 +628,7 @@ export default function DashboardLayout() {
                           style={{ background: `linear-gradient(135deg, ${meta.gradFrom}, ${meta.gradTo})` }}>
                           {user?.avatar
                             ? <img src={user.avatar} alt="avatar" className="w-full h-full object-cover" />
-                            : user?.initials}
+                            : (user?.name ? user.name.split(' ').map(s => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() : '?')}
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-bold text-slate-900 truncate">{user?.name}</p>
