@@ -242,12 +242,12 @@ export default function OrgDashboard() {
     : 0
 
   const quickActions = [
-    { label: 'Team Members',  icon: Users,       to: '/app/org/members',      color: 'amber' },
-    { label: 'Patients',      icon: Activity,    to: '/app/org/patients',     color: 'blue'  },
-    { label: 'Reports',       icon: FileText,    to: '/app/org/reports',      color: 'teal'  },
-    { label: 'AI Models',     icon: Brain,       to: '/app/org/models',       color: 'pink'  },
-    { label: 'Invitations',   icon: Mail,        to: '/app/org/invitations',  color: 'violet'},
-    { label: 'Subscription',  icon: CreditCard,  to: '/app/org/subscription', color: 'slate' },
+    { label: t('nav.members'),      icon: Users,       to: '/app/org/members',      color: 'amber' },
+    { label: t('nav.patients'),     icon: Activity,    to: '/app/org/patients',     color: 'blue'  },
+    { label: t('nav.reports'),      icon: FileText,    to: '/app/org/reports',      color: 'teal'  },
+    { label: t('nav.aiModels'),     icon: Brain,       to: '/app/org/models',       color: 'pink'  },
+    { label: t('nav.invitations'),  icon: Mail,        to: '/app/org/invitations',  color: 'violet'},
+    { label: t('nav.subscription'), icon: CreditCard,  to: '/app/org/subscription', color: 'slate' },
   ]
 
   return (
@@ -256,10 +256,10 @@ export default function OrgDashboard() {
 
       {/* ── Row 1: KPI metric tiles ─────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-7">
-        <MetricTile label="Active Doctors"  value={kpis?.active_doctors ?? '—'}      sub="On platform"     icon={Users}       color="amber" accent={{ label: 'Pending', value: kpis?.pending_approvals ?? 0 }} />
-        <MetricTile label="Total Patients"  value={kpis?.total_patients ?? '—'}      sub="Registered"      icon={Activity}    color="blue"  accent={{ label: 'Examinations', value: kpis?.total_examinations ?? 0 }} />
-        <MetricTile label="Predictions"     value={kpis?.total_predictions != null ? Number(kpis.total_predictions).toLocaleString() : '—'} sub="All time" icon={Brain} color="pink" accent={{ label: 'Completed', value: kpis?.completed_predictions ?? 0 }} />
-        <MetricTile label="Reports"         value={kpis?.total_reports ?? '—'}       sub="Generated"       icon={FileText}    color="teal"  accent={{ label: 'Completion', value: `${completionRate}%` }} />
+        <MetricTile label={t('orgDashboard.activeDoctors')}  value={kpis?.active_doctors ?? '—'}      sub={t('orgDashboard.onPlatform')}  icon={Users}    color="amber" accent={{ label: t('orgDashboard.pendingApproval'), value: kpis?.pending_approvals ?? 0 }} />
+        <MetricTile label={t('orgDashboard.totalPatients')}  value={kpis?.total_patients ?? '—'}      sub={t('orgDashboard.registered')}  icon={Activity} color="blue"  accent={{ label: t('orgDashboard.examinations'), value: kpis?.total_examinations ?? 0 }} />
+        <MetricTile label={t('orgDashboard.predictions')}    value={kpis?.total_predictions != null ? Number(kpis.total_predictions).toLocaleString() : '—'} sub={t('orgDashboard.allTime')} icon={Brain} color="pink" accent={{ label: t('orgDashboard.completed'), value: kpis?.completed_predictions ?? 0 }} />
+        <MetricTile label={t('orgDashboard.reports')}        value={kpis?.total_reports ?? '—'}       sub={t('orgDashboard.generated')}   icon={FileText} color="teal"  accent={{ label: t('orgDashboard.completionRate'), value: `${completionRate}%` }} />
       </div>
 
       {/* ── Row 2: Patient growth + Subtype donut ──────────────────────────── */}

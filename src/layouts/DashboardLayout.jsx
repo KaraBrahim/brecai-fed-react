@@ -202,7 +202,7 @@ function ProfileModal({ open, onClose }) {
   if (!open) return null
 
   const initials = (user?.name || '?').split(' ').map(s => s[0]).slice(0, 2).join('').toUpperCase()
-  const avatarSrc = avatarPreview || (user?.avatar ? `${import.meta.env.VITE_API_URL}/storage/${user.avatar}` : null)
+  const avatarSrc = avatarPreview || user?.avatar || null
 
   return (
     <>
@@ -369,7 +369,7 @@ function RoleBadge({ role }) {
 
 function UserAvatar({ user, roleKey, onClick, size = 9 }) {
   const meta = ROLE_META[roleKey] || ROLE_META[user?.role] || ROLE_META.Platform
-  const avatarSrc = user?.avatar ? `${import.meta.env.VITE_API_URL}/storage/${user.avatar}` : null
+  const avatarSrc = user?.avatar || null
   return (
     <motion.button
       onClick={onClick}
@@ -493,7 +493,7 @@ export default function DashboardLayout() {
               <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0 overflow-hidden"
                 style={{ background: `linear-gradient(135deg, ${meta.gradFrom}, ${meta.gradTo})` }}>
                 {user.avatar
-                  ? <img src={`${import.meta.env.VITE_API_URL}/storage/${user.avatar}`} alt="avatar" className="w-full h-full object-cover" />
+                  ? <img src={user.avatar} alt="avatar" className="w-full h-full object-cover" />
                   : user.initials}
               </div>
               <div className="min-w-0 flex-1">
@@ -624,7 +624,7 @@ export default function DashboardLayout() {
                         <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0 overflow-hidden"
                           style={{ background: `linear-gradient(135deg, ${meta.gradFrom}, ${meta.gradTo})` }}>
                           {user?.avatar
-                            ? <img src={`${import.meta.env.VITE_API_URL}/storage/${user.avatar}`} alt="avatar" className="w-full h-full object-cover" />
+                            ? <img src={user.avatar} alt="avatar" className="w-full h-full object-cover" />
                             : user?.initials}
                         </div>
                         <div className="min-w-0">
