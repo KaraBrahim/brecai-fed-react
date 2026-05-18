@@ -611,12 +611,20 @@ function StackingCards() {
   useEffect(() => {
     const measure = () => {
       if (sectionRef.current) {
-        setSectionTop(sectionRef.current.offsetTop);
+        setSectionTop(
+          sectionRef.current.getBoundingClientRect().top + window.scrollY
+        );
       }
     };
-    measure();
+    // Delay slightly so page layout is fully settled
+    const raf = requestAnimationFrame(measure);
     window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+    window.addEventListener("scroll", measure, { passive: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("scroll", measure);
+    };
   }, []);
 
   return (
