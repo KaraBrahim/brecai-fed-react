@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -163,11 +163,11 @@ function StepRole({ onNext }) {
       api_role: 'doctor',
       label: 'Doctor / Clinician',
       sub: 'Join an existing site',
-      desc: 'Clinician joining via invitation or searching for your organization.',
+      desc: 'Clinician joining an approved organization. Your account will be reviewed by the site manager before activation.',
       icon: Stethoscope,
       gradFrom: '#0572B2',
       gradTo: '#0BB592',
-      tags: ['Invitation link', 'Org search', 'Clinical AI'],
+      tags: ['Org search', 'Pending approval', 'Clinical AI'],
     },
   ]
 
@@ -448,11 +448,55 @@ function OrgManagerForm({ onBack, onNext }) {
 
 /* ── Step 2b: Doctor form ───────────────────────── */
 function DoctorForm({ onBack, onNext }) {
-  const [f, setF] = useState({ name: '', email: '', phone_number: '', password: '', confirm: '', organization_id: '', invite_code: '' })
+  const [f, setF] = useState({
+    name: '', email: '', phone_number: '', password: '', confirm: '',
+    organization_id: '',
+  })
   const [showPw, setShow] = useState(false)
   const [errors, setErrors] = useState({})
   const [submitError, setSubmitError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  // Organization search
+  const [orgs, setOrgs] = useState([])
+  const [orgsLoading, setOrgsLoading] = useState(true)
+  const [orgSearch, setOrgSearch] = useState('')
+  const [showOrgDropdown, setShowOrgDropdown] = useState(false)
+  const [selectedOrg, setSelectedOrg] = useState(null)
+  const orgSearchTimer = useRef(null)
+
+  // Load all active orgs on mount
+  useEffect(() => {
+    fetch(`${import.meta.env.VITE_API_URL}/api/auth/organizations`)
+      .then(r => r.json())
+      .then(data => {
+        const list = Array.isArray(data) ? data : data?.data || []
+        setOrgs(list)
+      })
+      .catch(() => {})
+      .finally(() => setOrgsLoading(false))
+  }, [])
+
+  const filteredOrgs = orgSearch.trim().length > 0
+    ? orgs.filter(o =>
+        o.name.toLowerCase().includes(orgSearch.toLowerCase()) ||
+        o.type?.toLowerCase().includes(orgSearch.toLowerCase())
+      )
+    : orgs
+
+  function selectOrg(org) {
+    setSelectedOrg(org)
+    setF(p => ({ ...p, organization_id: String(org.id) }))
+    setErrors(p => ({ ...p, organization_id: '' }))
+    setOrgSearch(org.name)
+    setShowOrgDropdown(false)
+  }
+
+  function clearOrg() {
+    setSelectedOrg(null)
+    setF(p => ({ ...p, organization_id: '' }))
+    setOrgSearch('')
+  }
 
   function set(key, val) { setF(p => ({ ...p, [key]: val })); setErrors(p => ({ ...p, [key]: '' })); setSubmitError('') }
 
@@ -463,7 +507,7 @@ function DoctorForm({ onBack, onNext }) {
     if (!f.phone_number.trim()) e.phone_number = 'Phone number is required'
     if (f.password.length < 8) e.password = 'At least 8 characters'
     if (f.password !== f.confirm) e.confirm = 'Passwords do not match'
-    if (!f.invite_code.trim() && !f.organization_id.trim()) e.organization_id = 'Organization ID is required (or provide an invitation code)'
+    if (!f.organization_id) e.organization_id = 'Select your organization'
     return e
   }
 
@@ -475,6 +519,10 @@ function DoctorForm({ onBack, onNext }) {
     const res = await onNext({ ...f, api_role: 'doctor' })
     setLoading(false)
     if (!res?.ok) setSubmitError(res?.error || 'Registration failed')
+  }
+
+  const ORG_TYPE_ICONS = {
+    clinic: '🏥', hospital: '🏨', laboratory: '🔬', radiology_center: '📡',
   }
 
   return (
@@ -489,9 +537,22 @@ function DoctorForm({ onBack, onNext }) {
         </div>
       </div>
 
+      {/* Pending approval notice */}
+      <div className="mb-4 rounded-2xl bg-blue-50 border border-blue-200 px-4 py-3 flex items-start gap-3">
+        <div className="w-7 h-7 rounded-lg bg-blue-100 border border-blue-200 flex items-center justify-center shrink-0 mt-0.5">
+          <Stethoscope className="w-3.5 h-3.5 text-[#0572B2]" />
+        </div>
+        <div>
+          <p className="text-xs font-black text-[#0572B2]">Account requires approval</p>
+          <p className="text-[11px] text-blue-700 font-medium mt-0.5 leading-relaxed">
+            After registration, your account will be inactive until the Organization Manager approves your identity. You'll receive an email once approved.
+          </p>
+        </div>
+      </div>
+
       <form onSubmit={handleSubmit} className="space-y-3.5">
         <Field label="Full name" error={errors.name}>
-          <Input icon={UserIcon} value={f.name} onChange={e => set('name', e.target.value)} placeholder="Dr. Ahmed" />
+          <Input icon={UserIcon} value={f.name} onChange={e => set('name', e.target.value)} placeholder="Dr. Ahmed Benali" />
         </Field>
 
         <Field label="Email address" error={errors.email}>
@@ -516,12 +577,82 @@ function DoctorForm({ onBack, onNext }) {
           </Field>
         </div>
 
-        <Field label="Organization ID" error={errors.organization_id}>
-          <Input icon={Building2} value={f.organization_id} onChange={e => set('organization_id', e.target.value)} placeholder="e.g. 12" />
-        </Field>
+        {/* Organization searchable dropdown */}
+        <Field label="Organization" error={errors.organization_id}>
+          <div className="relative">
+            <div className="relative">
+              <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none z-10" />
+              <input
+                value={orgSearch}
+                onChange={e => { setOrgSearch(e.target.value); setShowOrgDropdown(true); if (!e.target.value) clearOrg() }}
+                onFocus={() => setShowOrgDropdown(true)}
+                onBlur={() => setTimeout(() => setShowOrgDropdown(false), 200)}
+                placeholder={orgsLoading ? 'Loading organizations…' : 'Search your organization…'}
+                disabled={orgsLoading}
+                className={cn(
+                  'w-full rounded-2xl border-2 bg-slate-50 py-3.5 text-sm font-semibold text-slate-900 placeholder-slate-300 outline-none transition-all duration-200 pl-11 pr-10',
+                  selectedOrg
+                    ? 'border-[#0BB592] bg-teal-50/30 focus:ring-4 focus:ring-[#0BB592]/10'
+                    : errors.organization_id
+                      ? 'border-[#F55486] bg-red-50/30'
+                      : 'border-slate-200 focus:border-[#0BB592] focus:bg-white focus:ring-4 focus:ring-[#0BB592]/10'
+                )}
+              />
+              {orgsLoading && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <div className="w-4 h-4 rounded-full border-2 border-slate-300 border-t-[#0572B2] animate-spin" />
+                </div>
+              )}
+              {selectedOrg && !orgsLoading && (
+                <button type="button" onClick={clearOrg}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-slate-200 hover:bg-slate-300 flex items-center justify-center text-slate-500 transition-colors text-xs font-black">
+                  ×
+                </button>
+              )}
+            </div>
 
-        <Field label="Invitation code (optional)" error={errors.invite_code}>
-          <Input value={f.invite_code} onChange={e => set('invite_code', e.target.value)} placeholder="e.g. INV-XXXXXX" />
+            {/* Dropdown */}
+            {showOrgDropdown && !orgsLoading && (
+              <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden max-h-56 overflow-y-auto">
+                {filteredOrgs.length === 0 ? (
+                  <div className="px-4 py-6 text-center text-sm text-slate-400 font-semibold">
+                    {orgSearch ? 'No organizations match your search' : 'No approved organizations yet'}
+                  </div>
+                ) : filteredOrgs.map(org => (
+                  <button
+                    key={org.id}
+                    type="button"
+                    onMouseDown={() => selectOrg(org)}
+                    className={cn(
+                      'w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors border-b border-slate-100 last:border-0 flex items-center gap-3',
+                      selectedOrg?.id === org.id && 'bg-teal-50'
+                    )}
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#0572B2] to-[#0BB592] text-white flex items-center justify-center text-sm shrink-0">
+                      {ORG_TYPE_ICONS[org.type] || '🏥'}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-extrabold text-slate-900 truncate">{org.name}</p>
+                      <p className="text-[10px] font-semibold text-slate-400 capitalize">{org.type?.replace('_', ' ')}</p>
+                    </div>
+                    {selectedOrg?.id === org.id && (
+                      <Check className="w-4 h-4 text-[#0BB592] shrink-0" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Selected org confirmation */}
+          {selectedOrg && (
+            <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-xl bg-teal-50 border border-teal-200">
+              <Check className="w-3.5 h-3.5 text-[#0BB592] shrink-0" />
+              <p className="text-[11px] font-semibold text-teal-700">
+                Joining <span className="font-black">{selectedOrg.name}</span> — your account will need approval from their manager.
+              </p>
+            </div>
+          )}
         </Field>
 
         <motion.button
