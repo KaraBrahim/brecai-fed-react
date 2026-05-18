@@ -104,7 +104,7 @@ export const translations = {
     // Roles
     roles: {
       admin:       'Platform Admin',
-      org_manager: 'Site Admin',
+      org_manager: 'Org Manager',
       doctor:      'Clinician',
       instructor:  'Data Scientist',
     },
@@ -198,7 +198,7 @@ export const translations = {
     },
     roles: {
       admin:       'Admin Plateforme',
-      org_manager: 'Admin Site',
+      org_manager: 'Gestionnaire',
       doctor:      'Clinicien',
       instructor:  'Data Scientist',
     },
@@ -292,7 +292,7 @@ export const translations = {
     },
     roles: {
       admin:       'مدير المنصة',
-      org_manager: 'مدير الموقع',
+      org_manager: 'مدير المؤسسة',
       doctor:      'طبيب سريري',
       instructor:  'عالم بيانات',
     },

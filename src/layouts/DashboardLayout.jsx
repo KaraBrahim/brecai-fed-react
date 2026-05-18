@@ -2,15 +2,15 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Stethoscope, Network, Building2, ShieldCheck,
-  Bell, Settings, ChevronLeft, Menu, X,
+  Bell, Settings, Menu, X,
   Activity, LayoutDashboard, Users, FileText,
   CreditCard, Brain, BarChart3, ChevronDown,
-  LogOut, User, Mail, Globe,
+  LogOut, User, Mail, Globe, Edit3, Camera, Eye, EyeOff, Check,
 } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import logo from '@/assets/logo.png'
 import { cn } from '@/lib/utils'
-import { useAuthStore, ROLE_META, ROLE_HOME } from '@/stores/authStore'
+import { useAuthStore, ROLE_META } from '@/stores/authStore'
 import { useI18nStore, LANGUAGES, useT, useIsRTL } from '@/stores/i18nStore'
 
 const doctorNav = [
@@ -141,6 +141,193 @@ function SideNavLink({ label, labelKey, path, icon: Icon }) {
   )
 }
 
+/* ── Profile Modal ───────────────────────────────────────────────────────── */
+function ProfileModal({ open, onClose }) {
+  const { user, updateProfile, updateAvatar } = useAuthStore()
+  const meta = ROLE_META[user?.role] || ROLE_META.Platform
+  const fileRef = useRef(null)
+
+  const [name, setName]         = useState(user?.name || '')
+  const [email, setEmail]       = useState(user?.email || '')
+  const [password, setPassword] = useState('')
+  const [showPw, setShowPw]     = useState(false)
+  const [saving, setSaving]     = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [error, setError]       = useState('')
+  const [success, setSuccess]   = useState('')
+  const [avatarPreview, setAvatarPreview] = useState(null)
+
+  // Reset form when user changes
+  useEffect(() => {
+    setName(user?.name || '')
+    setEmail(user?.email || '')
+    setPassword('')
+    setError('')
+    setSuccess('')
+    setAvatarPreview(null)
+  }, [user, open])
+
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    // Preview
+    const reader = new FileReader()
+    reader.onload = (ev) => setAvatarPreview(ev.target.result)
+    reader.readAsDataURL(file)
+    // Upload immediately
+    setUploading(true)
+    setError('')
+    const res = await updateAvatar(file)
+    setUploading(false)
+    if (!res.ok) setError(res.error)
+    else setSuccess('Avatar updated!')
+  }
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    setError('')
+    setSuccess('')
+    const payload = {}
+    if (name.trim() && name !== user?.name) payload.name = name.trim()
+    if (email.trim() && email !== user?.email) payload.email = email.trim()
+    if (password) payload.password = password
+    if (!Object.keys(payload).length) { setError('No changes to save.'); return }
+    setSaving(true)
+    const res = await updateProfile(payload)
+    setSaving(false)
+    if (!res.ok) setError(res.error)
+    else { setSuccess('Profile updated!'); setPassword('') }
+  }
+
+  if (!open) return null
+
+  const initials = (user?.name || '?').split(' ').map(s => s[0]).slice(0, 2).join('').toUpperCase()
+  const avatarSrc = avatarPreview || (user?.avatar ? `${import.meta.env.VITE_API_URL}/storage/${user.avatar}` : null)
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[80]" onClick={onClose} />
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 20, scale: 0.97 }}
+        transition={{ duration: 0.2 }}
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[90] w-[calc(100%-2rem)] max-w-md bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden"
+      >
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Edit3 className="w-4 h-4 text-slate-400" />
+            <h3 className="text-base font-extrabold text-slate-900">Edit Profile</h3>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="px-6 py-5">
+          {/* Avatar section */}
+          <div className="flex items-center gap-4 mb-6">
+            <div className="relative group">
+              <div
+                className="w-16 h-16 rounded-2xl flex items-center justify-center text-white text-xl font-black shadow-md overflow-hidden cursor-pointer"
+                style={{ background: `linear-gradient(135deg, ${meta.gradFrom}, ${meta.gradTo})` }}
+                onClick={() => fileRef.current?.click()}
+              >
+                {avatarSrc ? (
+                  <img src={avatarSrc} alt="avatar" className="w-full h-full object-cover" />
+                ) : initials}
+                {uploading && (
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-2xl">
+                    <div className="w-5 h-5 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#0572B2] text-white flex items-center justify-center shadow-md hover:bg-[#0462a0] transition"
+              >
+                <Camera className="w-3 h-3" />
+              </button>
+              <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/jpg" className="hidden" onChange={handleAvatarChange} />
+            </div>
+            <div>
+              <p className="font-extrabold text-slate-900">{user?.name}</p>
+              <p className="text-xs text-slate-500 font-medium">{user?.email}</p>
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                className="mt-1 text-[11px] font-bold text-[#0572B2] hover:underline"
+              >
+                Change photo
+              </button>
+            </div>
+          </div>
+
+          {/* Form */}
+          <form onSubmit={handleSave} className="space-y-4">
+            <div>
+              <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Full name</label>
+              <input
+                value={name}
+                onChange={e => setName(e.target.value)}
+                className="w-full rounded-xl border-2 border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-[#0572B2] focus:bg-white focus:ring-4 focus:ring-[#0572B2]/10 transition"
+                placeholder="Your full name"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Email address</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                className="w-full rounded-xl border-2 border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-[#0572B2] focus:bg-white focus:ring-4 focus:ring-[#0572B2]/10 transition"
+                placeholder="your@email.com"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5">New password <span className="normal-case font-medium text-slate-400">(leave blank to keep current)</span></label>
+              <div className="relative">
+                <input
+                  type={showPw ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  className="w-full rounded-xl border-2 border-slate-200 bg-slate-50 px-4 py-3 pr-10 text-sm font-semibold text-slate-900 outline-none focus:border-[#0572B2] focus:bg-white focus:ring-4 focus:ring-[#0572B2]/10 transition"
+                  placeholder="Min 8 characters"
+                />
+                <button type="button" onClick={() => setShowPw(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {error && <p className="text-[#F55486] text-xs font-semibold bg-pink-50 border border-pink-200 rounded-xl px-4 py-2.5">{error}</p>}
+            {success && (
+              <div className="flex items-center gap-2 text-[#0BB592] text-xs font-semibold bg-teal-50 border border-teal-200 rounded-xl px-4 py-2.5">
+                <Check className="w-3.5 h-3.5 shrink-0" /> {success}
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-1">
+              <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-bold hover:bg-slate-50 transition">
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="flex-[2] py-2.5 rounded-xl bg-[#0572B2] text-white text-sm font-black hover:bg-[#0462a0] transition disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {saving ? <><div className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" /> Saving…</> : 'Save changes'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </motion.div>
+    </>
+  )
+}
+
 function buildSideNav(location) {
   const p = location.pathname
   if (p.startsWith('/app/admin'))      return { nav: adminNav,      grouped: true }
@@ -182,18 +369,20 @@ function RoleBadge({ role }) {
 
 function UserAvatar({ user, roleKey, onClick, size = 9 }) {
   const meta = ROLE_META[roleKey] || ROLE_META[user?.role] || ROLE_META.Platform
+  const avatarSrc = user?.avatar ? `${import.meta.env.VITE_API_URL}/storage/${user.avatar}` : null
   return (
     <motion.button
       onClick={onClick}
       whileHover={{ scale: 1.06 }}
       whileTap={{ scale: 0.96 }}
       title={user?.name || 'Guest'}
-      className={`w-${size} h-${size} rounded-xl flex items-center justify-center text-white text-xs font-bold shadow-sm cursor-pointer shrink-0`}
-      style={{
-        background: `linear-gradient(135deg, ${meta.gradFrom}, ${meta.gradTo})`,
-      }}
+      className={`w-${size} h-${size} rounded-xl flex items-center justify-center text-white text-xs font-bold shadow-sm cursor-pointer shrink-0 overflow-hidden`}
+      style={{ background: `linear-gradient(135deg, ${meta.gradFrom}, ${meta.gradTo})` }}
     >
-      {user?.initials || <User className="w-4 h-4" />}
+      {avatarSrc
+        ? <img src={avatarSrc} alt="avatar" className="w-full h-full object-cover" />
+        : (user?.initials || <User className="w-4 h-4" />)
+      }
     </motion.button>
   )
 }
@@ -202,6 +391,7 @@ export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showProfile, setShowProfile] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
   const isDesktop = useIsDesktop()
@@ -239,8 +429,8 @@ export default function DashboardLayout() {
         )}
       </AnimatePresence>
 
-      {showUserMenu && <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />}
-      {showSettings && <div className="fixed inset-0 z-40" onClick={() => setShowSettings(false)} />}
+      {showUserMenu && <div className="fixed inset-0 z-[48]" onClick={() => setShowUserMenu(false)} />}
+      {showSettings && <div className="fixed inset-0 z-[48]" onClick={() => setShowSettings(false)} />}
 
       {/* ── Sidebar ── */}
       <motion.aside
@@ -343,7 +533,7 @@ export default function DashboardLayout() {
                     exit={{ opacity: 0, scale: 0.95, y: -4 }}
                     transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
                     className={cn(
-                      'absolute top-11 z-50 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden',
+                      'absolute top-11 z-[60] w-72 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden',
                       isRTL ? 'left-0' : 'right-0'
                     )}
                   >
@@ -405,15 +595,17 @@ export default function DashboardLayout() {
                     exit={{ opacity: 0, scale: 0.95, y: -4 }}
                     transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
                     className={cn(
-                      'absolute top-11 z-50 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden',
+                      'absolute top-11 z-[60] w-56 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden',
                       isRTL ? 'left-0' : 'right-0'
                     )}
                   >
                     <div className="px-4 py-3 border-b border-slate-100">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0"
+                        <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0 overflow-hidden"
                           style={{ background: `linear-gradient(135deg, ${meta.gradFrom}, ${meta.gradTo})` }}>
-                          {user?.initials}
+                          {user?.avatar
+                            ? <img src={`${import.meta.env.VITE_API_URL}/storage/${user.avatar}`} alt="avatar" className="w-full h-full object-cover" />
+                            : user?.initials}
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-bold text-slate-900 truncate">{user?.name}</p>
@@ -425,8 +617,17 @@ export default function DashboardLayout() {
                       </div>
                     </div>
                     <div className="p-2">
-                      <button onClick={handleLogout}
-                        className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-red-50 hover:text-red-600 transition-all duration-200 group">
+                      <button
+                        onClick={() => { setShowUserMenu(false); setShowProfile(true) }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all duration-200"
+                      >
+                        <Edit3 className="w-4 h-4 text-slate-400" />
+                        Edit Profile
+                      </button>
+                      <button
+                        onClick={() => { setShowUserMenu(false); handleLogout() }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-red-50 hover:text-red-600 transition-all duration-200 group"
+                      >
                         <LogOut className="w-4 h-4 text-slate-400 group-hover:text-red-500 transition-colors" />
                         {t('nav.signOut')}
                       </button>
@@ -454,6 +655,11 @@ export default function DashboardLayout() {
           </AnimatePresence>
         </main>
       </div>
+
+      {/* Profile modal — rendered outside the sidebar/main flow */}
+      <AnimatePresence>
+        {showProfile && <ProfileModal open={showProfile} onClose={() => setShowProfile(false)} />}
+      </AnimatePresence>
     </div>
   )
 }

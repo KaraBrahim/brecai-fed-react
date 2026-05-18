@@ -105,6 +105,28 @@ const auth = {
   },
 
   /**
+   * Update the authenticated user's profile.
+   * PUT /api/auth/profile  [requires auth]
+   * @param {{ name?: string, email?: string, password?: string }} data
+   * @returns {Promise<{message: string, user: import('./types.js').User}>}
+   */
+  updateProfile(data) {
+    return client.put('/auth/profile', data).then((r) => r.data);
+  },
+
+  /**
+   * Upload a new avatar for the authenticated user.
+   * POST /api/auth/avatar  [requires auth]
+   * @param {FormData} formData  — must contain 'avatar' file field
+   * @returns {Promise<{message: string, avatar: string, user: import('./types.js').User}>}
+   */
+  updateAvatar(formData) {
+    return client.post('/auth/avatar', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then((r) => r.data);
+  },
+
+  /**
    * Get the currently authenticated user.
    * GET /api/auth/me  [requires auth]
    * @returns {Promise<import('./types.js').User>}

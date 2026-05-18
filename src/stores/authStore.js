@@ -204,6 +204,36 @@ export const useAuthStore = create(
         }
       },
 
+      /* ── updateProfile ────────────────────────────────── */
+      updateProfile: async (data) => {
+        try {
+          const res = await authApi.updateProfile(data)
+          if (res?.user) {
+            set({ user: res.user })
+          }
+          return { ok: true, user: res?.user }
+        } catch (err) {
+          const msg = errorMessage(err, 'Profile update failed')
+          return { ok: false, error: msg }
+        }
+      },
+
+      /* ── updateAvatar ─────────────────────────────────── */
+      updateAvatar: async (file) => {
+        try {
+          const formData = new FormData()
+          formData.append('avatar', file)
+          const res = await authApi.updateAvatar(formData)
+          if (res?.user) {
+            set({ user: res.user })
+          }
+          return { ok: true, avatar: res?.avatar, user: res?.user }
+        } catch (err) {
+          const msg = errorMessage(err, 'Avatar upload failed')
+          return { ok: false, error: msg }
+        }
+      },
+
       /* ── getRoleHome ──────────────────────────────────── */
       getRoleHome: () => {
         const role = get().userRole()
