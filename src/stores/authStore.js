@@ -91,7 +91,6 @@ export const useAuthStore = create(
       },
 
       /* ── login (step 1) ───────────────────────────────── */
-      // POST /api/auth/login — validates credentials, backend sends OTP.
       login: async (email, password) => {
         log.info('AUTH', `login → "${email}"`)
         try {
@@ -105,7 +104,16 @@ export const useAuthStore = create(
           return { ok: true, email }
         } catch (err) {
           const msg = errorMessage(err, 'Login failed')
+          const reason = err?.response?.data?.reason
           log.warn('AUTH', `login ✗ — ${msg}`)
+
+          // 403 account_pending — account exists but not yet activated
+          if (err?.response?.status === 403 && reason === 'account_pending') {
+            // Store email so the pending page can show it
+            lsSet('pending_email', email)
+            return { ok: false, error: msg, pendingRole: 'doctor', accountPending: true }
+          }
+
           return { ok: false, error: msg }
         }
       },
@@ -153,15 +161,6 @@ export const useAuthStore = create(
       },
 
       /* ── verifyOtp ────────────────────────────────────── */
-      // POST /api/auth/verify-otp → { message, user, token? }
-      //
-      // The response always includes the authenticated `user` object.
-      // If the backend also returns a Bearer `token` the api-client stores it
-      // automatically (setAuthToken). For cookie-based Sanctum backends the
-      // HttpOnly session cookie is already set by this response — no token needed.
-      //
-      // We set auth state directly from the response user so we never need a
-      // second round-trip to /api/auth/me just to read back what we already have.
       verifyOtp: async (otp) => {
         const email   = get().tempEmail
         const context = get().otpContext
@@ -174,26 +173,24 @@ export const useAuthStore = create(
           // Clear OTP localStorage keys immediately
           lsClear('temp_email', 'otp_context')
 
-          // 202 = registered but pending org-manager approval
+          // 202 = registered but pending approval (doctor awaiting org manager, or org_manager awaiting admin)
           if (data?._status === 202 || data?.pending_approval) {
             log.info('AUTH', 'verifyOtp — account pending approval')
+            // Store the pending role so the pending page can show the right message
+            const pendingRole = data?.role || (context === 'register' ? 'doctor' : null)
+            lsSet('pending_role', pendingRole)
             set({ tempEmail: null, otpContext: null })
-            return { ok: true, pendingApproval: true, data }
+            return { ok: true, pendingApproval: true, pendingRole, data }
           }
 
           // Prefer the user object embedded in the response body.
-          // If absent (some backends omit it), fall back to a fresh /me call.
           const user = data?.user ?? null
 
           if (user) {
             const role = resolveUserRole(user)
             log.info('AUTH', `verifyOtp ✓ — session for "${user?.name}" [${role}]`)
-            // Set auth state atomically — clears OTP transient state at the same time
-            // so RequireOtp never sees the unauthenticated+no-tempEmail flash.
             set({ user, isAuthenticated: true, isInitialized: true, tempEmail: null, otpContext: null })
           } else {
-            // Fallback: backend didn't return user in response — fetch via /me.
-            // This also works for pure-cookie Sanctum (cookie is now set on this response).
             log.info('AUTH', 'verifyOtp — no user in response, fetching via /api/auth/me …')
             await get().fetchUser({ force: true })
             set({ tempEmail: null, otpContext: null })

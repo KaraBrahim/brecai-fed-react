@@ -67,11 +67,30 @@ const auth = {
    * @returns {Promise<{message: string, user: import('./types.js').User, token?: string}>}
    */
   async verifyOtp(data) {
-    const response = await client.post('/auth/verify-otp', data);
-    if (response.data?.token) {
-      setAuthToken(response.data.token);
+    // Use axios directly so we can inspect the HTTP status code.
+    // A 202 means "identity verified but account pending approval" — not an error.
+    let response
+    try {
+      response = await client.post('/auth/verify-otp', data)
+    } catch (err) {
+      // Axios throws on 4xx/5xx — re-throw so the store can handle it
+      throw err
     }
-    return response.data;
+
+    if (response.data?.token) {
+      setAuthToken(response.data.token)
+    }
+
+    // 202 = registered but account is pending approval (doctor or org_manager)
+    if (response.status === 202) {
+      return {
+        ...response.data,
+        _status: 202,
+        pending_approval: true,
+      }
+    }
+
+    return response.data
   },
 
   /**

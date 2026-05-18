@@ -105,13 +105,12 @@ export default function OtpPage() {
         return
       }
       if (res.pendingApproval) {
-        setLoading(false)
-        setSuccess('Your account is pending approval by your organization manager.')
+        // Navigate to the role-aware pending page
+        const role = res.pendingRole || localStorage.getItem('pending_role') || 'doctor'
+        navigate(`/auth/pending?role=${role}`, { replace: true })
         return
       }
       // Do NOT call navigate() here — the RequireOtp guard handles the redirect
-      // automatically when isAuthenticated becomes true. A second navigate() call
-      // would race with the guard's <Navigate> and cause a login-page flash.
       log.info('OTP', 'Verification successful — RequireOtp guard will redirect')
     } catch {
       setError('An unexpected error occurred.')

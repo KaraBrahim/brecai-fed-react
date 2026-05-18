@@ -18,7 +18,15 @@ function SignInForm() {
     setLoading(true)
     const res = await login(email, password)
     setLoading(false)
-    if (!res.ok) { setError(res.error); return }
+    if (!res.ok) {
+      // 403 account_pending — doctor or org_manager not yet activated
+      if (res.accountPending) {
+        navigate(`/auth/pending?role=${res.pendingRole || 'doctor'}`, { replace: true })
+        return
+      }
+      setError(res.error)
+      return
+    }
     navigate('/auth/otp')
   }
 

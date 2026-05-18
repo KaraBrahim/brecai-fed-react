@@ -15,6 +15,7 @@ import LandingPage from '@/pages/landing/LandingPage'
 import LoginPage  from '@/pages/auth/LoginPage'
 import SignUpPage from '@/pages/auth/SignUpPage'
 import OtpPage    from '@/pages/auth/OtpPage'
+import PendingPage from '@/pages/auth/PendingPage'
 
 // Doctor
 import DoctorInsights    from '@/pages/doctor/DoctorInsights'
@@ -88,6 +89,12 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <OtpPage /> },
         ],
+      },
+
+      // ── Pending approval — public, no auth required ─────────
+      {
+        path: '/auth/pending',
+        element: <PendingPage />,
       },
 
       // ── Org gate pages — full-screen, NO DashboardLayout ───
