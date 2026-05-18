@@ -5,38 +5,39 @@ import {
   Bell, Settings, ChevronLeft, Menu, X,
   Activity, LayoutDashboard, Users, FileText,
   CreditCard, Brain, BarChart3, ChevronDown,
-  LogOut, User, Mail,
+  LogOut, User, Mail, Globe,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import logo from '@/assets/logo.png'
 import { cn } from '@/lib/utils'
 import { useAuthStore, ROLE_META, ROLE_HOME } from '@/stores/authStore'
+import { useI18nStore, LANGUAGES, useT } from '@/stores/i18nStore'
 
 const doctorNav = [
-  { label: 'Insights',     path: '/app/doctor',          icon: Activity },
-  { label: 'Patients',     path: '/app/doctor/patients', icon: Users },
-  { label: 'AI Prediction',path: '/app/doctor/predict',  icon: Brain },
-  { label: 'Final Exam',   path: '/app/doctor/exam',     icon: FileText },
-  { label: 'Reports',      path: '/app/doctor/reports',  icon: BarChart3 },
-  { label: 'XAI Lab',      path: '/app/doctor/xai',      icon: Stethoscope },
+  { labelKey: 'nav.insights',    path: '/app/doctor',          icon: Activity,       label: 'Insights' },
+  { labelKey: 'nav.patients',    path: '/app/doctor/patients', icon: Users,          label: 'Patients' },
+  { labelKey: 'nav.aiModels',    path: '/app/doctor/predict',  icon: Brain,          label: 'AI Prediction' },
+  { labelKey: 'nav.examinations',path: '/app/doctor/exam',     icon: FileText,       label: 'Final Exam' },
+  { labelKey: 'nav.reports',     path: '/app/doctor/reports',  icon: BarChart3,      label: 'Reports' },
+  { labelKey: 'nav.xai',         path: '/app/doctor/xai',      icon: Stethoscope,    label: 'XAI Lab' },
 ]
 
 const instructorNav = [
-  { label: 'Dashboard',        path: '/app/instructor',              icon: LayoutDashboard },
-  { label: 'Training Console', path: '/app/instructor/training',     icon: Network },
-  { label: 'Model Registry',   path: '/app/instructor/architect',    icon: Brain },
-  { label: 'Aggregation Logs', path: '/app/instructor/logs',         icon: BarChart3 },
-  { label: 'Contributions',    path: '/app/instructor/contributions', icon: Users },
+  { labelKey: 'nav.dashboard',    path: '/app/instructor',              icon: LayoutDashboard, label: 'Dashboard' },
+  { labelKey: 'nav.training',     path: '/app/instructor/training',     icon: Network,         label: 'Training Console' },
+  { labelKey: 'nav.modelRegistry',path: '/app/instructor/architect',    icon: Brain,           label: 'Model Registry' },
+  { labelKey: 'nav.aggLogs',      path: '/app/instructor/logs',         icon: BarChart3,       label: 'Aggregation Logs' },
+  { labelKey: 'nav.contributions',path: '/app/instructor/contributions', icon: Users,          label: 'Contributions' },
 ]
 
 const orgNav = [
-  { label: 'Dashboard',    path: '/app/org',               icon: LayoutDashboard },
-  { label: 'Members',      path: '/app/org/members',       icon: Users },
-  { label: 'Patients',     path: '/app/org/patients',      icon: Activity },
-  { label: 'Reports',      path: '/app/org/reports',       icon: FileText },
-  { label: 'AI Models',    path: '/app/org/models',        icon: Brain },
-  { label: 'Invitations',  path: '/app/org/invitations',   icon: Mail },
-  { label: 'Subscription', path: '/app/org/subscription',  icon: CreditCard },
+  { labelKey: 'nav.dashboard',    path: '/app/org',               icon: LayoutDashboard, label: 'Dashboard' },
+  { labelKey: 'nav.members',      path: '/app/org/members',       icon: Users,           label: 'Members' },
+  { labelKey: 'nav.patients',     path: '/app/org/patients',      icon: Activity,        label: 'Patients' },
+  { labelKey: 'nav.reports',      path: '/app/org/reports',       icon: FileText,        label: 'Reports' },
+  { labelKey: 'nav.aiModels',     path: '/app/org/models',        icon: Brain,           label: 'AI Models' },
+  { labelKey: 'nav.invitations',  path: '/app/org/invitations',   icon: Mail,            label: 'Invitations' },
+  { labelKey: 'nav.subscription', path: '/app/org/subscription',  icon: CreditCard,      label: 'Subscription' },
 ]
 
 const adminNav = [
@@ -108,7 +109,9 @@ function NavGroup({ group, items }) {
   )
 }
 
-function SideNavLink({ label, path, icon: Icon }) {
+function SideNavLink({ label, labelKey, path, icon: Icon }) {
+  const t = useT()
+  const displayLabel = labelKey ? t(labelKey) : label
   return (
     <NavLink
       to={path}
@@ -130,8 +133,8 @@ function SideNavLink({ label, path, icon: Icon }) {
             />
           )}
           <Icon className={cn('w-4 h-4 shrink-0 z-10 relative transition-colors', isActive ? 'text-[#0572B2]' : 'text-slate-400 group-hover:text-slate-600')} />
-          <span className="z-10 relative">{label}</span>
-          {isActive && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[#0572B2] z-10 relative" />}
+          <span className="z-10 relative">{displayLabel}</span>
+          {isActive && <span className="ms-auto w-1.5 h-1.5 rounded-full bg-[#0572B2] z-10 relative" />}
         </>
       )}
     </NavLink>
@@ -158,8 +161,10 @@ function useIsDesktop() {
 }
 
 function RoleBadge({ role }) {
-  // Normalize role key — backend returns 'org_manager', display names like 'Org Admin' also supported
+  const t = useT()
   const meta = ROLE_META[role] || ROLE_META[role?.toLowerCase()] || ROLE_META.Platform
+  // Use translated role name if available, fallback to meta.badge
+  const roleLabel = t(`roles.${role}`) !== `roles.${role}` ? t(`roles.${role}`) : meta.badge
   return (
     <span
       className="hidden sm:inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border"
@@ -170,7 +175,7 @@ function RoleBadge({ role }) {
       }}
     >
       <span className="w-1.5 h-1.5 rounded-full" style={{ background: meta.accent }} />
-      {meta.badge}
+      {roleLabel}
     </span>
   )
 }
@@ -196,16 +201,17 @@ function UserAvatar({ user, roleKey, onClick, size = 9 }) {
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
   const isDesktop = useIsDesktop()
   const { nav, grouped } = buildSideNav(location)
   const { user, logout } = useAuthStore()
   const userRoleKey = useAuthStore(s => s.userRole())
+  const { locale, setLocale } = useI18nStore()
+  const t = useT()
+  const isRTL = useI18nStore(s => s.isRTL())
 
-  // Soft redirect handled by RequireAuth guard — no need for manual effect
-
-  // Close mobile sidebar on route change
   useEffect(() => {
     setSidebarOpen(false)
     setShowUserMenu(false)
@@ -220,7 +226,7 @@ export default function DashboardLayout() {
   }
 
   return (
-    <div className="min-h-screen flex bg-transparent font-sans">
+    <div className={cn('min-h-screen flex bg-transparent font-sans', isRTL && 'font-arabic')} dir={isRTL ? 'rtl' : 'ltr'}>
 
       {/* Mobile overlay */}
       <AnimatePresence>
@@ -233,16 +239,17 @@ export default function DashboardLayout() {
         )}
       </AnimatePresence>
 
-      {/* User menu overlay dismiss */}
-      {showUserMenu && (
-        <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
-      )}
+      {showUserMenu && <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />}
+      {showSettings && <div className="fixed inset-0 z-40" onClick={() => setShowSettings(false)} />}
 
       {/* ── Sidebar ── */}
       <motion.aside
-        className="fixed top-0 left-0 z-50 w-64 h-screen flex flex-col bg-white/90 backdrop-blur-xl border-r border-slate-200 shadow-lg"
+        className={cn(
+          'fixed top-0 z-50 w-64 h-screen flex flex-col bg-white/90 backdrop-blur-xl border-slate-200 shadow-lg',
+          isRTL ? 'right-0 border-l' : 'left-0 border-r'
+        )}
         initial={false}
-        animate={{ x: sidebarVisible ? 0 : -256 }}
+        animate={{ x: sidebarVisible ? 0 : (isRTL ? 256 : -256) }}
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
       >
         {/* Logo */}
@@ -275,34 +282,27 @@ export default function DashboardLayout() {
         {/* User profile section */}
         <div className="p-3 border-t border-slate-100 shrink-0 space-y-1">
           {user && (
-            <div
-              className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer group"
-              onClick={() => navigate('/')}
-            >
-              <div
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0"
-                style={{ background: `linear-gradient(135deg, ${meta.gradFrom}, ${meta.gradTo})` }}
-              >
+            <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer group" onClick={() => navigate('/')}>
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0"
+                style={{ background: `linear-gradient(135deg, ${meta.gradFrom}, ${meta.gradTo})` }}>
                 {user.initials}
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-bold text-slate-800 truncate">{user.name}</p>
-                <p className="text-[10px] font-medium text-slate-400 truncate">{user.org}</p>
+                <p className="text-[10px] font-medium text-slate-400 truncate">{user.organization?.name || user.org}</p>
               </div>
             </div>
           )}
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-semibold text-slate-500 hover:bg-red-50 hover:text-red-600 transition-all duration-200 group"
-          >
+          <button onClick={handleLogout}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-semibold text-slate-500 hover:bg-red-50 hover:text-red-600 transition-all duration-200 group">
             <LogOut className="w-4 h-4 text-slate-400 group-hover:text-red-500 transition-colors" />
-            Sign out
+            {t('nav.signOut')}
           </button>
         </div>
       </motion.aside>
 
       {/* ── Main Content ── */}
-      <div className={cn('flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300', isDesktop ? 'ml-64' : 'ml-0')}>
+      <div className={cn('flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300', isDesktop ? (isRTL ? 'mr-64' : 'ml-64') : 'm-0')}>
         {/* Topbar */}
         <header className="h-16 bg-white/80 backdrop-blur-xl border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 shrink-0 z-30 sticky top-0">
           <div className="flex items-center gap-3">
@@ -312,13 +312,11 @@ export default function DashboardLayout() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Role badge */}
             {user && <RoleBadge role={userRoleKey} />}
 
-            {/* System status */}
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-teal-50 border border-teal-200">
               <span className="w-2 h-2 rounded-full bg-[#0BB592] animate-pulse" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-teal-700">System Active</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-teal-700">{t('topbar.systemActive')}</span>
             </div>
 
             <button className="relative p-2 rounded-xl text-slate-500 hover:bg-slate-100 transition-colors">
@@ -326,9 +324,74 @@ export default function DashboardLayout() {
               <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#F55486] border-2 border-white" />
             </button>
 
-            <button className="hidden sm:block p-2 rounded-xl text-slate-500 hover:bg-slate-100 transition-colors group">
-              <Settings className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
-            </button>
+            {/* Settings button */}
+            <div className="relative">
+              <button
+                onClick={() => setShowSettings(v => !v)}
+                className="hidden sm:block p-2 rounded-xl text-slate-500 hover:bg-slate-100 transition-colors group"
+                title={t('topbar.settings')}
+              >
+                <Settings className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
+              </button>
+
+              {/* Settings dropdown */}
+              <AnimatePresence>
+                {showSettings && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                    transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                    className={cn(
+                      'absolute top-11 z-50 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden',
+                      isRTL ? 'left-0' : 'right-0'
+                    )}
+                  >
+                    <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
+                      <Settings className="w-4 h-4 text-slate-400" />
+                      <p className="text-sm font-extrabold text-slate-900">{t('settings.title')}</p>
+                    </div>
+
+                    {/* Language section */}
+                    <div className="px-4 py-3">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Globe className="w-3.5 h-3.5 text-slate-400" />
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{t('settings.language')}</p>
+                      </div>
+                      <p className="text-[11px] text-slate-500 font-medium mb-3">{t('settings.chooseLanguage')}</p>
+                      <div className="space-y-1.5">
+                        {LANGUAGES.map(lang => (
+                          <button
+                            key={lang.code}
+                            onClick={() => { setLocale(lang.code); setShowSettings(false) }}
+                            className={cn(
+                              'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all',
+                              locale === lang.code
+                                ? 'bg-[#0572B2]/10 text-[#0572B2] border border-[#0572B2]/20'
+                                : 'text-slate-700 hover:bg-slate-50 border border-transparent'
+                            )}
+                          >
+                            <span className="text-lg shrink-0">{lang.flag}</span>
+                            <div className="flex-1 text-start">
+                              <p className={cn('font-bold text-sm', locale === lang.code ? 'text-[#0572B2]' : 'text-slate-900')}>
+                                {lang.nativeLabel}
+                              </p>
+                              <p className="text-[10px] text-slate-400 font-medium">{lang.label}</p>
+                            </div>
+                            {lang.dir === 'rtl' && (
+                              <span className="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">RTL</span>
+                            )}
+                            {locale === lang.code && (
+                              <span className="w-2 h-2 rounded-full bg-[#0572B2] shrink-0" />
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
             {/* User avatar + dropdown */}
             <div className="relative">
@@ -341,15 +404,15 @@ export default function DashboardLayout() {
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95, y: -4 }}
                     transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-                    className="absolute right-0 top-11 z-50 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden"
+                    className={cn(
+                      'absolute top-11 z-50 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden',
+                      isRTL ? 'left-0' : 'right-0'
+                    )}
                   >
-                    {/* User info */}
                     <div className="px-4 py-3 border-b border-slate-100">
                       <div className="flex items-center gap-3">
-                        <div
-                          className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0"
-                          style={{ background: `linear-gradient(135deg, ${meta.gradFrom}, ${meta.gradTo})` }}
-                        >
+                        <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0"
+                          style={{ background: `linear-gradient(135deg, ${meta.gradFrom}, ${meta.gradTo})` }}>
                           {user?.initials}
                         </div>
                         <div className="min-w-0">
@@ -361,15 +424,11 @@ export default function DashboardLayout() {
                         <RoleBadge role={userRoleKey} />
                       </div>
                     </div>
-
-                    {/* Actions */}
                     <div className="p-2">
-                      <button
-                        onClick={handleLogout}
-                        className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-red-50 hover:text-red-600 transition-all duration-200 group"
-                      >
+                      <button onClick={handleLogout}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-red-50 hover:text-red-600 transition-all duration-200 group">
                         <LogOut className="w-4 h-4 text-slate-400 group-hover:text-red-500 transition-colors" />
-                        Sign out
+                        {t('nav.signOut')}
                       </button>
                     </div>
                   </motion.div>

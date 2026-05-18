@@ -4,20 +4,47 @@ import { motion } from 'framer-motion'
 import {
   Users, Activity, Brain, FileText, CreditCard,
   Mail, TrendingUp, ArrowRight, ShieldCheck, Building2,
-  Clock, BarChart3, Stethoscope, FlaskConical,
+  Clock, BarChart3, Stethoscope, FlaskConical, AlertTriangle,
 } from 'lucide-react'
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   RadarChart, Radar, PolarGrid, PolarAngleAxis,
-  LineChart, Line, ComposedChart,
+  ComposedChart,
   ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts'
 import { SparkTile, StatusPill, MetricTile, Avatar } from '@/components/admin'
 import { SectionCard, stagger, fadeUp } from '@/components/shared'
 import orgManager from '@/api/api-client/orgManager'
+import { useT } from '@/stores/i18nStore'
+
+/* ── Subscription countdown helper ─────────────────────────────────────────── */
+function useSubCountdown(endsAt) {
+  const [days, setDays] = useState(null)
+  useEffect(() => {
+    if (!endsAt) return
+    const calc = () => {
+      const diff = new Date(endsAt) - new Date()
+      setDays(Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24))))
+    }
+    calc()
+    const id = setInterval(calc, 60_000)
+    return () => clearInterval(id)
+  }, [endsAt])
+  return days
+}
 
 /* ── Org hero ─────────────────────────────────────────────────────────────── */
-function OrgHero({ org, kpis, sub, plan, children }) {
+function OrgHero({ org, kpis, sub, plan }) {
+  const t = useT()
+  const daysLeft = useSubCountdown(sub?.ends_at)
+
+  // Urgency color for countdown
+  const urgency = daysLeft === null ? null
+    : daysLeft <= 3  ? { bg: 'bg-red-500/20',    border: 'border-red-300/40',    text: 'text-red-100',    icon: '🚨' }
+    : daysLeft <= 7  ? { bg: 'bg-orange-500/20',  border: 'border-orange-300/40', text: 'text-orange-100', icon: '⚠️' }
+    : daysLeft <= 30 ? { bg: 'bg-amber-400/20',   border: 'border-amber-300/40',  text: 'text-amber-100',  icon: '⏰' }
+    : { bg: 'bg-white/15', border: 'border-white/20', text: 'text-amber-100', icon: null }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
@@ -31,9 +58,12 @@ function OrgHero({ org, kpis, sub, plan, children }) {
       <div className="absolute -left-16 -bottom-24 w-72 h-72 rounded-full bg-amber-300/20 blur-3xl pointer-events-none" />
       <div className="relative px-7 py-7 sm:px-9 sm:py-8 flex flex-col xl:flex-row xl:items-end xl:justify-between gap-7">
         <div className="max-w-2xl">
+          {/* Eyebrow — shows org name + type, NOT "Site Admin" */}
           <div className="inline-flex items-center gap-2 mb-3 px-2.5 py-1 rounded-full bg-white/10 border border-white/20 backdrop-blur">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-200 animate-pulse" />
-            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-100">Site Admin · BRECAI-FED</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-100">
+              {org?.type ? org.type.replace('_', ' ') : t('orgDashboard.eyebrow')} · BRECAI-FED
+            </span>
           </div>
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-2xl bg-white/15 border border-white/20 backdrop-blur flex items-center justify-center shrink-0">
@@ -41,24 +71,50 @@ function OrgHero({ org, kpis, sub, plan, children }) {
             </div>
             <div>
               <h1 className="text-3xl sm:text-4xl font-black tracking-tight leading-tight text-white">
-                {org?.name || 'Organization Dashboard'}
+                {org?.name || t('orgDashboard.eyebrow')}
               </h1>
-              {org?.type && (
-                <p className="text-amber-100/80 text-sm font-semibold capitalize mt-0.5">{org.type.replace('_', ' ')}</p>
-              )}
             </div>
           </div>
           <p className="mt-3 text-sm text-amber-50/80 max-w-2xl leading-relaxed">
-            Monitor your team, track clinical activity, and oversee AI-powered breast cancer detection across your organization.
+            {t('orgDashboard.subtitle')}
           </p>
-          {children && <div className="mt-5 flex flex-wrap items-center gap-2">{children}</div>}
+
+          {/* Subscription info + countdown */}
+          {sub && (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border backdrop-blur ${urgency?.bg} ${urgency?.border}`}>
+                <ShieldCheck className={`w-3.5 h-3.5 ${urgency?.text}`} />
+                <span className={`text-xs font-black ${urgency?.text}`}>{plan?.name || t('orgDashboard.subActive')}</span>
+              </div>
+
+              {/* Countdown pill */}
+              {daysLeft !== null && (
+                <motion.div
+                  animate={daysLeft <= 7 ? { scale: [1, 1.04, 1] } : {}}
+                  transition={{ duration: 2, repeat: Infinity }}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border backdrop-blur ${urgency?.bg} ${urgency?.border}`}
+                >
+                  <Clock className={`w-3.5 h-3.5 ${urgency?.text}`} />
+                  <span className={`text-xs font-black ${urgency?.text}`}>
+                    {urgency?.icon && <span className="me-1">{urgency.icon}</span>}
+                    {daysLeft === 0
+                      ? t('orgDashboard.expired')
+                      : `${t('orgDashboard.expiresIn')} ${daysLeft} ${daysLeft === 1 ? t('orgDashboard.dayLeft') : t('orgDashboard.daysLeft')}`
+                    }
+                  </span>
+                </motion.div>
+              )}
+            </div>
+          )}
         </div>
+
+        {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 xl:flex xl:flex-row gap-3 shrink-0">
           {[
-            { label: 'Doctors',     value: kpis?.active_doctors ?? '—',      sub: 'Active' },
-            { label: 'Patients',    value: kpis?.total_patients ?? '—',       sub: 'Registered' },
-            { label: 'Predictions', value: kpis?.total_predictions != null ? Number(kpis.total_predictions).toLocaleString() : '—', sub: 'All time' },
-            { label: 'Reports',     value: kpis?.total_reports ?? '—',        sub: 'Generated' },
+            { label: t('orgDashboard.doctors'),     value: kpis?.active_doctors ?? '—',      sub: t('orgDashboard.active') },
+            { label: t('orgDashboard.patients'),    value: kpis?.total_patients ?? '—',       sub: t('orgDashboard.registered') },
+            { label: t('orgDashboard.predictions'), value: kpis?.total_predictions != null ? Number(kpis.total_predictions).toLocaleString() : '—', sub: t('orgDashboard.allTime') },
+            { label: t('orgDashboard.reports'),     value: kpis?.total_reports ?? '—',        sub: t('orgDashboard.generated') },
           ].map((s, i) => (
             <div key={i} className="rounded-2xl bg-white/10 border border-amber-200/20 backdrop-blur px-4 py-3 min-w-[110px]">
               <p className="text-[9px] font-black uppercase tracking-[0.18em] text-amber-200/80">{s.label}</p>
@@ -99,6 +155,7 @@ const ChartTooltip = ({ active, payload, label }) => {
 
 export default function OrgDashboard() {
   const navigate = useNavigate()
+  const t = useT()
   const [dashboard, setDashboard] = useState(null)
   const [kpis, setKpis] = useState(null)
   const [patientGrowth, setPatientGrowth] = useState([])
@@ -195,15 +252,7 @@ export default function OrgDashboard() {
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show">
-      <OrgHero org={org} kpis={kpis} sub={sub} plan={plan}>
-        {sub && (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/15 border border-white/20 backdrop-blur">
-            <ShieldCheck className="w-3.5 h-3.5 text-amber-200" />
-            <span className="text-xs font-black text-amber-100">{plan?.name || 'Active Plan'}</span>
-            {sub.ends_at && <span className="text-[10px] text-amber-200/70 font-semibold">· expires {new Date(sub.ends_at).toLocaleDateString()}</span>}
-          </div>
-        )}
-      </OrgHero>
+      <OrgHero org={org} kpis={kpis} sub={sub} plan={plan} />
 
       {/* ── Row 1: KPI metric tiles ─────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-7">
@@ -215,7 +264,7 @@ export default function OrgDashboard() {
 
       {/* ── Row 2: Patient growth + Subtype donut ──────────────────────────── */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-7">
-        <SectionCard title="Patient growth" subtitle="Monthly registrations — last 12 months" icon={TrendingUp} iconColor="amber" className="xl:col-span-2">
+        <SectionCard title={t('orgDashboard.patientGrowth')} subtitle={t('orgDashboard.monthlyReg')} icon={TrendingUp} iconColor="amber" className="xl:col-span-2">
           {loading ? <Spinner /> : (
             <div className="h-64 px-4 pb-4">
               {pgSeries.length > 0 ? (
@@ -239,7 +288,7 @@ export default function OrgDashboard() {
           )}
         </SectionCard>
 
-        <SectionCard title="Subtype distribution" subtitle="Luminal A vs Non-Luminal A" icon={Activity} iconColor="pink">
+        <SectionCard title={t('orgDashboard.subtypeDist')} subtitle={t('orgDashboard.lumVsNon')} icon={Activity} iconColor="pink">
           {loading ? <Spinner /> : (
             <div className="h-64 px-4 pb-4">
               {subtypeMix.length > 0 && predResults?.total > 0 ? (
@@ -272,7 +321,7 @@ export default function OrgDashboard() {
 
       {/* ── Row 3: Predictions over time (composed) + Doctor leaderboard ───── */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-7">
-        <SectionCard title="Prediction activity" subtitle="Total · completed · failed per month" icon={Brain} iconColor="blue" className="xl:col-span-2">
+        <SectionCard title={t('orgDashboard.predActivity')} subtitle={t('orgDashboard.predPerMonth')} icon={Brain} iconColor="blue" className="xl:col-span-2">
           {loading ? <Spinner /> : (
             <div className="h-64 px-4 pb-4">
               {potSeries.length > 0 ? (
@@ -299,7 +348,7 @@ export default function OrgDashboard() {
           )}
         </SectionCard>
 
-        <SectionCard title="Doctor leaderboard" subtitle="Most active clinicians" icon={Users} iconColor="amber">
+        <SectionCard title={t('orgDashboard.doctorLeaderboard')} subtitle={t('orgDashboard.mostActive')} icon={Users} iconColor="amber">
           {loading ? <Spinner /> : leaderboard.length > 0 ? (
             <div className="divide-y divide-slate-100">
               {leaderboard.slice(0, 6).map((d, i) => {
@@ -330,7 +379,7 @@ export default function OrgDashboard() {
 
       {/* ── Row 4: Age distribution + Receptor status ──────────────────────── */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-7">
-        <SectionCard title="Patient age distribution" subtitle="Breakdown by age group" icon={BarChart3} iconColor="blue">
+        <SectionCard title={t('orgDashboard.ageDistrib')} subtitle={t('orgDashboard.byAgeGroup')} icon={BarChart3} iconColor="blue">
           {loading ? <Spinner /> : (
             <div className="h-56 px-4 pb-4">
               {ageDistrib.length > 0 && ageDistrib.some(d => d.count > 0) ? (
@@ -352,7 +401,7 @@ export default function OrgDashboard() {
           )}
         </SectionCard>
 
-        <SectionCard title="Receptor status" subtitle="ER · PR · HER2 distribution" icon={FlaskConical} iconColor="teal">
+        <SectionCard title={t('orgDashboard.receptorStatus')} subtitle={t('orgDashboard.erPrHer2')} icon={FlaskConical} iconColor="teal">
           {loading ? <Spinner /> : (
             <div className="h-56 px-4 pb-4">
               {receptorBar.length > 0 && receptorBar.some(d => d.positive + d.negative > 0) ? (
@@ -376,7 +425,7 @@ export default function OrgDashboard() {
 
       {/* ── Row 5: Receptor radar + Pending approvals ──────────────────────── */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-7">
-        <SectionCard title="Receptor radar" subtitle="Visual overview of all markers" icon={Stethoscope} iconColor="pink">
+        <SectionCard title={t('orgDashboard.receptorRadar')} subtitle={t('orgDashboard.visualOverview')} icon={Stethoscope} iconColor="pink">
           {loading ? <Spinner /> : (
             <div className="h-56 px-2 pb-2">
               {receptorRadar.length > 0 && receptorRadar.some(d => d.value > 0) ? (
@@ -393,14 +442,14 @@ export default function OrgDashboard() {
           )}
         </SectionCard>
 
-        <SectionCard title="Team overview" subtitle="Members at a glance" icon={Users} iconColor="amber" className="xl:col-span-2">
+        <SectionCard title={t('orgDashboard.teamOverview')} subtitle={t('orgDashboard.membersGlance')} icon={Users} iconColor="amber" className="xl:col-span-2">
           {loading ? <Spinner /> : (
             <div className="px-5 py-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
               {[
-                { label: 'Total Members',    value: kpis?.total_members ?? '—',      color: 'text-amber-600',  bg: 'bg-amber-50',  border: 'border-amber-200' },
-                { label: 'Active Doctors',   value: kpis?.active_doctors ?? '—',     color: 'text-teal-600',   bg: 'bg-teal-50',   border: 'border-teal-200' },
-                { label: 'Pending Approval', value: kpis?.pending_approvals ?? '—',  color: 'text-[#F55486]',  bg: 'bg-pink-50',   border: 'border-pink-200' },
-                { label: 'Examinations',     value: kpis?.total_examinations != null ? Number(kpis.total_examinations).toLocaleString() : '—', color: 'text-[#0572B2]', bg: 'bg-blue-50', border: 'border-blue-200' },
+                { label: t('orgDashboard.totalMembers'),    value: kpis?.total_members ?? '—',      color: 'text-amber-600',  bg: 'bg-amber-50',  border: 'border-amber-200' },
+                { label: t('orgDashboard.activeDoctors'),   value: kpis?.active_doctors ?? '—',     color: 'text-teal-600',   bg: 'bg-teal-50',   border: 'border-teal-200' },
+                { label: t('orgDashboard.pendingApproval'), value: kpis?.pending_approvals ?? '—',  color: 'text-[#F55486]',  bg: 'bg-pink-50',   border: 'border-pink-200' },
+                { label: t('orgDashboard.examinations'),    value: kpis?.total_examinations != null ? Number(kpis.total_examinations).toLocaleString() : '—', color: 'text-[#0572B2]', bg: 'bg-blue-50', border: 'border-blue-200' },
               ].map((s, i) => (
                 <motion.div key={i} variants={fadeUp}
                   className={`rounded-2xl border ${s.border} ${s.bg} px-4 py-4 text-center`}
@@ -412,7 +461,7 @@ export default function OrgDashboard() {
               {/* Completion rate bar */}
               <div className="col-span-2 sm:col-span-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Prediction completion rate</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{t('orgDashboard.completionRate')}</span>
                   <span className="text-sm font-extrabold text-slate-900">{completionRate}%</span>
                 </div>
                 <div className="h-2.5 rounded-full bg-slate-200 overflow-hidden">
@@ -423,8 +472,8 @@ export default function OrgDashboard() {
                   />
                 </div>
                 <div className="flex justify-between mt-1.5">
-                  <span className="text-[10px] font-semibold text-slate-400">{kpis?.completed_predictions ?? 0} completed</span>
-                  <span className="text-[10px] font-semibold text-slate-400">{kpis?.total_predictions ?? 0} total</span>
+                  <span className="text-[10px] font-semibold text-slate-400">{kpis?.completed_predictions ?? 0} {t('orgDashboard.completed')}</span>
+                  <span className="text-[10px] font-semibold text-slate-400">{kpis?.total_predictions ?? 0} {t('orgDashboard.total')}</span>
                 </div>
               </div>
             </div>

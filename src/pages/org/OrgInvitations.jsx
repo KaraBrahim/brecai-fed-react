@@ -80,7 +80,9 @@ export default function OrgInvitations() {
   const showToast = (message, tone = 'teal') => setToast({ open: true, message, tone })
 
   // Derived plan permissions
-  const canInviteInstructor = plan?.instructor_allowed === true
+  // fl_contribution_allowed = org participates in FL → can invite instructors
+  // instructor_allowed = explicit flag (either one is sufficient)
+  const canInviteInstructor = !plan || plan.fl_contribution_allowed === true || plan.instructor_allowed === true
   const canInviteDoctor = !plan || plan.max_doctors === -1 || activeDoctorCount < plan.max_doctors
   const canSendInvitation = form.role === 'instructor' ? canInviteInstructor : canInviteDoctor
 
@@ -96,7 +98,7 @@ export default function OrgInvitations() {
       label: 'Instructor',
       desc: canInviteInstructor
         ? 'FL access — can manage federated training rounds'
-        : 'Your plan does not include instructor access',
+        : 'Requires a plan with FL contribution access',
       disabled: !canInviteInstructor,
     },
   ]
@@ -236,7 +238,7 @@ export default function OrgInvitations() {
           <p className="text-xs text-indigo-700 font-medium mt-0.5 leading-relaxed">
             The <strong>Instructor</strong> role cannot self-register. You must send an invitation with role set to "Instructor". The recipient will receive a link to create their account with FL access pre-assigned.
             {!canInviteInstructor && plan && (
-              <span className="ml-1 text-amber-700 font-bold">Your current plan does not include instructor access.</span>
+              <span className="ml-1 text-amber-700 font-bold">Your current plan does not include FL contribution access — upgrade to invite instructors.</span>
             )}
           </p>
         </div>
