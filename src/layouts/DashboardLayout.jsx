@@ -11,7 +11,7 @@ import { useState, useEffect } from 'react'
 import logo from '@/assets/logo.png'
 import { cn } from '@/lib/utils'
 import { useAuthStore, ROLE_META, ROLE_HOME } from '@/stores/authStore'
-import { useI18nStore, LANGUAGES, useT } from '@/stores/i18nStore'
+import { useI18nStore, LANGUAGES, useT, useIsRTL } from '@/stores/i18nStore'
 
 const doctorNav = [
   { labelKey: 'nav.insights',    path: '/app/doctor',          icon: Activity,       label: 'Insights' },
@@ -210,7 +210,7 @@ export default function DashboardLayout() {
   const userRoleKey = useAuthStore(s => s.userRole())
   const { locale, setLocale } = useI18nStore()
   const t = useT()
-  const isRTL = useI18nStore(s => s.isRTL())
+  const isRTL = useIsRTL()
 
   useEffect(() => {
     setSidebarOpen(false)

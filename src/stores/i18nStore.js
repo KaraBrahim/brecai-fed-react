@@ -313,41 +313,15 @@ export const useI18nStore = create(
 
       setLocale: (code) => {
         set({ locale: code })
-        // Apply RTL/LTR to document
         const lang = LANGUAGES.find(l => l.code === code)
         document.documentElement.dir = lang?.dir || 'ltr'
         document.documentElement.lang = code
-      },
-
-      // t('nav.dashboard') → translated string
-      t: (key) => {
-        const locale = get().locale
-        const dict = translations[locale] || translations.en
-        const parts = key.split('.')
-        let val = dict
-        for (const p of parts) {
-          val = val?.[p]
-          if (val === undefined) break
-        }
-        // Fallback to English
-        if (val === undefined) {
-          let fallback = translations.en
-          for (const p of parts) fallback = fallback?.[p]
-          return fallback ?? key
-        }
-        return val
-      },
-
-      isRTL: () => {
-        const lang = LANGUAGES.find(l => l.code === get().locale)
-        return lang?.dir === 'rtl'
       },
     }),
     {
       name: 'brecai-i18n',
       partialize: (s) => ({ locale: s.locale }),
       onRehydrateStorage: () => (state) => {
-        // Re-apply direction on page load
         if (state?.locale) {
           const lang = LANGUAGES.find(l => l.code === state.locale)
           document.documentElement.dir = lang?.dir || 'ltr'
@@ -358,7 +332,33 @@ export const useI18nStore = create(
   )
 )
 
-// Convenience hook
+// ── Standalone helpers (not in state — avoids Zustand function serialization issues) ──
+
+function translate(locale, key) {
+  const dict = translations[locale] || translations.en
+  const parts = key.split('.')
+  let val = dict
+  for (const p of parts) {
+    val = val?.[p]
+    if (val === undefined) break
+  }
+  if (val === undefined) {
+    let fallback = translations.en
+    for (const p of parts) fallback = fallback?.[p]
+    return fallback ?? key
+  }
+  return val
+}
+
+// Convenience hook — returns a stable t() function bound to current locale
 export function useT() {
-  return useI18nStore(s => s.t)
+  const locale = useI18nStore(s => s.locale)
+  return (key) => translate(locale, key)
+}
+
+// RTL hook
+export function useIsRTL() {
+  const locale = useI18nStore(s => s.locale)
+  const lang = LANGUAGES.find(l => l.code === locale)
+  return lang?.dir === 'rtl'
 }
