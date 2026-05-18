@@ -402,10 +402,29 @@ export default function DashboardLayout() {
   const t = useT()
   const isRTL = useIsRTL()
 
+  // Refs for click-outside detection — no overlay divs needed
+  const userMenuRef   = useRef(null)
+  const settingsRef   = useRef(null)
+
   useEffect(() => {
     setSidebarOpen(false)
     setShowUserMenu(false)
+    setShowSettings(false)
   }, [location.pathname])
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    function handleMouseDown(e) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
+        setShowUserMenu(false)
+      }
+      if (settingsRef.current && !settingsRef.current.contains(e.target)) {
+        setShowSettings(false)
+      }
+    }
+    document.addEventListener('mousedown', handleMouseDown)
+    return () => document.removeEventListener('mousedown', handleMouseDown)
+  }, [])
 
   const sidebarVisible = isDesktop || sidebarOpen
   const meta = ROLE_META[userRoleKey] || ROLE_META.Platform
@@ -428,9 +447,6 @@ export default function DashboardLayout() {
           />
         )}
       </AnimatePresence>
-
-      {showUserMenu && <div className="fixed inset-0 z-[48]" onClick={() => setShowUserMenu(false)} />}
-      {showSettings && <div className="fixed inset-0 z-[48]" onClick={() => setShowSettings(false)} />}
 
       {/* ── Sidebar ── */}
       <motion.aside
@@ -472,15 +488,19 @@ export default function DashboardLayout() {
         {/* User profile section */}
         <div className="p-3 border-t border-slate-100 shrink-0 space-y-1">
           {user && (
-            <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer group" onClick={() => navigate('/')}>
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0"
+            <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer group"
+              onClick={() => setShowProfile(true)}>
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0 overflow-hidden"
                 style={{ background: `linear-gradient(135deg, ${meta.gradFrom}, ${meta.gradTo})` }}>
-                {user.initials}
+                {user.avatar
+                  ? <img src={`${import.meta.env.VITE_API_URL}/storage/${user.avatar}`} alt="avatar" className="w-full h-full object-cover" />
+                  : user.initials}
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-bold text-slate-800 truncate">{user.name}</p>
                 <p className="text-[10px] font-medium text-slate-400 truncate">{user.organization?.name || user.org}</p>
               </div>
+              <Edit3 className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 transition-colors shrink-0" />
             </div>
           )}
           <button onClick={handleLogout}
@@ -515,7 +535,7 @@ export default function DashboardLayout() {
             </button>
 
             {/* Settings button */}
-            <div className="relative">
+            <div className="relative" ref={settingsRef}>
               <button
                 onClick={() => setShowSettings(v => !v)}
                 className="hidden sm:block p-2 rounded-xl text-slate-500 hover:bg-slate-100 transition-colors group"
@@ -584,7 +604,7 @@ export default function DashboardLayout() {
             </div>
 
             {/* User avatar + dropdown */}
-            <div className="relative">
+            <div className="relative" ref={userMenuRef}>
               <UserAvatar user={user} roleKey={userRoleKey} onClick={() => setShowUserMenu(v => !v)} />
 
               <AnimatePresence>
