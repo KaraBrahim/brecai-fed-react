@@ -216,6 +216,25 @@ const doctor = {
     return client.post('/doctor/wsi/presign', data).then((r) => r.data);
   },
 
+  /**
+   * Multipart upload helpers for large SVS files.
+   * Flow: init → parts → (upload each part) → complete  (or abort on error)
+   */
+  wsiMultipart: {
+    init(data) {
+      return client.post('/doctor/wsi/multipart/init', data).then((r) => r.data);
+    },
+    parts(data) {
+      return client.post('/doctor/wsi/multipart/parts', data).then((r) => r.data);
+    },
+    complete(data) {
+      return client.post('/doctor/wsi/multipart/complete', data).then((r) => r.data);
+    },
+    abort(data) {
+      return client.post('/doctor/wsi/multipart/abort', data).then((r) => r.data);
+    },
+  },
+
   // ─── WSI Uploads ─────────────────────────────────────────────────────────────
 
   wsiUploads: {

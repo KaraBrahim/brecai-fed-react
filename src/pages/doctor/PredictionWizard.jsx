@@ -448,46 +448,81 @@ export default function PredictionWizard({ onClose }) {
         const isSVS = slideFile.name.toLowerCase().match(/\.(svs|ndpi|scn|mrxs)$/)
 
         if (isSVS) {
-          // SVS/NDPI: upload to R2 via presigned URL, FastAPI downloads from R2
-          setProgressLabel('Getting secure upload URL…')
+          // SVS/NDPI: multipart upload to R2 (reliable for large files), FastAPI downloads from R2
+          const CHUNK_SIZE = 50 * 1024 * 1024 // 50 MB per part
+          const totalParts = Math.ceil(slideFile.size / CHUNK_SIZE)
+
+          setProgressLabel('Initialising secure upload…')
           setProgressPct(28)
 
-          const presignRes = await doctorApi.wsiPresign({
+          // Step 1: initiate multipart upload
+          const { upload_id, r2_key } = await doctorApi.wsiMultipart.init({
             filename: slideFile.name,
             patient_id: selectedPatient.id,
           })
-          const { presigned_url, r2_key } = presignRes
 
-          setProgressLabel('Uploading slide to secure storage…')
+          // Step 2: get presigned URLs for all parts
+          const { part_urls } = await doctorApi.wsiMultipart.parts({
+            upload_id,
+            r2_key,
+            part_count: totalParts,
+          })
+
+          setProgressLabel(`Uploading slide (${(slideFile.size / (1024 * 1024)).toFixed(0)} MB) in ${totalParts} parts…`)
           setProgressPct(30)
 
-          // Tick +1% every 2s, cap at 58. If upload finishes early it jumps straight to 58.
-          let uploadPct = 30
-          const ticker = setInterval(() => {
-            uploadPct = Math.min(57, uploadPct + 1)
-            setProgressPct(uploadPct)
-          }, 2000)
+          // Step 3: upload parts — 3 concurrent, with progress tracking
+          const completedParts = []
+          let uploadedParts = 0
 
-          // Upload directly to R2 — no server involved, no size limit
-          let uploadRes
-          try {
-            uploadRes = await fetch(presigned_url, {
+          const uploadPart = async (partNumber, url) => {
+            const start  = (partNumber - 1) * CHUNK_SIZE
+            const end    = Math.min(start + CHUNK_SIZE, slideFile.size)
+            const chunk  = slideFile.slice(start, end)
+
+            const res = await fetch(url, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/octet-stream' },
-              body: slideFile,
+              body: chunk,
             })
-          } catch (fetchErr) {
-            clearInterval(ticker)
-            throw new Error(`R2 upload network error: ${fetchErr.message} — check CORS policy on slidesbucket`)
-          } finally {
-            clearInterval(ticker)
-          }
-          if (!uploadRes.ok) {
-            const body = await uploadRes.text().catch(() => '')
-            throw new Error(`R2 upload failed (HTTP ${uploadRes.status}): ${body.slice(0, 200)}`)
+            if (!res.ok) {
+              const body = await res.text().catch(() => '')
+              throw new Error(`Part ${partNumber} failed (HTTP ${res.status}): ${body.slice(0, 150)}`)
+            }
+
+            const etag = res.headers.get('ETag') || res.headers.get('etag') || `"part-${partNumber}"`
+            uploadedParts++
+            const pct = Math.round(30 + (uploadedParts / totalParts) * 28) // 30 → 58
+            setProgressPct(pct)
+            setProgressLabel(`Uploading… ${uploadedParts}/${totalParts} parts done`)
+            return { PartNumber: partNumber, ETag: etag }
           }
 
+          // Upload with concurrency = 3
+          const CONCURRENCY = 3
+          try {
+            for (let i = 0; i < totalParts; i += CONCURRENCY) {
+              const batch = part_urls
+                .slice(i, i + CONCURRENCY)
+                .map((url, idx) => uploadPart(i + idx + 1, url))
+              const results = await Promise.all(batch)
+              completedParts.push(...results)
+            }
+          } catch (uploadErr) {
+            // Abort the multipart upload to avoid orphaned parts in R2
+            await doctorApi.wsiMultipart.abort({ upload_id, r2_key }).catch(() => {})
+            throw uploadErr
+          }
+
+          // Step 4: complete — tell R2 to assemble the parts
+          setProgressLabel('Finalising upload…')
           setProgressPct(58)
+          await doctorApi.wsiMultipart.complete({
+            upload_id,
+            r2_key,
+            parts: completedParts.sort((a, b) => a.PartNumber - b.PartNumber),
+          })
+
           setProgressLabel('Slide stored — registering…')
 
           const wsi = await doctorApi.wsiUploads.uploadR2Key({
