@@ -445,118 +445,35 @@ export default function PredictionWizard({ onClose }) {
         const fastApiUrl = __FASTAPI_URL__
         let ptB64 = null
 
-        // Strategy: tile the image in the browser using Canvas API (works for PNG/JPG/TIFF)
-        // then send patches ZIP to FastAPI /extract endpoint (no CORS issue — small files)
-        const isSVS = slideFile.name.toLowerCase().match(/\.(svs|ndpi|scn|mrxs)$/)
+        // All formats (SVS, NDPI, TIFF, PNG, JPG) go to FastAPI /extract/wsi
+        // which handles tissue segmentation server-side (HSV+Otsu, spatial bucketing)
+        setProgressLabel('Uploading slide to AI server…')
+        setProgressPct(28)
 
-        if (isSVS) {
-          // SVS/NDPI: can't be read by Canvas — send directly to FastAPI /extract/wsi
-          // This requires CORS to be open on HF Space (it is — allow_origins=["*"])
-          setProgressLabel('Uploading slide to AI server…')
-          const wsiFormData = new FormData()
-          wsiFormData.append('wsi_file', slideFile)
-          wsiFormData.append('patch_size', '256')
-          wsiFormData.append('max_patches', '500')
-          try {
-            const extractRes = await fetch(`${fastApiUrl}/extract/wsi`, {
-              method: 'POST',
-              body: wsiFormData,
-            })
-            if (!extractRes.ok) {
-              const errData = await extractRes.json().catch(() => ({}))
-              throw new Error(errData.detail || `Feature extraction failed (${extractRes.status})`)
-            }
-            const extractData = await extractRes.json()
-            ptB64 = extractData.pt_b64
-            setProgressPct(65)
-          } catch (extractErr) {
-            // SVS failed — inform user instead of silent fallback
-            throw new Error(`Slide processing failed: ${extractErr.message}. Try a PNG/TIFF image instead.`)
+        const wsiFormData = new FormData()
+        wsiFormData.append('wsi_file', slideFile)
+        wsiFormData.append('patch_size', '256')
+        wsiFormData.append('max_patches', '500')
+
+        try {
+          const extractRes = await fetch(`${fastApiUrl}/extract/wsi`, {
+            method: 'POST',
+            body: wsiFormData,
+          })
+          if (!extractRes.ok) {
+            const errData = await extractRes.json().catch(() => ({}))
+            throw new Error(errData.detail || `Feature extraction failed (${extractRes.status})`)
           }
-        } else {
-          // PNG/JPG/TIFF: tile in browser using Canvas, send patches ZIP to FastAPI /extract
-          setProgressLabel('Tiling slide image…')
-          setProgressPct(28)
-
-          try {
-            // Load image into canvas
-            const imgBitmap = await createImageBitmap(slideFile)
-            const { width, height } = imgBitmap
-            const PATCH_SIZE = 256
-            const MAX_PATCHES = 500
-
-            const cols = Math.floor(width / PATCH_SIZE)
-            const rows = Math.floor(height / PATCH_SIZE)
-            const total = cols * rows
-            const step = Math.max(1, Math.ceil(total / MAX_PATCHES))
-
-            const canvas = document.createElement('canvas')
-            canvas.width = PATCH_SIZE
-            canvas.height = PATCH_SIZE
-            const ctx = canvas.getContext('2d')
-
-            // Build ZIP of patches using JSZip-like approach with fetch + blob
-            // We'll use a simple approach: collect patch blobs and send as FormData
-            const patches = []
-            let count = 0
-            for (let r = 0; r < rows && count < MAX_PATCHES; r += step) {
-              for (let c = 0; c < cols && count < MAX_PATCHES; c++) {
-                ctx.clearRect(0, 0, PATCH_SIZE, PATCH_SIZE)
-                ctx.drawImage(imgBitmap, c * PATCH_SIZE, r * PATCH_SIZE, PATCH_SIZE, PATCH_SIZE, 0, 0, PATCH_SIZE, PATCH_SIZE)
-                // Check if patch is mostly background (white)
-                const imageData = ctx.getImageData(0, 0, PATCH_SIZE, PATCH_SIZE)
-                const pixels = imageData.data
-                let sum = 0
-                for (let i = 0; i < pixels.length; i += 4) sum += pixels[i]
-                const avg = sum / (pixels.length / 4)
-                if (avg > 230) continue // skip white background
-                const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.85))
-                patches.push({ blob, name: `patch_${r}_${c}.jpg` })
-                count++
-              }
-            }
-            imgBitmap.close()
-
-            if (patches.length === 0) {
-              throw new Error('No tissue patches found in the image. The slide may be mostly background.')
-            }
-
-            setProgressLabel(`Extracted ${patches.length} patches — sending to AI…`)
-            setProgressPct(50)
-
-            // Create ZIP using native browser APIs
-            const { default: JSZip } = await import('jszip').catch(() => ({ default: null }))
-            let zipBlob
-            if (JSZip) {
-              const zip = new JSZip()
-              patches.forEach(p => zip.file(p.name, p.blob))
-              zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 1 } })
-            } else {
-              // Fallback: send patches as multipart without ZIP
-              // Use FormData with multiple files
-              const formData = new FormData()
-              patches.forEach(p => formData.append('patches_zip', p.blob, p.name))
-              // This won't work with /extract which expects a ZIP — use /extract/wsi fallback
-              throw new Error('JSZip not available. Please use a PNG/TIFF image.')
-            }
-
-            // Send ZIP to FastAPI /extract
-            const extractForm = new FormData()
-            extractForm.append('patches_zip', zipBlob, 'patches.zip')
-            const extractRes = await fetch(`${fastApiUrl}/extract`, {
-              method: 'POST',
-              body: extractForm,
-            })
-            if (!extractRes.ok) {
-              const errData = await extractRes.json().catch(() => ({}))
-              throw new Error(errData.detail || `Feature extraction failed (${extractRes.status})`)
-            }
-            const extractData = await extractRes.json()
-            ptB64 = extractData.pt_b64
-            setProgressPct(65)
-          } catch (tileErr) {
-            throw new Error(`Image processing failed: ${tileErr.message}`)
-          }
+          const extractData = await extractRes.json()
+          ptB64 = extractData.pt_b64
+          setProgressPct(65)
+          setProgressLabel(`Extracted ${extractData.n_patches} tissue patches`)
+        } catch (extractErr) {
+          // If /extract/wsi fails, fall back to clinical-only with a warning
+          console.warn('[Wizard] /extract/wsi failed:', extractErr.message)
+          setProgressLabel('Image processing failed — using clinical data only')
+          await new Promise(r => setTimeout(r, 1500))
+          ptB64 = null
         }
 
         if (ptB64) {

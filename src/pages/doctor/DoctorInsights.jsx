@@ -159,20 +159,20 @@ export default function DoctorInsights() {
         />
       </div>
 
-      {/* ── Quick actions ─────────────────────────────────────────────────── */}
+      {/* ── Stat cards row (replaces useless quick-action boxes) ─────────── */}
       <motion.div variants={fadeUp} className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-7">
         {[
-          { label: t('nav.patients'),     icon: Users,       to: '/app/doctor/patients',     color: 'blue'   },
-          { label: t('nav.examinations'), icon: FileText,    to: '/app/doctor/examinations', color: 'amber'  },
-          { label: t('nav.predictions'),  icon: Brain,       to: '/app/doctor/predictions',  color: 'pink'   },
-          { label: t('nav.finalExam'),    icon: CheckCircle2,to: '/app/doctor/exam',         color: 'teal'   },
-          { label: t('nav.reports'),      icon: BarChart3,   to: '/app/doctor/reports',      color: 'slate'  },
-          { label: t('nav.xai'),          icon: Activity,    to: '/app/doctor/xai',          color: 'violet' },
+          { label: t('nav.patients'),     value: kpis?.my_patients ?? '—',    sub: 'registered',   to: '/app/doctor/patients',     color: 'blue',   icon: Users       },
+          { label: t('nav.examinations'), value: kpis?.my_examinations ?? '—',sub: 'total',        to: '/app/doctor/examinations', color: 'amber',  icon: FileText    },
+          { label: t('nav.predictions'),  value: kpis?.my_predictions ?? '—', sub: `${completionRate}% done`, to: '/app/doctor/predictions', color: 'pink', icon: Brain },
+          { label: t('nav.finalExam'),    value: kpis?.pending_examinations ?? '—', sub: 'pending review', to: '/app/doctor/exam', color: 'teal', icon: CheckCircle2 },
+          { label: t('nav.reports'),      value: kpis?.my_reports ?? '—',     sub: 'generated',    to: '/app/doctor/reports',      color: 'slate',  icon: BarChart3   },
+          { label: t('nav.xai'),          value: predResults?.total ?? '—',   sub: 'predictions',  to: '/app/doctor/xai',          color: 'violet', icon: Activity    },
         ].map(a => (
           <button key={a.to} onClick={() => navigate(a.to)}
             className="group bg-white rounded-2xl border border-slate-200 p-4 text-left hover:border-[#0572B2] hover:shadow-md transition-all"
           >
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-2 ${
               a.color === 'blue'   ? 'bg-blue-50 text-[#0572B2]' :
               a.color === 'amber'  ? 'bg-amber-50 text-amber-600' :
               a.color === 'pink'   ? 'bg-pink-50 text-[#F55486]' :
@@ -182,7 +182,13 @@ export default function DoctorInsights() {
             }`}>
               <a.icon className="w-4 h-4" />
             </div>
-            <p className="text-xs font-extrabold text-slate-900">{a.label}</p>
+            <p className={`text-xl font-black ${
+              a.color === 'blue' ? 'text-[#0572B2]' : a.color === 'amber' ? 'text-amber-600' :
+              a.color === 'pink' ? 'text-[#F55486]' : a.color === 'teal' ? 'text-[#0BB592]' :
+              a.color === 'violet' ? 'text-violet-600' : 'text-slate-700'
+            }`}>{loading ? '—' : a.value}</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 truncate">{a.label}</p>
+            <p className="text-[10px] font-medium text-slate-400 truncate">{a.sub}</p>
           </button>
         ))}
       </motion.div>

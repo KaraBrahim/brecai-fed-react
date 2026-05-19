@@ -60,12 +60,13 @@ export default function ExaminationsList() {
     if (!deleteId) return
     setDeleteLoading(true)
     try {
-      await doctorApi.examinations.delete(deleteId)
+      // Use force-delete which works for all statuses (also cleans up prediction + XAI)
+      await doctorApi.examinations.forceDelete(deleteId)
       showToast('Examination deleted')
       setDeleteId(null)
       load(page, statusFilter)
     } catch (err) {
-      showToast(err?.response?.data?.message || 'Cannot delete — only draft examinations can be removed', false)
+      showToast(err?.response?.data?.message || 'Failed to delete examination', false)
       setDeleteId(null)
     } finally {
       setDeleteLoading(false)
@@ -221,11 +222,12 @@ export default function ExaminationsList() {
                       <Brain className="w-3.5 h-3.5" /> XAI
                     </button>
                   )}
-                  {canDelete && (
+                  {/* Show delete for all non-concluded exams */}
+                  {exam.status !== 'concluded' && (
                     <button
                       onClick={() => setDeleteId(exam.id)}
                       className="w-9 h-9 rounded-xl border border-pink-200 bg-pink-50 flex items-center justify-center text-[#F55486] hover:bg-pink-100 transition"
-                      title="Delete draft"
+                      title="Delete examination"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -263,7 +265,7 @@ export default function ExaminationsList() {
               className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[90] w-[calc(100%-2rem)] max-w-sm bg-white rounded-2xl border border-slate-200 shadow-2xl p-6"
             >
               <h3 className="font-extrabold text-slate-900 mb-2">Delete examination?</h3>
-              <p className="text-sm text-slate-500 font-medium mb-5">Only draft examinations can be deleted. This cannot be undone.</p>
+              <p className="text-sm text-slate-500 font-medium mb-5">This will permanently delete the examination and all associated prediction and XAI data. Cannot be undone.</p>
               <div className="flex gap-3">
                 <button onClick={() => setDeleteId(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-bold hover:bg-slate-50 transition">Cancel</button>
                 <button onClick={handleDelete} disabled={deleteLoading} className="flex-1 py-2.5 rounded-xl bg-[#F55486] text-white text-sm font-black hover:bg-[#e04070] transition disabled:opacity-60 flex items-center justify-center gap-2">

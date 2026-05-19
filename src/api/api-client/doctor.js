@@ -173,6 +173,16 @@ const doctor = {
     },
 
     /**
+     * DELETE /api/doctor/examinations/:id/force
+     * Force-delete any examination regardless of status (also deletes prediction + XAI).
+     * @param {number} id
+     * @returns {Promise<{message: string}>}
+     */
+    forceDelete(id) {
+      return client.delete(`/doctor/examinations/${id}/force`).then((r) => r.data);
+    },
+
+    /**
      * POST /api/doctor/examinations/:id/submit
      * Marks the examination as submitted (ready for prediction).
      * @param {number} id
