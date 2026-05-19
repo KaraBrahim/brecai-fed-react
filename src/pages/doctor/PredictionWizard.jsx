@@ -491,7 +491,9 @@ export default function PredictionWizard({ onClose }) {
             }
 
             // ETag may be quoted ("abc123") — keep as-is, R2 requires the quotes
-            const etag = res.headers.get('ETag') || res.headers.get('etag') || `"part-${partNumber}"`
+            const rawEtag = res.headers.get('ETag') || res.headers.get('etag') || `part-${partNumber}`
+            // Ensure quotes are present (some browsers strip them)
+            const etag = rawEtag.startsWith('"') ? rawEtag : `"${rawEtag}"`
             uploadedParts++
             const pct = Math.round(30 + (uploadedParts / totalParts) * 28) // 30 → 58
             setProgressPct(pct)
@@ -676,7 +678,13 @@ export default function PredictionWizard({ onClose }) {
           // Ignore — may already be in predicted state and can't be deleted
         }
       }
-      setError(err?.response?.data?.message || err?.message || 'An error occurred')
+      setError(
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        (err?.response?.data ? JSON.stringify(err.response.data).slice(0, 300) : null) ||
+        err?.message ||
+        'An error occurred'
+      )
       setStep('slide')
     }
   }, [selectedPatient, selectedModel, slideFile, requiresWSI, t])
