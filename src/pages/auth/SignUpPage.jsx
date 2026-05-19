@@ -497,8 +497,8 @@ function DoctorForm({ onBack, onNext }) {
   // Load all active orgs on mount (only when no invitation)
   useEffect(() => {
     if (invitationToken) return
-    fetch(`${import.meta.env.VITE_API_URL}/api/auth/organizations`)
-      .then(r => r.json())
+    setOrgsLoading(true)
+    auth.getOrganizations()
       .then(data => {
         const list = Array.isArray(data) ? data : data?.data || []
         setOrgs(list)
