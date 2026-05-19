@@ -466,24 +466,17 @@ export default function PredictionWizard({ onClose }) {
           throw new Error(`Feature extraction failed: ${extractErr.message}`)
         }
 
-        // Decode base64 .pt and upload to Laravel as a small file
+        // Decode base64 .pt and upload to Laravel as base64 JSON (avoids PHP upload_max_filesize limit)
         setProgressLabel('Saving features to server…')
         setProgressPct(75)
 
-        const ptBytes = Uint8Array.from(atob(ptB64), c => c.charCodeAt(0))
-        const ptBlob  = new Blob([ptBytes], { type: 'application/octet-stream' })
-        const ptFile  = new File([ptBlob], 'features.pt', { type: 'application/octet-stream' })
-
-        const wsi = await doctorApi.wsiUploads.upload(
-          { patient_id: selectedPatient.id, file: ptFile },
-          (e) => {
-            const pct = Math.round((e.loaded / e.total) * 5)
-            setProgressPct(75 + pct)
-          }
-        )
+        // Create a WsiUpload record via JSON (base64) — no multipart needed
+        const wsi = await doctorApi.wsiUploads.uploadPtBase64({
+          patient_id: selectedPatient.id,
+          pt_b64: ptB64,
+          original_name: slideFile.name,
+        })
         wsiUploadId = wsi.id
-
-        // Mark as ready (features already extracted)
         setProgressPct(80)
       }
 

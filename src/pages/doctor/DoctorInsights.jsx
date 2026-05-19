@@ -162,7 +162,7 @@ export default function DoctorInsights() {
           icon={TrendingUp} iconColor="blue"
           className="xl:col-span-2"
         >
-          <div className="h-56 px-4 pb-4">
+          <div className="h-56 px-4 pb-4 min-h-0">
             {loading ? (
               <div className="h-full flex items-center justify-center">
                 <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-[#0572B2] animate-spin" />
@@ -196,7 +196,7 @@ export default function DoctorInsights() {
           subtitle={`${predResults?.total ?? 0} predictions`}
           icon={Activity} iconColor="teal"
         >
-          <div className="h-56 px-4 pb-4 flex flex-col items-center justify-center">
+          <div className="h-56 px-4 pb-4 flex flex-col items-center justify-center min-h-0">
             {loading ? (
               <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-[#0BB592] animate-spin" />
             ) : predResults?.total > 0 ? (
