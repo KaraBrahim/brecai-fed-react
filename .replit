@@ -42,3 +42,8 @@ externalPort = 3001
 deploymentTarget = "static"
 build = ["npm", "run", "build"]
 publicDir = "dist"
+
+[userenv]
+
+[userenv.shared]
+VITE_API_URL = "https://breast-cancer-detection-backend-main-5kbnz8.laravel.cloud"
