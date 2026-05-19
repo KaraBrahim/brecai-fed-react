@@ -461,13 +461,31 @@ export default function PredictionWizard({ onClose }) {
           setProgressLabel('Uploading slide to secure storage…')
           setProgressPct(30)
 
+          // Tick +1% every 2s, cap at 58. If upload finishes early it jumps straight to 58.
+          let uploadPct = 30
+          const ticker = setInterval(() => {
+            uploadPct = Math.min(57, uploadPct + 1)
+            setProgressPct(uploadPct)
+          }, 2000)
+
           // Upload directly to R2 — no server involved, no size limit
-          const uploadRes = await fetch(presigned_url, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/octet-stream' },
-            body: slideFile,
-          })
-          if (!uploadRes.ok) throw new Error(`R2 upload failed (${uploadRes.status})`)
+          let uploadRes
+          try {
+            uploadRes = await fetch(presigned_url, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/octet-stream' },
+              body: slideFile,
+            })
+          } catch (fetchErr) {
+            clearInterval(ticker)
+            throw new Error(`R2 upload network error: ${fetchErr.message} — check CORS policy on slidesbucket`)
+          } finally {
+            clearInterval(ticker)
+          }
+          if (!uploadRes.ok) {
+            const body = await uploadRes.text().catch(() => '')
+            throw new Error(`R2 upload failed (HTTP ${uploadRes.status}): ${body.slice(0, 200)}`)
+          }
 
           setProgressPct(58)
           setProgressLabel('Slide stored — registering…')
