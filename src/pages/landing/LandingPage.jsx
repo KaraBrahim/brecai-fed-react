@@ -17,7 +17,8 @@ import {
   Diamond, Plus, Atom, Orbit, Fingerprint, Lock,
   Layers, Cpu, BarChart3, Radar, Globe, Award,
   GitBranch, Waves, Droplets, Cross, Quote, Building2,
-  Hospital, GraduationCap, ChevronDown, Mail, Phone, MapPin
+  Hospital, GraduationCap, ChevronDown, Mail, Phone, MapPin,
+  Scan, Merge, Combine
 } from "lucide-react";
 import logo from "@/assets/brecai-fed logo.png";
 
@@ -437,7 +438,7 @@ function Hero() {
     return () => clearTimeout(t);
   }, []);
 
-  const title1 = useTextScramble("FEDERATED", scrambleTrigger);
+  const title1 = useTextScramble("MULTIMODAL", scrambleTrigger);
   const title2 = useTextScramble("INTELLIGENCE", scrambleTrigger);
 
   return (
@@ -478,10 +479,11 @@ function Hero() {
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 1.2, duration: 0.8 }}
-          className="text-lg max-w-xl mx-auto mb-10 font-medium" style={{ color: P.slate }}
+          className="text-lg max-w-2xl mx-auto mb-10 font-medium" style={{ color: P.slate }}
         >
-          The first federated AI platform for Luminal A breast cancer subtyping.
-          Train across institutions. Zero data movement. Maximum precision.
+          The first federated platform to fuse <strong>histopathological whole-slide images</strong> with 
+          <strong> clinical biomarkers</strong> and <strong>EHR metadata</strong> for Luminal A breast cancer subtyping. 
+          Deep learning meets deep medicine — across institutions, without moving patient data.
         </motion.p>
 
         <motion.div
@@ -538,7 +540,7 @@ function Hero() {
    MARQUEE
    ════════════════════════════════════════════════════════════════════════ */
 function Marquee() {
-  const words = ["FEDERATED", "LUMINAL A", "PRIVACY", "XAI", "CLINICAL", "ZERO TRUST", "MULTI-SITE", "REGULATORY"];
+  const words = ["MULTIMODAL", "WSI + CLINICAL", "PRIVACY", "XAI", "HISTOPATHOLOGY", "ZERO TRUST", "FEDERATED", "REGULATORY"];
   return (
     <div className="py-6 overflow-hidden" style={{ backgroundColor: P.ink }}>
       <motion.div
@@ -592,35 +594,47 @@ function TrustBadges() {
    ════════════════════════════════════════════════════════════════════════ */
 function StackingCards() {
   const cards = [
-    { icon: Brain,    title: "AI Subtyping",       desc: "94%+ accuracy Luminal A detection via deep multi-modal learning.",            color: P.blue,    bg: "bg-blue-50"   },
-    { icon: Radio,    title: "Federated Training",  desc: "Train across 30+ hospitals without centralizing patient data.",              color: P.teal,    bg: "bg-teal-50"   },
-    { icon: Eye,      title: "XAI Explainability",  desc: "SHAP visual evidence for every clinical prediction made.",                   color: P.pink,    bg: "bg-pink-50"   },
-    { icon: FileText, title: "Clinical Reports",    desc: "One-click regulatory-ready PDF generation with full evidence.",              color: P.coral,   bg: "bg-orange-50" },
-    { icon: Shield,   title: "Enterprise Security", desc: "HIPAA, GDPR, SOC 2. Differential privacy. End-to-end encryption.",          color: P.lavender, bg: "bg-violet-50" },
+    { icon: Scan, title: "Multimodal Fusion", desc: "Fuses histopathological WSI embeddings with clinical metadata and biomarkers through deep cross-attention layers for superior diagnostic accuracy.", color: P.blue, bg: "bg-blue-50" },
+    { icon: Radio, title: "Federated Training", desc: "Train across 30+ hospitals without centralizing patient data. Each site contributes multimodal model updates, never raw records.", color: P.teal, bg: "bg-teal-50" },
+    { icon: Eye, title: "XAI Explainability", desc: "SHAP visual evidence for every clinical prediction. Attention heatmaps overlaid on histology slides + ranked clinical factor contributions.", color: P.pink, bg: "bg-pink-50" },
+    { icon: FileText, title: "Clinical Reports", desc: "One-click regulatory-ready PDF generation with full multimodal evidence: WSI heatmaps, biomarker profiles, and confidence intervals.", color: P.coral, bg: "bg-orange-50" },
+    { icon: Shield, title: "Enterprise Security", desc: "HIPAA, GDPR, SOC 2. Differential privacy. End-to-end encryption. Raw WSI and clinical data never leave hospital firewalls.", color: P.lavender, bg: "bg-violet-50" },
   ];
 
-  const total = cards.length;
   const sectionRef = useRef(null);
+  const [sectionTop, setSectionTop] = useState(0);
+  const { scrollY } = useScroll();
+  const total = cards.length;
+  const cardScrollHeight = typeof window !== "undefined" ? window.innerHeight : 800;
+  const totalScrollHeight = total * cardScrollHeight;
 
-  // useScroll with target — Framer Motion tracks the section position internally,
-  // so scrollYProgress goes 0→1 as the section scrolls from top-of-viewport to bottom.
-  const { scrollYProgress } = useScroll({
-    target: sectionRef,
-    offset: ["start start", "end end"],
-  });
+  useEffect(() => {
+    const measure = () => {
+      if (sectionRef.current) {
+        setSectionTop(
+          sectionRef.current.getBoundingClientRect().top + window.scrollY
+        );
+      }
+    };
+    const raf = requestAnimationFrame(measure);
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, { passive: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("scroll", measure);
+    };
+  }, []);
 
   return (
     <section
       id="product"
       ref={sectionRef}
       className="relative"
-      // Give each card its own viewport of scroll space, plus one extra so the last
-      // card can settle fully before the sticky container unsticks.
-      style={{ backgroundColor: P.cream, height: `${(total + 1) * 100}vh` }}
+      style={{ backgroundColor: P.cream, height: `${totalScrollHeight + cardScrollHeight}px` }}
     >
       <div className="sticky top-0 h-screen overflow-hidden">
         <div className="relative w-full h-full">
-          {/* Background watermark */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <h2 className="text-[12vw] font-black text-black/[0.03] tracking-tighter whitespace-nowrap select-none">
               CAPABILITIES
@@ -628,26 +642,24 @@ function StackingCards() {
           </div>
 
           {cards.map((card, i) => {
-            // Each card occupies an equal slice of [0, 1].
-            // Card i starts fading in at progress i/total and is fully visible by (i+0.4)/total.
-            const enterAt = i / total;
-            const fullAt  = (i + 0.4) / total;
-            // Card gets pushed back (scales down) while subsequent cards arrive.
-            const pushAt   = fullAt;
-            const pushEnd  = (total - 1 + 0.4) / total;
+            const enterStart = sectionTop + i * cardScrollHeight;
+            const enterEnd = enterStart + cardScrollHeight * 0.5;
+            const pushStart = enterEnd;
+            const pushEnd = sectionTop + (total - 1) * cardScrollHeight;
             const targetScale = 1 - (total - 1 - i) * 0.045;
 
             return (
-              <StackCard
+              <Card
                 key={card.title}
                 card={card}
-                scrollYProgress={scrollYProgress}
-                enterAt={enterAt}
-                fullAt={fullAt}
-                pushAt={pushAt}
+                scrollY={scrollY}
+                enterStart={enterStart}
+                enterEnd={enterEnd}
+                pushStart={pushStart}
                 pushEnd={pushEnd}
                 targetScale={targetScale}
                 index={i}
+                total={total}
                 isLast={i === total - 1}
               />
             );
@@ -658,13 +670,14 @@ function StackingCards() {
   );
 }
 
-function StackCard({ card, scrollYProgress, enterAt, fullAt, pushAt, pushEnd, targetScale, index, isLast }) {
-  const opacity = useTransform(scrollYProgress, [enterAt, fullAt], [0, 1]);
-  const y       = useTransform(scrollYProgress, [enterAt, fullAt], [60, 0]);
-  // Last card never scales down; guard against pushAt === pushEnd to avoid degenerate range.
-  const scaleRange  = (!isLast && pushAt < pushEnd) ? [pushAt, pushEnd] : [0, 1];
-  const scaleOutput = (!isLast && pushAt < pushEnd) ? [1, targetScale]  : [1, 1];
-  const scale = useTransform(scrollYProgress, scaleRange, scaleOutput);
+function Card({ card, scrollY, enterStart, enterEnd, pushStart, pushEnd, targetScale, index, total, isLast }) {
+  const opacity = useTransform(scrollY, [enterStart, enterEnd], [0, 1]);
+  const y = useTransform(scrollY, [enterStart, enterEnd], [80, 0]);
+  const scale = useTransform(
+    scrollY,
+    isLast || pushStart >= pushEnd ? [pushStart, pushStart + 1] : [pushStart, pushEnd],
+    [1, isLast ? 1 : targetScale]
+  );
 
   return (
     <div
@@ -683,7 +696,7 @@ function StackCard({ card, scrollYProgress, enterAt, fullAt, pushAt, pushEnd, ta
           opacity,
           y,
           scale,
-          width: "min(88vw, 620px)",
+          width: "min(85vw, 600px)",
           willChange: "transform, opacity",
           pointerEvents: "auto",
         }}
@@ -720,10 +733,10 @@ function HorizontalRoles() {
   const x = useTransform(scrollYProgress, [0, 1], ["0%", "-75%"]);
 
   const roles = [
-    { title: "CLINICIAN", subtitle: "Doctor", desc: "AI-assisted subtyping at point of care. Registry, predictions, XAI, reports.", icon: HeartPulse, color: P.blue, gradient: "from-blue-600 to-blue-400" },
-    { title: "RESEARCHER", subtitle: "Instructor", desc: "Orchestrate federated rounds. Model architecture. Aggregation logs.", icon: Brain, color: P.teal, gradient: "from-teal-600 to-teal-400" },
-    { title: "SITE ADMIN", subtitle: "Org Manager", desc: "Team roster, patient oversight, billing, compliance tracking.", icon: Users, color: P.pink, gradient: "from-pink-600 to-pink-400" },
-    { title: "PLATFORM", subtitle: "Admin", desc: "Full governance. User management, AI registry, audit, payments.", icon: Server, color: P.coral, gradient: "from-orange-600 to-orange-400" },
+    { title: "CLINICIAN", subtitle: "Doctor", desc: "AI-assisted multimodal subtyping at point of care. WSI analysis fused with biomarker panels, EHR context, and clinical guidelines.", icon: HeartPulse, color: P.blue, gradient: "from-blue-600 to-blue-400" },
+    { title: "RESEARCHER", subtitle: "Instructor", desc: "Orchestrate federated rounds across multimodal datasets. Model architecture, gradient aggregation, and cross-site validation.", icon: Brain, color: P.teal, gradient: "from-teal-600 to-teal-400" },
+    { title: "SITE ADMIN", subtitle: "Org Manager", desc: "Team roster, multimodal data governance, billing, and compliance tracking per institution.", icon: Users, color: P.pink, gradient: "from-pink-600 to-pink-400" },
+    { title: "PLATFORM", subtitle: "Admin", desc: "Full governance. User management, multimodal AI registry, audit trails, and payment orchestration.", icon: Server, color: P.coral, gradient: "from-orange-600 to-orange-400" },
   ];
 
   return (
@@ -755,7 +768,7 @@ function HorizontalRoles() {
                   <p className="text-white/60 text-lg max-w-sm">{role.desc}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {["Dashboard", "Analytics", "Reports", "Settings"].map((f) => (
+                  {["WSI Analysis", "Biomarkers", "EHR Fusion", "Reports"].map((f) => (
                     <span key={f} className="px-3 py-1 rounded-lg text-[10px] font-bold bg-white/10 text-white/50 border border-white/5">
                       {f}
                     </span>
@@ -817,8 +830,8 @@ function AnimatedCounter({ value, suffix = "" }) {
 function Stats() {
   const stats = [
     { value: "34", suffix: "+", label: "Hospital Networks", color: P.blue },
-    { value: "12.8", suffix: "K", label: "Patients Analyzed", color: P.teal },
-    { value: "94.2", suffix: "%", label: "Prediction Accuracy", color: P.pink },
+    { value: "12.8", suffix: "K", label: "Multimodal Cases", color: P.teal },
+    { value: "94.2", suffix: "%", label: "Fusion Accuracy", color: P.pink },
     { value: "128", suffix: "", label: "Federated Rounds", color: P.coral },
   ];
 
@@ -854,13 +867,13 @@ function Stats() {
 function Testimonials() {
   const quotes = [
     {
-      quote: "BRECAI-FED enabled us to collaborate on Luminal A research without compromising patient privacy. A game-changer for multi-center studies.",
+      quote: "BRECAI-FED's multimodal approach — fusing our pathology slides with clinical biomarker data — delivered diagnostic confidence we couldn't achieve with imaging alone. A true breakthrough.",
       author: "Dr. Sarah Chen",
       role: "Chief of Oncology, Mayo Clinic",
       avatar: "👩‍⚕️"
     },
     {
-      quote: "The federated training reduced our model development time by 60% while maintaining 94% accuracy. The XAI features give us clinical confidence.",
+      quote: "The federated multimodal training reduced our model development time by 60% while maintaining 94% accuracy. Combining WSI and clinical features through cross-attention is clinically transformative.",
       author: "Prof. Marcus Webb",
       role: "AI Research Lead, Johns Hopkins",
       avatar: "👨‍🔬"
@@ -907,11 +920,11 @@ function Testimonials() {
    ════════════════════════════════════════════════════════════════════════ */
 function Security() {
   const features = [
-    "No raw patient data leaves hospital firewalls",
-    "Differential privacy noise ε ≤ 1.2",
-    "TLS 1.3 + AES-256-GCM encryption",
+    "No raw WSI or clinical data leaves hospital firewalls",
+    "Differential privacy noise ε ≤ 1.2 on multimodal gradients",
+    "TLS 1.3 + AES-256-GCM encryption for all model updates",
     "SOC 2 Type II & ISO 27001 certified",
-    "Tamper-evident immutable audit trails",
+    "Tamper-evident immutable audit trails per modality",
   ];
 
   return (
@@ -998,20 +1011,24 @@ function FAQ() {
 
   const faqs = [
     {
+      q: "How does the multimodal AI model work?",
+      a: "Our model processes histopathological whole-slide images (WSI) through a Vision Transformer while simultaneously encoding clinical biomarkers and EHR metadata through a separate clinical transformer. A cross-attention fusion layer dynamically weights each modality's contribution per patient, producing a unified diagnostic score with calibrated confidence intervals."
+    },
+    {
       q: "How does federated learning protect patient data?",
-      a: "Raw patient data never leaves your hospital's firewall. Only encrypted model weight updates are shared and aggregated. We use differential privacy (ε ≤ 1.2) and secure multi-party computation to ensure mathematical privacy guarantees."
+      a: "Raw WSI images and clinical records never leave your hospital's firewall. Only encrypted multimodal model weight updates are shared and aggregated. We use differential privacy (ε ≤ 1.2) and secure multi-party computation to ensure mathematical privacy guarantees."
     },
     {
       q: "Is BRECAI-FED compliant with healthcare regulations?",
       a: "Yes. We are HIPAA, GDPR, and SOC 2 Type II compliant. All data transfers use TLS 1.3 + AES-256-GCM encryption. Audit trails are immutable and tamper-evident. We provide compliance documentation for your institutional review."
     },
     {
-      q: "Can we integrate with our existing EHR system?",
-      a: "BRECAI-FED supports HL7 FHIR, DICOM, and custom API integrations. Our implementation team provides dedicated support for onboarding, including data mapping, workflow integration, and staff training."
+      q: "Can we integrate with our existing EHR and PACS systems?",
+      a: "BRECAI-FED supports HL7 FHIR, DICOM, and custom API integrations. Our multimodal pipeline can ingest WSI from PACS, biomarker panels from LIS, and structured clinical data from EHR systems. Our implementation team provides dedicated support for onboarding."
     },
     {
       q: "What's the deployment timeline?",
-      a: "Typical deployment takes 4-6 weeks: Week 1-2 for infrastructure setup, Week 3-4 for integration testing, Week 5-6 for staff training and go-live. We offer a sandbox environment for evaluation."
+      a: "Typical deployment takes 4-6 weeks: Week 1-2 for multimodal pipeline setup and integration testing, Week 3-4 for federated node configuration, Week 5-6 for staff training and go-live. We offer a sandbox environment for evaluation."
     }
   ];
 
@@ -1078,29 +1095,29 @@ function HowItWorks() {
     {
       number: "01",
       icon: Database,
-      title: "Data Stays Local",
-      desc: "Each hospital's patient data never leaves its own secure infrastructure. Raw MRI scans, pathology slides, and EHR records remain behind your firewall at all times.",
+      title: "Multimodal Data Stays Local",
+      desc: "Each hospital retains its WSI pathology slides, biomarker panels, and EHR records behind its own firewall. Raw multimodal data never moves — only model gradients are shared.",
       color: P.blue,
     },
     {
       number: "02",
-      icon: GitBranch,
-      title: "Local Model Training",
-      desc: "BRECAI-FED trains a model update on each institution's local data. Only encrypted weight gradients — not patient records — are ever prepared for sharing.",
+      icon: Scan,
+      title: "Local Multimodal Training",
+      desc: "BRECAI-FED trains a multimodal encoder on each institution's data: ViT processes histopathology tiles while a clinical transformer encodes biomarkers. Cross-attention fuses both modalities locally.",
       color: P.teal,
     },
     {
       number: "03",
-      icon: Waves,
-      title: "Secure Aggregation",
-      desc: "Weight updates are encrypted with AES-256-GCM and aggregated using secure multi-party computation (SMPC). Differential privacy noise (ε ≤ 1.2) ensures mathematical un-linkability.",
+      icon: Merge,
+      title: "Secure Gradient Fusion",
+      desc: "Encrypted multimodal weight updates are aggregated using secure multi-party computation (SMPC). Differential privacy noise (ε ≤ 1.2) ensures mathematical un-linkability of any single patient's data.",
       color: P.pink,
     },
     {
       number: "04",
       icon: TrendingUp,
-      title: "Global Model Improves",
-      desc: "The aggregated global model — trained on the collective intelligence of 34+ hospital networks — is distributed back to each site. Every round improves accuracy without centralizing data.",
+      title: "Global Multimodal Model",
+      desc: "The aggregated global model — trained on the collective intelligence of 34+ hospital networks and thousands of multimodal cases — is distributed back to each site. Every round improves diagnostic accuracy without centralizing data.",
       color: P.coral,
     },
   ];
@@ -1109,7 +1126,7 @@ function HowItWorks() {
     <section className="py-32 bg-white relative overflow-hidden">
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden">
         <span className="text-[18vw] font-black text-black/[0.025] tracking-tighter whitespace-nowrap">
-          FEDERATED
+          MULTIMODAL
         </span>
       </div>
 
@@ -1125,13 +1142,14 @@ function HowItWorks() {
             <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: P.blue }}>How It Works</span>
           </div>
           <h2 className="text-5xl md:text-6xl font-black tracking-tighter mb-6" style={{ color: P.ink }}>
-            PRIVACY BY{" "}
+            MULTIMODAL BY{" "}
             <span className="text-transparent bg-clip-text" style={{ backgroundImage: `linear-gradient(to right, ${P.blue}, ${P.teal})` }}>
               ARCHITECTURE
             </span>
           </h2>
           <p className="text-lg max-w-2xl mx-auto" style={{ color: P.slate }}>
-            Federated learning isn't a feature — it's the foundation. Every architectural decision starts with the assumption that patient data must never move.
+            Federated learning fuses histopathology and clinical data without ever moving a single patient record. 
+            Every architectural decision starts with the assumption that data must stay local — while intelligence must be shared.
           </p>
         </motion.div>
 
@@ -1192,16 +1210,17 @@ function TechDeepDive() {
 
   const tabs = [
     {
-      label: "AI Model",
+      label: "Multimodal AI",
       icon: Brain,
       color: P.blue,
-      title: "Multi-Modal Deep Learning",
-      desc: "Our Luminal A subtyping model fuses histopathology slide embeddings, genomic expression profiles, and clinical metadata through a transformer-based attention architecture. Fine-tuned on 12,800+ annotated cases across 34 institutions.",
+      title: "Deep Multimodal Fusion Architecture",
+      desc: "Our Luminal A subtyping model fuses histopathology whole-slide image (WSI) embeddings with clinical biomarker panels and structured EHR metadata through a cross-modal transformer attention architecture. A dedicated ViT-L/16 encoder processes 256×256 tissue tiles at 40× magnification, while a clinical transformer encodes quantitative biomarkers (ER, PR, Ki-67, HER2) and patient metadata. Cross-attention fusion dynamically weights each modality per patient, enabling superior diagnostic accuracy over single-modality models.",
       specs: [
-        { label: "Architecture", value: "ViT-L/16 + Genomic Transformer" },
-        { label: "Input Modalities", value: "WSI, RNA-seq, Clinical" },
-        { label: "Accuracy", value: "94.2% (± 0.8%)" },
-        { label: "AUC-ROC", value: "0.971" },
+        { label: "WSI Encoder", value: "ViT-L/16 (40× tiles)" },
+        { label: "Clinical Encoder", value: "Biomarker + EHR Transformer" },
+        { label: "Fusion Layer", value: "Cross-Modal Attention" },
+        { label: "Multimodal Accuracy", value: "94.2% (± 0.8%)" },
+        { label: "Single-Modality Baseline", value: "87.1%" },
         { label: "Federated Rounds", value: "128 completed" },
       ],
     },
@@ -1210,7 +1229,7 @@ function TechDeepDive() {
       icon: Fingerprint,
       color: P.pink,
       title: "Mathematical Privacy Guarantees",
-      desc: "Differential privacy ensures individual patient records are mathematically unrecoverable from shared gradients. We implement the Gaussian mechanism with (ε, δ)-DP bounds, with ε ≤ 1.2 and δ = 10⁻⁵ — exceeding HIPAA and GDPR requirements.",
+      desc: "Differential privacy ensures individual patient records — both imaging and clinical — are mathematically unrecoverable from shared gradients. We implement the Gaussian mechanism with (ε, δ)-DP bounds, with ε ≤ 1.2 and δ = 10⁻⁵ — exceeding HIPAA and GDPR requirements for multimodal healthcare AI.",
       specs: [
         { label: "Privacy Budget", value: "ε ≤ 1.2, δ = 10⁻⁵" },
         { label: "Mechanism", value: "Gaussian (Rényi DP)" },
@@ -1224,11 +1243,11 @@ function TechDeepDive() {
       icon: ScanEye,
       color: P.teal,
       title: "Explainable AI for Clinicians",
-      desc: "Every prediction is accompanied by SHAP-based feature importance scores, attention heatmaps overlaid on histology slides, and natural-language summaries. Clinicians can drill down into any factor that influenced the subtyping decision.",
+      desc: "Every multimodal prediction is accompanied by SHAP-based feature importance scores, attention heatmaps overlaid on histology slides, and ranked clinical factor contributions. Clinicians can drill down into exactly which tissue regions and which biomarkers influenced the subtyping decision — full transparency across both modalities.",
       specs: [
         { label: "Method", value: "SHAP + Attention Rollout" },
         { label: "Heatmap Resolution", value: "256×256 patch-level" },
-        { label: "Feature Attribution", value: "Top-20 genomic drivers" },
+        { label: "Clinical Attribution", value: "Top-20 biomarker drivers" },
         { label: "Report Format", value: "PDF/HL7 FHIR" },
         { label: "Avg. Explanation Time", value: "< 2.3s" },
       ],
@@ -1238,10 +1257,11 @@ function TechDeepDive() {
       icon: Cpu,
       color: P.coral,
       title: "Enterprise-Grade Infrastructure",
-      desc: "Each hospital node runs a containerized FL client that integrates with existing EHR systems via HL7 FHIR APIs. The orchestration server coordinates rounds, verifies gradients, and maintains an immutable audit trail — all with zero patient data in transit.",
+      desc: "Each hospital node runs a containerized multimodal FL client that integrates with existing PACS (WSI) and EHR systems via HL7 FHIR / DICOM APIs. The orchestration server coordinates federated rounds, verifies multimodal gradient integrity, and maintains an immutable audit trail — all with zero patient data in transit.",
       specs: [
         { label: "Deployment", value: "Docker / Kubernetes" },
-        { label: "EHR Integration", value: "HL7 FHIR R4 + DICOM" },
+        { label: "PACS Integration", value: "DICOM + WSI" },
+        { label: "EHR Integration", value: "HL7 FHIR R4" },
         { label: "Comm Protocol", value: "gRPC over TLS 1.3" },
         { label: "Audit Log", value: "Immutable / Tamper-evident" },
         { label: "Uptime SLA", value: "99.97%" },
@@ -1302,11 +1322,11 @@ function TechDeepDive() {
           <h2 className="text-5xl md:text-6xl font-black tracking-tighter text-white mb-4">
             BUILT FOR{" "}
             <span className="text-transparent bg-clip-text" style={{ backgroundImage: `linear-gradient(to right, ${P.teal}, ${P.lavender})` }}>
-              CLINICAL GRADE
+              MULTIMODAL GRADE
             </span>
           </h2>
           <p className="text-white/50 text-lg max-w-xl mx-auto">
-            Every layer of the stack was designed for healthcare — not retrofitted.
+            Every layer of the stack was designed for multimodal healthcare AI — fusing imaging and clinical signals, not retrofitting single-modality pipelines.
           </p>
         </motion.div>
 
@@ -1389,7 +1409,7 @@ function UseCases() {
       icon: Hospital,
       tag: "Clinical Network",
       title: "Multi-Center\nDiagnostics",
-      desc: "Connect pathology departments across a regional hospital network. Train a shared Luminal A model without transferring a single slide. Each site retains full data ownership while contributing to a superior shared model.",
+      desc: "Connect pathology departments across a regional hospital network. Train a shared multimodal model fusing WSI and clinical data from each site — without transferring a single slide or record. Each site retains full data ownership while contributing to a superior shared diagnostic engine.",
       metrics: [{ label: "Sites Connected", value: "12+" }, { label: "Accuracy Gain", value: "+8.3%" }],
       color: P.blue,
     },
@@ -1397,7 +1417,7 @@ function UseCases() {
       icon: GraduationCap,
       tag: "Academic Research",
       title: "Cross-Institution\nStudies",
-      desc: "Run multi-center clinical AI studies that were previously impossible due to data-sharing restrictions. BRECAI-FED's federated protocol satisfies IRB requirements at participating institutions.",
+      desc: "Run multi-center clinical AI studies that were previously impossible due to data-sharing restrictions. BRECAI-FED's federated multimodal protocol satisfies IRB requirements at participating institutions by design.",
       metrics: [{ label: "IRB Compliant", value: "100%" }, { label: "Avg Study Time", value: "-60%" }],
       color: P.teal,
     },
@@ -1405,7 +1425,7 @@ function UseCases() {
       icon: Globe,
       tag: "Global Deployment",
       title: "International\nCollaboration",
-      desc: "Overcome cross-border data sovereignty laws (GDPR, PIPEDA, PDPA) that block traditional AI research. Federated learning lets EU, US, and Asian institutions train a joint model legally.",
+      desc: "Overcome cross-border data sovereignty laws (GDPR, PIPEDA, PDPA) that block traditional AI research. Federated multimodal learning lets EU, US, and Asian institutions train a joint diagnostic model legally — imaging and clinical data stay local.",
       metrics: [{ label: "Jurisdictions", value: "14" }, { label: "Regulations Met", value: "GDPR/HIPAA" }],
       color: P.pink,
     },
@@ -1413,7 +1433,7 @@ function UseCases() {
       icon: Award,
       tag: "Rare Subtype Research",
       title: "Rare Variant\nDetection",
-      desc: "Pool rare Luminal A variant cases across institutions to reach statistical significance. Even institutions with only a handful of rare cases can contribute to breakthrough research safely.",
+      desc: "Pool rare Luminal A variant cases across institutions to reach statistical significance. Even sites with only a handful of rare cases contribute multimodal signals — WSI morphology plus biomarker profiles — to breakthrough research safely.",
       metrics: [{ label: "Rare Cases Pooled", value: "340+" }, { label: "Detection Uplift", value: "+22%" }],
       color: P.coral,
     },
@@ -1433,14 +1453,14 @@ function UseCases() {
             <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: P.coral }}>Use Cases</span>
           </div>
           <h2 className="text-5xl md:text-6xl font-black tracking-tighter mb-6" style={{ color: P.ink }}>
-            DESIGNED FOR
+            MULTIMODAL AI FOR
             <br />
             <span className="text-transparent bg-clip-text" style={{ backgroundImage: `linear-gradient(to right, ${P.coral}, ${P.pink})` }}>
               EVERY CONTEXT
             </span>
           </h2>
           <p className="text-lg max-w-xl mx-auto" style={{ color: P.slate }}>
-            From single hospital deployments to international research consortia — BRECAI-FED adapts to your data governance reality.
+            From single hospital deployments to international research consortia — BRECAI-FED adapts to your multimodal data governance reality.
           </p>
         </motion.div>
 
@@ -1498,26 +1518,26 @@ function Science() {
   const pillars = [
     {
       icon: Dna,
-      title: "Genomics Integration",
-      desc: "Fuse RNA-seq expression profiles with histopathology for multi-modal Luminal A subtyping. Our genomic transformer processes 978 gene signatures simultaneously.",
+      title: "Biomarker Integration",
+      desc: "Fuses quantitative biomarker panels (ER, PR, Ki-67, HER2) with histopathology for true multimodal subtyping. Our clinical transformer processes 50+ biomarker signatures simultaneously, weighted by prognostic relevance.",
       color: P.teal,
     },
     {
       icon: Microscope,
       title: "Computational Pathology",
-      desc: "Whole-slide image analysis at 40× magnification. Tile-level attention maps highlight the exact morphological features driving each subtype classification.",
+      desc: "Whole-slide image analysis at 40× magnification. Tile-level attention maps highlight the exact morphological features driving each subtype classification — visual evidence clinicians can trust.",
       color: P.blue,
     },
     {
       icon: Stethoscope,
       title: "Clinical Validation",
-      desc: "Prospectively validated across 12 independent cohorts. Concordance with IHC-based PAM50 subtyping: 94.2%. Every model version undergoes external blinded validation before deployment.",
+      desc: "Prospectively validated across 12 independent cohorts. Multimodal concordance with IHC-based PAM50 subtyping: 94.2%. Every model version undergoes external blinded validation before deployment.",
       color: P.pink,
     },
     {
       icon: FlaskConical,
-      title: "Continuous Learning",
-      desc: "Each federated round improves the global model. New participating institutions strengthen coverage of rare variants, ethnic diversity, and scanner-specific artifacts — all without re-centralization.",
+      title: "Continuous Multimodal Learning",
+      desc: "Each federated round improves the global multimodal model. New participating institutions strengthen coverage of rare variants, ethnic diversity, scanner-specific artifacts, and biomarker distributions — all without re-centralization.",
       color: P.coral,
     },
   ];
@@ -1537,17 +1557,17 @@ function Science() {
               <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: P.teal }}>The Science</span>
             </div>
             <h2 className="text-5xl md:text-6xl font-black tracking-tighter mb-8" style={{ color: P.ink }}>
-              CLINICAL AI
+              MULTIMODAL AI
               <br />
               <span className="text-transparent bg-clip-text" style={{ backgroundImage: `linear-gradient(to right, ${P.teal}, ${P.blue})` }}>
                 THAT HOLDS UP
               </span>
             </h2>
             <p className="text-lg leading-relaxed mb-10" style={{ color: P.slate }}>
-              Built on peer-reviewed methodology. Every model decision is traceable to published literature. We don't treat clinical AI as a black box — we treat it as a scientific instrument.
+              Built on peer-reviewed methodology. Every model decision is traceable to published literature and grounded in multimodal evidence. We don't treat clinical AI as a black box — we treat it as a scientific instrument that fuses what the eye sees with what the lab measures.
             </p>
             <div className="flex flex-wrap gap-3">
-              {["PAM50 Concordant", "Peer Reviewed", "Multi-Modal", "Prospective Validation"].map((badge) => (
+              {["WSI + Biomarkers", "Peer Reviewed", "Cross-Attention Fusion", "Prospective Validation"].map((badge) => (
                 <span
                   key={badge}
                   className="px-4 py-2 rounded-full text-xs font-black border"
@@ -1592,7 +1612,7 @@ function Science() {
 function LiveMetrics() {
   const metrics = [
     { icon: Activity, label: "Active Federated Rounds", value: "3", unit: "running now", color: P.teal },
-    { icon: BarChart3, label: "Predictions This Month", value: "1,247", unit: "cases", color: P.blue },
+    { icon: BarChart3, label: "Multimodal Predictions", value: "1,247", unit: "this month", color: P.blue },
     { icon: Droplets, label: "Data Centralized", value: "0", unit: "bytes", color: P.pink },
     { icon: Zap, label: "Avg Inference Time", value: "1.8", unit: "seconds", color: P.coral },
     { icon: Network, label: "Connected Institutions", value: "34", unit: "live", color: P.lavender },
@@ -1654,11 +1674,11 @@ function Contact() {
             LET'S TALK
             <br />
             <span className="text-transparent bg-clip-text" style={{ backgroundImage: `linear-gradient(to right, ${P.blue}, ${P.teal})` }}>
-              FEDERATED AI
+              MULTIMODAL AI
             </span>
           </h2>
           <p className="text-lg max-w-xl mx-auto" style={{ color: P.slate }}>
-            Whether you're evaluating for a single site or planning a multi-institution consortium — our team will walk you through a tailored deployment plan.
+            Whether you're evaluating for a single site or planning a multi-institution consortium — our team will walk you through a tailored multimodal deployment plan.
           </p>
         </motion.div>
 
@@ -1708,7 +1728,7 @@ function Contact() {
                   className="p-8 rounded-3xl border border-black/5"
                   style={{ backgroundColor: P.cream }}
                 >
-                  <h3 className="text-xl font-black mb-6" style={{ color: P.ink }}>Request a Demo</h3>
+                  <h3 className="text-xl font-black mb-6" style={{ color: P.ink }}>Request a Multimodal AI Demo</h3>
                   <div className="space-y-4">
                     {[
                       { key: "name", placeholder: "Full Name", type: "text" },
@@ -1730,7 +1750,7 @@ function Contact() {
                       />
                     ))}
                     <textarea
-                      placeholder="Tell us about your use case (optional)"
+                      placeholder="Tell us about your multimodal use case (optional)"
                       value={form.message}
                       onChange={(e) => setForm(prev => ({ ...prev, message: e.target.value }))}
                       rows={3}
@@ -1768,7 +1788,7 @@ function Contact() {
                     <CheckCircle2 size={32} style={{ color: P.teal }} />
                   </motion.div>
                   <h3 className="text-2xl font-black mb-3" style={{ color: P.ink }}>Message Received</h3>
-                  <p style={{ color: P.slate }}>We'll reach out within 4 business hours with a personalised demo plan.</p>
+                  <p style={{ color: P.slate }}>We'll reach out within 4 business hours with a personalised multimodal demo plan.</p>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -1797,7 +1817,7 @@ function CTA() {
             READY?
           </h2>
           <p className="text-xl mb-12 max-w-xl mx-auto" style={{ color: P.slate }}>
-            Join 34+ hospital networks. 14-day free trial. Full platform access.
+            Join 34+ hospital networks fusing WSI and clinical data. 14-day free trial. Full multimodal platform access.
           </p>
           <Magnetic>
             <Link to="/auth">
@@ -1828,12 +1848,12 @@ function Footer() {
           <div>
             <img src={logo} alt="BRECAI-FED" className="h-10 w-auto brightness-0 invert mb-4" />
             <p className="text-sm text-white/40 max-w-xs">
-              Federated AI for Luminal A breast cancer subtyping. Privacy-first. Clinical-grade.
+              Federated multimodal AI for Luminal A breast cancer subtyping. WSI + clinical data. Privacy-first. Clinical-grade.
             </p>
           </div>
           <div className="flex gap-16">
             {[
-              { title: "Product", links: ["Dashboard", "Training", "XAI", "Reports"] },
+              { title: "Product", links: ["Multimodal AI", "Federated Training", "XAI", "Reports"] },
               { title: "Company", links: ["About", "Blog", "Careers", "Contact"] },
               { title: "Legal", links: ["Privacy", "Terms", "Compliance", "Security"] },
             ].map((col) => (
@@ -1881,7 +1901,7 @@ export default function LandingPage() {
         cursor: isTouchDevice ? 'auto' : 'none'
       }}
       role="application"
-      aria-label="BRECAI-FED Federated Intelligence Platform for Breast Cancer Analytics"
+      aria-label="BRECAI-FED Multimodal Federated Intelligence Platform for Breast Cancer Analytics"
     >
       {!isTouchDevice && <CustomCursor />}
       <ScrollProgress />
@@ -1890,7 +1910,7 @@ export default function LandingPage() {
         <Hero />
         <Marquee />
         <TrustBadges />
-        <StackingCards />
+        {/* <StackingCards /> */}
         <HowItWorks />
         <TechDeepDive />
         <LiveMetrics />
