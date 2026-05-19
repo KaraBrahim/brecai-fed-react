@@ -78,7 +78,7 @@ function PatientCard({ patient, selected, onClick }) {
 /* ── Model card ──────────────────────────────────────────────────────────── */
 function ModelCard({ model, selected, onClick }) {
   const inferenceType = model.inference_type || model.metadata?.inference_type || ''
-  const requiresWSI = model.metadata?.requires_wsi ?? inferenceType.includes('a6') || inferenceType.includes('a4')
+  const requiresWSI = model.metadata?.requires_wsi ?? (inferenceType.includes('a6') || inferenceType.includes('a4'))
   const requiresClinical = model.metadata?.requires_clinical ?? true
   const icon = requiresWSI && requiresClinical ? Layers : requiresWSI ? ImageIcon : FlaskConical
   const Icon = icon
