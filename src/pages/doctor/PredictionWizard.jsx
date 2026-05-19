@@ -443,7 +443,6 @@ export default function PredictionWizard({ onClose }) {
         setProgressPct(25)
 
         const fastApiUrl = __FASTAPI_URL__
-        let wsiUploadId = null
 
         const isSVS = slideFile.name.toLowerCase().match(/\.(svs|ndpi|scn|mrxs)$/)
 
