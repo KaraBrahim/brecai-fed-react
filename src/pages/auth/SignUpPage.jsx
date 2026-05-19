@@ -9,6 +9,7 @@ import {
 import { useAuthStore } from '@/stores/authStore'
 import { cn } from '@/lib/utils'
 import auth from '@/api/api-client/auth'
+import { useT } from '@/stores/i18nStore'
 
 /* ── Shared OTP Input ───────────────────────────── */
 function OtpInput({ value, onChange, hasError }) {
@@ -149,12 +150,13 @@ function StepBar({ step }) {
 
 /* ── Step 1: Role selector ──────────────────────── */
 function StepRole({ onNext }) {
+  const t = useT()
   const ROLES = [
     {
       api_role: 'org_manager',
-      label: 'Org Manager',
-      sub: 'Register a clinical organization',
-      desc: 'Hospital, clinic, laboratory or radiology center joining the federated network.',
+      label: t('auth.orgManager'),
+      sub: t('auth.orgManagerSub'),
+      desc: t('auth.orgManagerDesc'),
       icon: Building2,
       gradFrom: '#D97706',
       gradTo: '#EA580C',
@@ -162,9 +164,9 @@ function StepRole({ onNext }) {
     },
     {
       api_role: 'doctor',
-      label: 'Doctor / Clinician',
-      sub: 'Join an existing site',
-      desc: 'Clinician joining an approved organization. Your account will be reviewed by the site manager before activation.',
+      label: t('auth.doctor'),
+      sub: t('auth.doctorSub'),
+      desc: t('auth.doctorDesc'),
       icon: Stethoscope,
       gradFrom: '#0572B2',
       gradTo: '#0BB592',
@@ -180,11 +182,11 @@ function StepRole({ onNext }) {
     >
       <div className="mb-8">
         <h1 className="text-[48px] font-black tracking-[-0.04em] leading-[0.88] uppercase text-slate-900">
-          Create<br />
-          <span style={{ WebkitTextFillColor: 'transparent', background: 'linear-gradient(135deg,#0BB592,#0572B2)', WebkitBackgroundClip: 'text' }}>Account</span>
+          {t('auth.createAccount').split(' ')[0]}<br />
+          <span style={{ WebkitTextFillColor: 'transparent', background: 'linear-gradient(135deg,#0BB592,#0572B2)', WebkitBackgroundClip: 'text' }}>{t('auth.createAccount').split(' ').slice(1).join(' ') || 'Account'}</span>
           <span style={{ color: '#0BB592' }}>.</span>
         </h1>
-        <p className="text-slate-400 text-sm font-semibold mt-3">Choose your role to get started</p>
+        <p className="text-slate-400 text-sm font-semibold mt-3">{t('auth.chooseRole')}</p>
       </div>
 
       <div className="space-y-3">
@@ -210,8 +212,8 @@ function StepRole({ onNext }) {
                 <p className="text-white/70 text-xs font-semibold mt-0.5 mb-3">{r.sub}</p>
                 <p className="text-white/55 text-xs font-medium leading-relaxed mb-3">{r.desc}</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {r.tags.map(t => (
-                    <span key={t} className="text-[9px] font-black uppercase tracking-wide px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.18)', color: 'rgba(255,255,255,0.85)' }}>{t}</span>
+                  {r.tags.map(tag => (
+                    <span key={tag} className="text-[9px] font-black uppercase tracking-wide px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.18)', color: 'rgba(255,255,255,0.85)' }}>{tag}</span>
                   ))}
                 </div>
               </div>
@@ -221,8 +223,8 @@ function StepRole({ onNext }) {
       </div>
 
       <p className="text-center text-sm text-slate-500 font-semibold mt-6">
-        Already have an account?{' '}
-        <Link to="/auth" className="text-[#0572B2] hover:underline font-bold">Sign in →</Link>
+        {t('auth.alreadyHave')}{' '}
+        <Link to="/auth" className="text-[#0572B2] hover:underline font-bold">{t('auth.signInArrow')}</Link>
       </p>
     </motion.div>
   )
@@ -230,6 +232,7 @@ function StepRole({ onNext }) {
 
 /* ── Step 2a: Org Manager form ──────────────────── */
 function OrgManagerForm({ onBack, onNext }) {
+  const t = useT()
   const [f, setF] = useState({
     name: '', email: '', phone_number: '', password: '', confirm: '',
     organization_name: '', organization_type: '', organization_address: '',
@@ -355,20 +358,20 @@ function OrgManagerForm({ onBack, onNext }) {
         </div>
 
         <div className="pt-1">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2.5">Organization Details</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2.5">{t('auth.orgDetails')}</p>
           <div className="space-y-3 p-4 rounded-2xl bg-slate-50 border border-slate-200">
-            <Field label="Organization name" error={errors.organization_name}>
+            <Field label={t('auth.orgName')} error={errors.organization_name}>
               <Input icon={Building2} value={f.organization_name} onChange={e => set('organization_name', e.target.value)} placeholder="Constantine Oncology Center" />
             </Field>
-            <Field label="Organization type" error={errors.organization_type}>
+            <Field label={t('auth.orgType')} error={errors.organization_type}>
               <Select value={f.organization_type} onChange={e => set('organization_type', e.target.value)}>
-                <option value="">Select type…</option>
-                {ORG_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                <option value="">{t('auth.selectType')}</option>
+                {ORG_TYPES.map(ot => <option key={ot.value} value={ot.value}>{ot.label}</option>)}
               </Select>
             </Field>
 
             {/* Address with Nominatim autocomplete */}
-            <Field label="Address" error={errors.organization_address}>
+            <Field label={t('auth.address')} error={errors.organization_address}>
               <div className="relative">
                 <div className="relative">
                   <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
@@ -430,7 +433,7 @@ function OrgManagerForm({ onBack, onNext }) {
           className="w-full flex items-center justify-between rounded-2xl px-6 py-4 text-[15px] font-black uppercase tracking-wide text-white transition-all disabled:opacity-60"
           style={{ background: 'linear-gradient(135deg,#D97706,#EA580C)', boxShadow: '0 6px 24px #D9770644' }}
         >
-          <span>{loading ? 'Registering...' : 'Continue'}</span>
+          <span>{loading ? t('auth.registering') : t('auth.continue')}</span>
           {loading ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }} className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full" /> : <ArrowRight className="w-5 h-5" />}
         </motion.button>
 
@@ -449,6 +452,7 @@ function OrgManagerForm({ onBack, onNext }) {
 
 /* ── Step 2b: Doctor form ───────────────────────── */
 function DoctorForm({ onBack, onNext }) {
+  const t = useT()
   const [searchParams] = useSearchParams()
   const invitationToken = searchParams.get('token')
 
@@ -617,9 +621,9 @@ function DoctorForm({ onBack, onNext }) {
             <CheckCircle2 className="w-3.5 h-3.5 text-[#0BB592]" />
           </div>
           <div>
-            <p className="text-xs font-black text-teal-800">You've been invited to join {inviteData.organization?.name}</p>
+            <p className="text-xs font-black text-teal-800">{t('auth.invitedTo')} {inviteData.organization?.name}</p>
             <p className="text-[11px] text-teal-700 font-medium mt-0.5 leading-relaxed">
-              Your account will be pre-approved — no waiting for manager approval needed.
+              {t('auth.preApprovedDesc')}
             </p>
           </div>
         </div>
@@ -629,9 +633,9 @@ function DoctorForm({ onBack, onNext }) {
             <Stethoscope className="w-3.5 h-3.5 text-[#0572B2]" />
           </div>
           <div>
-            <p className="text-xs font-black text-[#0572B2]">Account requires approval</p>
+            <p className="text-xs font-black text-[#0572B2]">{t('auth.accountRequiresApproval')}</p>
             <p className="text-[11px] text-blue-700 font-medium mt-0.5 leading-relaxed">
-              After registration, your account will be inactive until the Organization Manager approves your identity. You'll receive an email once approved.
+              {t('auth.approvalDesc')}
             </p>
           </div>
         </div>
@@ -695,7 +699,7 @@ function DoctorForm({ onBack, onNext }) {
                   onChange={e => { setOrgSearch(e.target.value); setShowOrgDropdown(true); if (!e.target.value) clearOrg() }}
                   onFocus={() => setShowOrgDropdown(true)}
                   onBlur={() => setTimeout(() => setShowOrgDropdown(false), 200)}
-                  placeholder={orgsLoading ? 'Loading organizations…' : 'Search your organization…'}
+                  placeholder={orgsLoading ? t('auth.loadingOrgs') : t('auth.searchOrg')}
                   disabled={orgsLoading}
                   className={cn(
                     'w-full rounded-2xl border-2 bg-slate-50 py-3.5 text-sm font-semibold text-slate-900 placeholder-slate-300 outline-none transition-all duration-200 pl-11 pr-10',
@@ -727,12 +731,12 @@ function DoctorForm({ onBack, onNext }) {
                       <p className="text-xs font-semibold text-[#F55486] mb-2">{orgsError}</p>
                       <button type="button" onClick={loadOrgs}
                         className="text-xs font-black text-[#0572B2] hover:underline">
-                        Retry
+                        {t('common.retry')}
                       </button>
                     </div>
                   ) : filteredOrgs.length === 0 ? (
                     <div className="px-4 py-6 text-center text-sm text-slate-400 font-semibold">
-                      {orgSearch ? 'No organizations match your search' : 'No approved organizations yet'}
+                      {orgSearch ? t('auth.noOrgsMatch') : t('auth.noOrgsFound')}
                     </div>
                   ) : filteredOrgs.map(org => (
                     <button
@@ -797,6 +801,7 @@ function DoctorForm({ onBack, onNext }) {
 }
 /* ── Step 3: OTP verify ─────────────────────────── */
 function OtpStep({ email, onBack }) {
+  const t = useT()
   const navigate = useNavigate()
   const { verifyOtp, getRoleHome } = useAuthStore()
   const [code, setCode] = useState('')
@@ -826,7 +831,7 @@ function OtpStep({ email, onBack }) {
             <span style={{ color: '#0BB592' }}>.</span>
           </h1>
           <p className="text-slate-500 text-sm font-semibold mt-2">
-            Enter the 6-digit code sent to <span className="text-slate-800 font-bold">{email}</span>
+            {t('auth.otpSent')} <span className="text-slate-800 font-bold">{email}</span>
           </p>
         </div>
       </div>
@@ -849,7 +854,7 @@ function OtpStep({ email, onBack }) {
         className="w-full mt-5 flex items-center justify-between rounded-2xl px-6 py-4 text-[15px] font-black uppercase tracking-wide text-white transition-all disabled:opacity-40"
         style={{ background: 'linear-gradient(135deg,#0BB592,#0572B2)', boxShadow: '0 6px 24px #0BB59244' }}
       >
-        <span>{loading ? 'Verifying...' : 'Complete Sign-Up'}</span>
+        <span>{loading ? t('auth.verifying') : t('auth.verify')}</span>
         {loading ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }} className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full" /> : <Check className="w-5 h-5" />}
       </motion.button>
     </motion.div>

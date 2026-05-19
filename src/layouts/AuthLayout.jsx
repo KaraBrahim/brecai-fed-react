@@ -2,6 +2,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { motion, useAnimationFrame } from 'framer-motion'
 import { useRef, useState } from 'react'
 import logo from '@/assets/logo.png'
+import { useI18nStore, LANGUAGES } from '@/stores/i18nStore'
 
 const NODES = [
   { x: 15, y: 18, r: 3.5, delay: 0 },
@@ -107,6 +108,7 @@ const STATS_CARDS = [
 
 export default function AuthLayout() {
   const navigate = useNavigate()
+  const { locale, setLocale } = useI18nStore()
 
   return (
     <div className="min-h-screen flex bg-slate-50 font-sans">
@@ -245,6 +247,23 @@ export default function AuthLayout() {
       <main className="w-full lg:w-[52%] flex flex-col justify-center px-6 sm:px-12 md:px-16 py-12 bg-white relative overflow-y-auto">
         {/* Top nav */}
         <div className="absolute top-6 right-6 flex items-center gap-3 text-sm font-semibold">
+          {/* Language switcher */}
+          <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
+            {LANGUAGES.map(lang => (
+              <button
+                key={lang.code}
+                onClick={() => setLocale(lang.code)}
+                title={lang.label}
+                className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                  locale === lang.code
+                    ? 'bg-white text-[#0572B2] shadow-sm'
+                    : 'text-slate-400 hover:text-slate-700'
+                }`}
+              >
+                {lang.flag}
+              </button>
+            ))}
+          </div>
           <NavLink to="/" className="text-slate-400 hover:text-[#0572B2] transition-colors text-xs font-bold uppercase tracking-widest">Platform</NavLink>
           <NavLink
             to="/auth"

@@ -3,9 +3,11 @@ import { useNavigate, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowRight, Lock, Mail } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
+import { useT } from '@/stores/i18nStore'
 
 function SignInForm() {
   const { login } = useAuthStore()
+  const t = useT()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -19,7 +21,6 @@ function SignInForm() {
     const res = await login(email, password)
     setLoading(false)
     if (!res.ok) {
-      // 403 account_pending — doctor or org_manager not yet activated
       if (res.accountPending) {
         navigate(`/auth/pending?role=${res.pendingRole || 'doctor'}`, { replace: true })
         return
@@ -40,20 +41,20 @@ function SignInForm() {
     >
       <div className="mb-8">
         <h1 className="text-[56px] font-black tracking-[-0.04em] leading-[0.88] uppercase text-slate-900">
-          Sign<br />
+          {t('auth.signIn').split(' ')[0]}<br />
           <span style={{ WebkitTextFillColor: 'transparent', background: 'linear-gradient(135deg,#093A7A,#0572B2)', WebkitBackgroundClip: 'text' }}>
-            In
+            {t('auth.signIn').split(' ').slice(1).join(' ') || 'In'}
           </span>
           <span style={{ color: '#0BB592' }}>.</span>
         </h1>
         <p className="text-slate-400 text-sm font-semibold mt-3">
-          Federated clinical AI platform
+          {t('auth.signInSubtitle')}
         </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Email</label>
+          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">{t('auth.email')}</label>
           <div className="relative">
             <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             <input
@@ -68,7 +69,7 @@ function SignInForm() {
         </div>
 
         <div>
-          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Password</label>
+          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">{t('auth.password')}</label>
           <div className="relative">
             <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             <input
@@ -76,7 +77,7 @@ function SignInForm() {
               autoComplete="current-password"
               value={password}
               onChange={e => { setPassword(e.target.value); setError('') }}
-              placeholder="Your password"
+              placeholder={t('auth.yourPassword')}
               className="w-full rounded-2xl border-2 border-slate-200 bg-slate-50 pl-11 pr-4 py-4 text-[15px] font-semibold text-slate-900 placeholder-slate-300 outline-none transition-all duration-200 focus:border-[#0572B2] focus:bg-white focus:ring-4 focus:ring-[#0572B2]/10"
             />
           </div>
@@ -99,7 +100,7 @@ function SignInForm() {
           className="w-full flex items-center justify-between gap-2 rounded-2xl px-6 py-4 text-[15px] font-black uppercase tracking-wide text-white transition-all duration-200 disabled:opacity-60"
           style={{ background: 'linear-gradient(135deg,#093A7A,#0572B2)', boxShadow: '0 6px 24px rgba(5,114,178,0.4)' }}
         >
-          <span>{loading ? 'Signing in...' : 'Continue'}</span>
+          <span>{loading ? t('auth.signingIn') : t('auth.continue')}</span>
           {loading
             ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }} className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full" />
             : <ArrowRight className="w-5 h-5" />
@@ -108,8 +109,8 @@ function SignInForm() {
       </form>
 
       <p className="text-center text-sm text-slate-500 font-semibold mt-5">
-        No account?{' '}
-        <Link to="/auth/signup" className="text-[#0572B2] hover:underline font-bold">Create one →</Link>
+        {t('auth.noAccount')}{' '}
+        <Link to="/auth/signup" className="text-[#0572B2] hover:underline font-bold">{t('auth.createOne')}</Link>
       </p>
     </motion.div>
   )

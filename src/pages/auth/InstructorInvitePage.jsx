@@ -42,7 +42,7 @@ function Input({ icon: Icon, ...props }) {
 function InstructorHero({ orgName }) {
   return (
     <div
-      className="relative overflow-hidden rounded-3xl p-8 text-white mb-8 shadow-xl"
+      className="relative overflow-hidden rounded-3xl p-7 text-white mb-8 shadow-xl"
       style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #4f46e5 50%, #7c3aed 100%)' }}
     >
       <div
@@ -55,19 +55,19 @@ function InstructorHero({ orgName }) {
           <span className="w-1.5 h-1.5 rounded-full bg-violet-300 animate-pulse" />
           <span className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-100">Invitation · Instructor</span>
         </div>
-        <div className="flex items-center gap-4 mb-3">
-          <div className="w-12 h-12 rounded-2xl bg-white/15 border border-white/20 flex items-center justify-center shrink-0">
-            <GraduationCap className="w-6 h-6 text-white" />
+        <div className="flex items-start gap-3 mb-3">
+          <div className="w-11 h-11 rounded-2xl bg-white/15 border border-white/20 flex items-center justify-center shrink-0 mt-0.5">
+            <GraduationCap className="w-5 h-5 text-white" />
           </div>
-          <div>
-            <h1 className="text-2xl font-black tracking-tight text-white leading-tight">
+          <div className="min-w-0">
+            <h1 className="text-xl font-black tracking-tight text-white leading-tight">
               You've been invited as a
             </h1>
             <p className="text-violet-200 font-bold text-sm">Data Scientist / Instructor</p>
           </div>
         </div>
         {orgName && (
-          <p className="text-violet-100/80 text-sm font-semibold">
+          <p className="text-violet-100/80 text-sm font-semibold truncate">
             Joining <span className="text-white font-black">{orgName}</span> on BRECAI-FED
           </p>
         )}
