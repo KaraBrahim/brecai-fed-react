@@ -469,6 +469,7 @@ function DoctorForm({ onBack, onNext }) {
   // Organization search (only shown when no invitation token)
   const [orgs, setOrgs] = useState([])
   const [orgsLoading, setOrgsLoading] = useState(!invitationToken)
+  const [orgsError, setOrgsError] = useState('')
   const [orgSearch, setOrgSearch] = useState('')
   const [showOrgDropdown, setShowOrgDropdown] = useState(false)
   const [selectedOrg, setSelectedOrg] = useState(null)
@@ -495,16 +496,25 @@ function DoctorForm({ onBack, onNext }) {
   }, [invitationToken])
 
   // Load all active orgs on mount (only when no invitation)
-  useEffect(() => {
+  const loadOrgs = () => {
     if (invitationToken) return
     setOrgsLoading(true)
+    setOrgsError('')
     auth.getOrganizations()
       .then(data => {
-        const list = Array.isArray(data) ? data : data?.data || []
+        const list = Array.isArray(data) ? data : (data?.data ?? [])
         setOrgs(list)
       })
-      .catch(() => {})
+      .catch(err => {
+        const msg = err?.response?.data?.message || err?.message || 'Failed to load organizations'
+        setOrgsError(msg)
+        console.error('[DoctorForm] getOrganizations failed:', err?.response?.status, msg)
+      })
       .finally(() => setOrgsLoading(false))
+  }
+
+  useEffect(() => {
+    loadOrgs()
   }, [invitationToken])
 
   const filteredOrgs = orgSearch.trim().length > 0
@@ -712,7 +722,15 @@ function DoctorForm({ onBack, onNext }) {
               {/* Dropdown */}
               {showOrgDropdown && !orgsLoading && (
                 <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden max-h-56 overflow-y-auto">
-                  {filteredOrgs.length === 0 ? (
+                  {orgsError ? (
+                    <div className="px-4 py-5 text-center">
+                      <p className="text-xs font-semibold text-[#F55486] mb-2">{orgsError}</p>
+                      <button type="button" onClick={loadOrgs}
+                        className="text-xs font-black text-[#0572B2] hover:underline">
+                        Retry
+                      </button>
+                    </div>
+                  ) : filteredOrgs.length === 0 ? (
                     <div className="px-4 py-6 text-center text-sm text-slate-400 font-semibold">
                       {orgSearch ? 'No organizations match your search' : 'No approved organizations yet'}
                     </div>
