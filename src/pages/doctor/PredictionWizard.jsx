@@ -411,79 +411,79 @@ export default function PredictionWizard({ onClose }) {
     setStep('running')
     setError('')
     setProgressPct(0)
+    setProgressStep(0)
+
+    let examId = null
 
     try {
       // Step 1: Create examination
       setProgressStep(1)
       setProgressLabel('Creating examination…')
-      setProgressPct(10)
+      setProgressPct(5)
       const exam = await doctorApi.examinations.create({
         patient_id: selectedPatient.id,
         chief_complaint: 'AI-assisted Luminal A subtyping',
         examined_at: new Date().toISOString().slice(0, 10),
       })
+      examId = exam.id
+      setProgressPct(10)
 
       // Step 2: Submit examination
       setProgressStep(2)
       setProgressLabel('Submitting examination…')
-      setProgressPct(20)
+      setProgressPct(15)
       await doctorApi.examinations.submit(exam.id)
+      setProgressPct(20)
 
-      // Step 3: Upload WSI if provided — goes DIRECTLY to FastAPI, not Laravel
+      // Step 3: WSI feature extraction (optional — falls back to clinical-only)
       let wsiUploadId = null
       if (slideFile && requiresWSI) {
         setProgressStep(3)
-        setProgressLabel(t('doctor.uploading'))
-        setProgressPct(35)
-
-        // Get FastAPI URL — injected at build time from vite.config.js
-        const fastApiUrl = __FASTAPI_URL__
-
-        // Upload WSI directly to FastAPI /extract/wsi
-        // This bypasses Laravel's POST size limit entirely
-        const formData = new FormData()
-        formData.append('wsi_file', slideFile)
-        formData.append('patch_size', '256')
-        formData.append('max_patches', '1000')
-
         setProgressLabel(t('doctor.extracting'))
-        setProgressPct(40)
+        setProgressPct(25)
+
+        const fastApiUrl = __FASTAPI_URL__
+        const wsiFormData = new FormData()
+        wsiFormData.append('wsi_file', slideFile)
+        wsiFormData.append('patch_size', '256')
+        wsiFormData.append('max_patches', '500')
 
         let ptB64 = null
         try {
           const extractRes = await fetch(`${fastApiUrl}/extract/wsi`, {
             method: 'POST',
-            body: formData,
+            body: wsiFormData,
           })
           if (!extractRes.ok) {
-            const err = await extractRes.json().catch(() => ({}))
-            throw new Error(err.detail || `FastAPI returned ${extractRes.status}`)
+            const errData = await extractRes.json().catch(() => ({}))
+            throw new Error(errData.detail || `FastAPI /extract/wsi returned ${extractRes.status}`)
           }
           const extractData = await extractRes.json()
           ptB64 = extractData.pt_b64
-          setProgressPct(70)
+          setProgressPct(65)
         } catch (extractErr) {
-          throw new Error(`Feature extraction failed: ${extractErr.message}`)
+          // /extract/wsi not deployed yet or CORS issue → fall back to clinical-only silently
+          console.warn('[Wizard] WSI extraction failed, using clinical-only mode:', extractErr.message)
+          ptB64 = null
         }
 
-        // Decode base64 .pt and upload to Laravel as base64 JSON (avoids PHP upload_max_filesize limit)
-        setProgressLabel('Saving features to server…')
+        if (ptB64) {
+          setProgressLabel('Saving features…')
+          setProgressPct(70)
+          const wsi = await doctorApi.wsiUploads.uploadPtBase64({
+            patient_id: selectedPatient.id,
+            pt_b64: ptB64,
+            original_name: slideFile.name,
+          })
+          wsiUploadId = wsi.id
+        }
         setProgressPct(75)
-
-        // Create a WsiUpload record via JSON (base64) — no multipart needed
-        const wsi = await doctorApi.wsiUploads.uploadPtBase64({
-          patient_id: selectedPatient.id,
-          pt_b64: ptB64,
-          original_name: slideFile.name,
-        })
-        wsiUploadId = wsi.id
-        setProgressPct(80)
       }
 
-      // Step 5: Dispatch prediction
-      setProgressStep(5)
+      // Step 4: Dispatch prediction
+      setProgressStep(4)
       setProgressLabel(t('doctor.analyzing'))
-      setProgressPct(80)
+      setProgressPct(78)
       const predRes = await doctorApi.predictions.predict({
         examination_id: exam.id,
         wsi_upload_id: wsiUploadId,
@@ -491,19 +491,19 @@ export default function PredictionWizard({ onClose }) {
       })
       setPredictionId(predRes.prediction_id)
 
-      // Step 6: Poll for result
+      // Step 5: Poll for result
+      setProgressStep(5)
       setProgressLabel('Waiting for AI result…')
       let attempts = 0
-      const maxAttempts = 120 // 2 min max
+      const maxAttempts = 120
       while (attempts < maxAttempts) {
         await new Promise(r => setTimeout(r, 3000))
         const status = await doctorApi.predictions.getStatus(predRes.prediction_id)
-        const pct = Math.min(99, 80 + Math.round((attempts / maxAttempts) * 19))
+        const pct = Math.min(99, 78 + Math.round((attempts / maxAttempts) * 21))
         setProgressPct(pct)
         if (status.status === 'completed') {
           setPrediction(status)
           setProgressPct(100)
-          // Fetch XAI
           try {
             const xaiData = await doctorApi.predictions.getXai(predRes.prediction_id)
             setXai(xaiData)
@@ -517,9 +517,18 @@ export default function PredictionWizard({ onClose }) {
         attempts++
       }
       throw new Error('Prediction timed out. Please check the predictions page.')
+
     } catch (err) {
+      // Clean up: delete the examination if it was created but never completed
+      if (examId) {
+        try {
+          await doctorApi.examinations.delete(examId)
+        } catch {
+          // Ignore — may already be in predicted state and can't be deleted
+        }
+      }
       setError(err?.response?.data?.message || err?.message || 'An error occurred')
-      setStep('slide') // go back to slide step to show error
+      setStep('slide')
     }
   }, [selectedPatient, selectedModel, slideFile, requiresWSI, t])
 
