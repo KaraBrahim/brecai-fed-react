@@ -490,6 +490,7 @@ export default function PredictionWizard({ onClose }) {
               throw new Error(`Part ${partNumber} failed (HTTP ${res.status}): ${body.slice(0, 150)}`)
             }
 
+            // ETag may be quoted ("abc123") — keep as-is, R2 requires the quotes
             const etag = res.headers.get('ETag') || res.headers.get('etag') || `"part-${partNumber}"`
             uploadedParts++
             const pct = Math.round(30 + (uploadedParts / totalParts) * 28) // 30 → 58
@@ -830,7 +831,7 @@ export default function PredictionWizard({ onClose }) {
             {step === 'slide' && (
               <motion.div key="slide" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
                 {error && (
-                  <div className="mb-4 p-3 rounded-xl bg-pink-50 border border-pink-200 text-[#F55486] text-xs font-semibold">
+                  <div className="mb-4 p-3 rounded-xl bg-pink-50 border border-pink-200 text-[#F55486] text-xs font-semibold max-h-32 overflow-y-auto break-all">
                     {error}
                   </div>
                 )}
