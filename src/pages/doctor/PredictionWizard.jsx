@@ -458,6 +458,9 @@ export default function PredictionWizard({ onClose }) {
         try {
           const extractRes = await fetch(`${fastApiUrl}/extract/wsi`, {
             method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${__HF_TOKEN__}`,
+            },
             body: wsiFormData,
           })
           if (!extractRes.ok) {

@@ -10,12 +10,14 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const BACKEND  = env.VITE_API_URL   || 'https://breast-cancer-detection-backend-main-5kbnz8.laravel.cloud'
   const FASTAPI  = env.VITE_FASTAPI_URL || 'https://ahmedchikhsalah-brecai-fed-api.hf.space'
+  const HF_TOKEN = env.VITE_HF_TOKEN   || ''
 
   return {
     plugins: [react(), tailwindcss()],
     // Inject both URLs as compile-time constants — no .env needed in frontend code
     define: {
       __FASTAPI_URL__: JSON.stringify(FASTAPI),
+      __HF_TOKEN__:    JSON.stringify(HF_TOKEN),
     },
     server: {
       host: '0.0.0.0',
