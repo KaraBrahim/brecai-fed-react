@@ -22,7 +22,7 @@ export function setAuthToken(token) {
 /* ── Axios instance ──────────────────────────────────────────── */
 const BASE_URL = import.meta.env.DEV
   ? '/api'
-  : (import.meta.env.VITE_API_URL || 'https://breast-cancer-detection-backend-main-p7c9cg.laravel.cloud') + '/api';
+  : (import.meta.env.VITE_API_URL || 'https://breast-cancer-detection-backend-main-5kbnz8.laravel.cloud') + '/api';
 
 const client = axios.create({
   baseURL: BASE_URL,
