@@ -74,8 +74,8 @@ export default function DoctorInsights() {
     count: d.count,
   }))
 
-  const completionRate = kpis?.total_predictions > 0
-    ? Math.round((kpis.completed_predictions / kpis.total_predictions) * 100)
+  const completionRate = kpis?.my_predictions > 0
+    ? Math.round((kpis.completed_predictions / kpis.my_predictions) * 100)
     : 0
 
   return (
@@ -129,16 +129,16 @@ export default function DoctorInsights() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-7">
         <MetricTile
           label={t('doctor.totalPatients')}
-          value={loading ? '—' : (kpis?.total_patients ?? 0)}
-          sub={t('doctor.examinations') + ': ' + (kpis?.total_examinations ?? 0)}
+          value={loading ? '—' : (kpis?.my_patients ?? 0)}
+          sub={t('doctor.examinations') + ': ' + (kpis?.my_examinations ?? 0)}
           icon={Users} color="blue"
         />
         <MetricTile
           label={t('doctor.predictions')}
-          value={loading ? '—' : (kpis?.total_predictions ?? 0)}
+          value={loading ? '—' : (kpis?.my_predictions ?? 0)}
           sub={`${completionRate}% completed`}
           icon={Brain} color="pink"
-          accent={{ label: t('doctor.pendingReview'), value: kpis?.pending_predictions ?? 0 }}
+          accent={{ label: t('doctor.pendingReview'), value: kpis?.pending_examinations ?? 0 }}
         />
         <MetricTile
           label={t('doctor.luminalA')}
@@ -148,7 +148,7 @@ export default function DoctorInsights() {
         />
         <MetricTile
           label={t('doctor.reports')}
-          value={loading ? '—' : (kpis?.total_reports ?? 0)}
+          value={loading ? '—' : (kpis?.my_reports ?? 0)}
           sub={t('doctor.avgConfidence') + ': ' + (kpis?.avg_confidence ? `${(kpis.avg_confidence * 100).toFixed(1)}%` : '—')}
           icon={FileText} color="amber"
         />
