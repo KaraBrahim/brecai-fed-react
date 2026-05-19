@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   CheckCircle, AlertTriangle, FileSignature, Brain,
   PenLine, ThumbsUp, ThumbsDown, Clock, Loader2,
-  RefreshCw, FileText,
+  RefreshCw, FileText, Trash2,
 } from 'lucide-react'
 import { SectionCard, stagger, fadeUp } from '@/components/shared'
 import { StatusPill } from '@/components/admin'
@@ -30,15 +30,35 @@ export default function FinalExamination() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await doctorApi.examinations.list({ status: 'predicted' })
-      const list = res.data || []
-      setExaminations(list)
-      if (list.length > 0 && !selected) setSelected(list[0])
+      // Load ALL examinations that need review (predicted) + stale ones (submitted/draft)
+      const [predictedRes, submittedRes] = await Promise.allSettled([
+        doctorApi.examinations.list({ status: 'predicted' }),
+        doctorApi.examinations.list({ status: 'submitted' }),
+      ])
+      const predicted = predictedRes.status === 'fulfilled' ? (predictedRes.value.data || []) : []
+      const submitted = submittedRes.status === 'fulfilled' ? (submittedRes.value.data || []) : []
+      // Combine: predicted first, then submitted (stale)
+      setExaminations([...predicted, ...submitted])
     } catch {}
     finally { setLoading(false) }
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  const [deleting, setDeleting] = useState(null)
+
+  const handleDelete = async (examId) => {
+    setDeleting(examId)
+    try {
+      await doctorApi.examinations.delete(examId)
+      if (selected?.id === examId) setSelected(null)
+      load()
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Cannot delete this examination')
+    } finally {
+      setDeleting(null)
+    }
+  }
 
   const handleSubmit = async () => {
     if (!doctorVerdict || !selected) return
@@ -120,9 +140,21 @@ export default function FinalExamination() {
                     <span className="font-mono text-xs font-bold text-slate-500">
                       {exam.patient?.patient_identifier || `Exam #${exam.id}`}
                     </span>
-                    <span className="text-[10px] text-slate-400 font-medium">
-                      {exam.examined_at ? new Date(exam.examined_at).toLocaleDateString() : '—'}
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        {exam.examined_at ? new Date(exam.examined_at).toLocaleDateString() : '—'}
+                      </span>
+                      {(exam.status === 'submitted' || exam.status === 'draft') && (
+                        <button
+                          onClick={e => { e.stopPropagation(); handleDelete(exam.id) }}
+                          disabled={deleting === exam.id}
+                          className="ml-1 w-6 h-6 rounded-lg bg-pink-50 border border-pink-200 flex items-center justify-center text-[#F55486] hover:bg-pink-100 transition"
+                          title="Delete stale examination"
+                        >
+                          {deleting === exam.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-2 mt-1">
                     <StatusPill tone={isLA === true ? 'teal' : isLA === false ? 'pink' : 'slate'}>

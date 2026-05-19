@@ -435,7 +435,7 @@ export default function PredictionWizard({ onClose }) {
       await doctorApi.examinations.submit(exam.id)
       setProgressPct(20)
 
-      // Step 3: WSI feature extraction (optional — falls back to clinical-only)
+      // Step 3: WSI feature extraction
       let wsiUploadId = null
       if (slideFile && requiresWSI) {
         setProgressStep(3)
@@ -443,28 +443,120 @@ export default function PredictionWizard({ onClose }) {
         setProgressPct(25)
 
         const fastApiUrl = __FASTAPI_URL__
-        const wsiFormData = new FormData()
-        wsiFormData.append('wsi_file', slideFile)
-        wsiFormData.append('patch_size', '256')
-        wsiFormData.append('max_patches', '500')
-
         let ptB64 = null
-        try {
-          const extractRes = await fetch(`${fastApiUrl}/extract/wsi`, {
-            method: 'POST',
-            body: wsiFormData,
-          })
-          if (!extractRes.ok) {
-            const errData = await extractRes.json().catch(() => ({}))
-            throw new Error(errData.detail || `FastAPI /extract/wsi returned ${extractRes.status}`)
+
+        // Strategy: tile the image in the browser using Canvas API (works for PNG/JPG/TIFF)
+        // then send patches ZIP to FastAPI /extract endpoint (no CORS issue — small files)
+        const isSVS = slideFile.name.toLowerCase().match(/\.(svs|ndpi|scn|mrxs)$/)
+
+        if (isSVS) {
+          // SVS/NDPI: can't be read by Canvas — send directly to FastAPI /extract/wsi
+          // This requires CORS to be open on HF Space (it is — allow_origins=["*"])
+          setProgressLabel('Uploading slide to AI server…')
+          const wsiFormData = new FormData()
+          wsiFormData.append('wsi_file', slideFile)
+          wsiFormData.append('patch_size', '256')
+          wsiFormData.append('max_patches', '500')
+          try {
+            const extractRes = await fetch(`${fastApiUrl}/extract/wsi`, {
+              method: 'POST',
+              body: wsiFormData,
+            })
+            if (!extractRes.ok) {
+              const errData = await extractRes.json().catch(() => ({}))
+              throw new Error(errData.detail || `Feature extraction failed (${extractRes.status})`)
+            }
+            const extractData = await extractRes.json()
+            ptB64 = extractData.pt_b64
+            setProgressPct(65)
+          } catch (extractErr) {
+            // SVS failed — inform user instead of silent fallback
+            throw new Error(`Slide processing failed: ${extractErr.message}. Try a PNG/TIFF image instead.`)
           }
-          const extractData = await extractRes.json()
-          ptB64 = extractData.pt_b64
-          setProgressPct(65)
-        } catch (extractErr) {
-          // /extract/wsi not deployed yet or CORS issue → fall back to clinical-only silently
-          console.warn('[Wizard] WSI extraction failed, using clinical-only mode:', extractErr.message)
-          ptB64 = null
+        } else {
+          // PNG/JPG/TIFF: tile in browser using Canvas, send patches ZIP to FastAPI /extract
+          setProgressLabel('Tiling slide image…')
+          setProgressPct(28)
+
+          try {
+            // Load image into canvas
+            const imgBitmap = await createImageBitmap(slideFile)
+            const { width, height } = imgBitmap
+            const PATCH_SIZE = 256
+            const MAX_PATCHES = 500
+
+            const cols = Math.floor(width / PATCH_SIZE)
+            const rows = Math.floor(height / PATCH_SIZE)
+            const total = cols * rows
+            const step = Math.max(1, Math.ceil(total / MAX_PATCHES))
+
+            const canvas = document.createElement('canvas')
+            canvas.width = PATCH_SIZE
+            canvas.height = PATCH_SIZE
+            const ctx = canvas.getContext('2d')
+
+            // Build ZIP of patches using JSZip-like approach with fetch + blob
+            // We'll use a simple approach: collect patch blobs and send as FormData
+            const patches = []
+            let count = 0
+            for (let r = 0; r < rows && count < MAX_PATCHES; r += step) {
+              for (let c = 0; c < cols && count < MAX_PATCHES; c++) {
+                ctx.clearRect(0, 0, PATCH_SIZE, PATCH_SIZE)
+                ctx.drawImage(imgBitmap, c * PATCH_SIZE, r * PATCH_SIZE, PATCH_SIZE, PATCH_SIZE, 0, 0, PATCH_SIZE, PATCH_SIZE)
+                // Check if patch is mostly background (white)
+                const imageData = ctx.getImageData(0, 0, PATCH_SIZE, PATCH_SIZE)
+                const pixels = imageData.data
+                let sum = 0
+                for (let i = 0; i < pixels.length; i += 4) sum += pixels[i]
+                const avg = sum / (pixels.length / 4)
+                if (avg > 230) continue // skip white background
+                const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.85))
+                patches.push({ blob, name: `patch_${r}_${c}.jpg` })
+                count++
+              }
+            }
+            imgBitmap.close()
+
+            if (patches.length === 0) {
+              throw new Error('No tissue patches found in the image. The slide may be mostly background.')
+            }
+
+            setProgressLabel(`Extracted ${patches.length} patches — sending to AI…`)
+            setProgressPct(50)
+
+            // Create ZIP using native browser APIs
+            const { default: JSZip } = await import('jszip').catch(() => ({ default: null }))
+            let zipBlob
+            if (JSZip) {
+              const zip = new JSZip()
+              patches.forEach(p => zip.file(p.name, p.blob))
+              zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 1 } })
+            } else {
+              // Fallback: send patches as multipart without ZIP
+              // Use FormData with multiple files
+              const formData = new FormData()
+              patches.forEach(p => formData.append('patches_zip', p.blob, p.name))
+              // This won't work with /extract which expects a ZIP — use /extract/wsi fallback
+              throw new Error('JSZip not available. Please use a PNG/TIFF image.')
+            }
+
+            // Send ZIP to FastAPI /extract
+            const extractForm = new FormData()
+            extractForm.append('patches_zip', zipBlob, 'patches.zip')
+            const extractRes = await fetch(`${fastApiUrl}/extract`, {
+              method: 'POST',
+              body: extractForm,
+            })
+            if (!extractRes.ok) {
+              const errData = await extractRes.json().catch(() => ({}))
+              throw new Error(errData.detail || `Feature extraction failed (${extractRes.status})`)
+            }
+            const extractData = await extractRes.json()
+            ptB64 = extractData.pt_b64
+            setProgressPct(65)
+          } catch (tileErr) {
+            throw new Error(`Image processing failed: ${tileErr.message}`)
+          }
         }
 
         if (ptB64) {
@@ -498,11 +590,15 @@ export default function PredictionWizard({ onClose }) {
       // If the prediction already completed synchronously, use it directly
       if (predRes.status === 'completed') {
         setPrediction(predRes)
+        setProgressPct(95)
+        setProgressStep(6)
+        setProgressLabel('Fetching XAI results…')
+        // Fetch XAI — wait for it so the progress bar completes properly
+        try {
+          const xaiData = await doctorApi.predictions.getXai(predRes.prediction_id)
+          setXai(xaiData)
+        } catch {} // clinical-only has no XAI — that's fine
         setProgressPct(100)
-        // XAI is optional — fetch it but don't block results on it
-        doctorApi.predictions.getXai(predRes.prediction_id)
-          .then(xaiData => setXai(xaiData))
-          .catch(() => {}) // clinical-only has no XAI — that's fine
         setStep('results')
         return
       }
@@ -513,15 +609,18 @@ export default function PredictionWizard({ onClose }) {
       while (attempts < maxAttempts) {
         await new Promise(r => setTimeout(r, 3000))
         const status = await doctorApi.predictions.getStatus(predRes.prediction_id)
-        const pct = Math.min(99, 78 + Math.round((attempts / maxAttempts) * 21))
+        const pct = Math.min(94, 78 + Math.round((attempts / maxAttempts) * 16))
         setProgressPct(pct)
         if (status.status === 'completed') {
           setPrediction(status)
+          setProgressStep(6)
+          setProgressLabel('Fetching XAI results…')
+          setProgressPct(95)
+          try {
+            const xaiData = await doctorApi.predictions.getXai(predRes.prediction_id)
+            setXai(xaiData)
+          } catch {}
           setProgressPct(100)
-          // XAI is optional — fetch async, don't block
-          doctorApi.predictions.getXai(predRes.prediction_id)
-            .then(xaiData => setXai(xaiData))
-            .catch(() => {})
           setStep('results')
           return
         }
@@ -714,7 +813,7 @@ export default function PredictionWizard({ onClose }) {
                         'border-slate-200 bg-slate-50 hover:border-[#0572B2] hover:bg-blue-50/20'
                       )}
                     >
-                      <input ref={fileRef} type="file" className="hidden" accept=".tiff,.tif,.svs,.ndpi,.scn,.mrxs,.png,.jpg" onChange={e => { const f = e.target.files?.[0]; if (f) setSlideFile(f) }} />
+                      <input ref={fileRef} type="file" className="hidden" accept=".tiff,.tif,.svs,.ndpi,.scn,.mrxs,.png,.jpg,.jpeg" onChange={e => { const f = e.target.files?.[0]; if (f) setSlideFile(f) }} />
                       <div className={cn('w-14 h-14 rounded-2xl flex items-center justify-center mb-4', slideFile ? 'bg-teal-100' : 'bg-white border border-slate-200')}>
                         {slideFile ? <CheckCircle2 className="w-7 h-7 text-[#0BB592]" /> : <Upload className="w-7 h-7 text-slate-400" />}
                       </div>
@@ -726,7 +825,7 @@ export default function PredictionWizard({ onClose }) {
                           {(slideFile.size / 1024 / 1024).toFixed(1)} MB · Click to change
                         </p>
                       )}
-                      {!slideFile && <p className="text-xs text-slate-400 font-medium mt-1">{t('doctor.uploadFormats')}</p>}
+                      {!slideFile && <p className="text-xs text-slate-400 font-medium mt-1">PNG/JPG/TIFF: tiled in browser. SVS/NDPI: sent directly to AI server.</p>}
                     </div>
                     <button
                       onClick={() => { setSlideFile(null); runPrediction() }}
@@ -786,6 +885,7 @@ export default function PredictionWizard({ onClose }) {
                   {requiresWSI && <ProgressStep label={t('doctor.uploading')} done={progressStep > 3} active={progressStep === 3} />}
                   {requiresWSI && <ProgressStep label={t('doctor.extracting')} done={progressStep > 4} active={progressStep === 4} />}
                   <ProgressStep label={t('doctor.analyzing')} done={progressStep > 5} active={progressStep === 5} />
+                  <ProgressStep label="Fetching XAI results…" done={progressStep > 6} active={progressStep === 6} />
                   <ProgressStep label={t('doctor.done')} done={step === 'results'} active={false} />
                 </div>
               </motion.div>

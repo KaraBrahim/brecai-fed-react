@@ -26,6 +26,8 @@ export const translations = {
       signOut:      'Sign out',
       predictions:  'Predictions',
       finalExam:    'Final Exam',
+      examinations: 'Examinations',
+      xai:          'XAI Lab',
     },
     // Topbar
     topbar: {
@@ -316,6 +318,8 @@ export const translations = {
       signOut:      'Se déconnecter',
       predictions:  'Prédictions',
       finalExam:    'Examen final',
+      examinations: 'Examens',
+      xai:          'Labo XAI',
     },
     topbar: {
       systemActive: 'Système actif',
@@ -586,6 +590,8 @@ export const translations = {
       signOut:      'تسجيل الخروج',
       predictions:  'التنبؤات',
       finalExam:    'الفحص النهائي',
+      examinations: 'الفحوصات',
+      xai:          'مختبر XAI',
     },
     topbar: {
       systemActive: 'النظام نشط',
