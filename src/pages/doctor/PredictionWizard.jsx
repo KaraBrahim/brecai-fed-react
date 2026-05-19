@@ -462,18 +462,20 @@ export default function PredictionWizard({ onClose }) {
           })
           if (!extractRes.ok) {
             const errData = await extractRes.json().catch(() => ({}))
-            throw new Error(errData.detail || `Feature extraction failed (${extractRes.status})`)
+            throw new Error(errData.detail || `Feature extraction failed (HTTP ${extractRes.status})`)
           }
           const extractData = await extractRes.json()
           ptB64 = extractData.pt_b64
           setProgressPct(65)
           setProgressLabel(`Extracted ${extractData.n_patches} tissue patches`)
         } catch (extractErr) {
-          // If /extract/wsi fails, fall back to clinical-only with a warning
-          console.warn('[Wizard] /extract/wsi failed:', extractErr.message)
-          setProgressLabel('Image processing failed — using clinical data only')
-          await new Promise(r => setTimeout(r, 1500))
-          ptB64 = null
+          // Do NOT silently fall back — the user chose an image-based model
+          // Show the real error so they know the image wasn't used
+          throw new Error(
+            `Slide processing failed: ${extractErr.message}\n\n` +
+            `Make sure the AI server is running and the HuggingFace space is awake. ` +
+            `You can also skip the slide and use clinical-only mode.`
+          )
         }
 
         if (ptB64) {
@@ -748,7 +750,7 @@ export default function PredictionWizard({ onClose }) {
                       onClick={() => { setSlideFile(null); runPrediction() }}
                       className="mt-3 w-full text-center text-xs font-bold text-slate-400 hover:text-[#0572B2] transition"
                     >
-                      {t('doctor.skipSlide')}
+                      {t('doctor.skipSlide')} (clinical data only — no XAI heatmaps)
                     </button>
                   </div>
                 ) : (
