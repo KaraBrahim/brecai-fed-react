@@ -204,6 +204,18 @@ const doctor = {
     },
   },
 
+  // ─── WSI Presign (R2 direct upload) ─────────────────────────────────────────
+
+  /**
+   * POST /api/doctor/wsi/presign
+   * Get a presigned R2 URL for direct browser → R2 upload.
+   * @param {{ filename: string, patient_id: number }} data
+   * @returns {Promise<{presigned_url: string, r2_key: string, expires_in: number}>}
+   */
+  wsiPresign(data) {
+    return client.post('/doctor/wsi/presign', data).then((r) => r.data);
+  },
+
   // ─── WSI Uploads ─────────────────────────────────────────────────────────────
 
   wsiUploads: {
@@ -245,8 +257,20 @@ const doctor = {
     },
 
     /**
-     * POST /api/doctor/wsi-uploads/from-features  (JSON)
-     * Upload pre-extracted CONCH features as base64 — bypasses PHP upload_max_filesize.
+     * POST /api/doctor/wsi/presign
+     * Get a presigned R2 URL for direct browser upload.
+     */
+    presign(data) {
+      return client.post('/doctor/wsi/presign', data).then((r) => r.data);
+    },
+
+    /**
+     * POST /api/doctor/wsi-uploads/from-r2
+     * Register an R2 upload in Laravel (after direct browser → R2 upload).
+     */
+    uploadR2Key(data) {
+      return client.post('/doctor/wsi-uploads/from-r2-key', data).then((r) => r.data);
+    },
      * @param {{ patient_id: number, pt_b64: string, original_name: string }} data
      * @returns {Promise<import('./types.js').WsiUpload>}
      */

@@ -443,53 +443,113 @@ export default function PredictionWizard({ onClose }) {
         setProgressPct(25)
 
         const fastApiUrl = __FASTAPI_URL__
-        let ptB64 = null
+        let wsiUploadId = null
 
-        // All formats (SVS, NDPI, TIFF, PNG, JPG) go to FastAPI /extract/wsi
-        // which handles tissue segmentation server-side (HSV+Otsu, spatial bucketing)
-        setProgressLabel('Uploading slide to AI server…')
-        setProgressPct(28)
+        const isSVS = slideFile.name.toLowerCase().match(/\.(svs|ndpi|scn|mrxs)$/)
 
-        const wsiFormData = new FormData()
-        wsiFormData.append('wsi_file', slideFile)
-        wsiFormData.append('patch_size', '256')
-        wsiFormData.append('max_patches', '500')
+        if (isSVS) {
+          // SVS/NDPI: upload to R2 via presigned URL, FastAPI downloads from R2
+          setProgressLabel('Getting secure upload URL…')
+          setProgressPct(28)
 
-        try {
-          const extractRes = await fetch(`${fastApiUrl}/extract/wsi`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${__HF_TOKEN__}`,
-            },
-            body: wsiFormData,
-          })
-          if (!extractRes.ok) {
-            const errData = await extractRes.json().catch(() => ({}))
-            throw new Error(errData.detail || `Feature extraction failed (HTTP ${extractRes.status})`)
-          }
-          const extractData = await extractRes.json()
-          ptB64 = extractData.pt_b64
-          setProgressPct(65)
-          setProgressLabel(`Extracted ${extractData.n_patches} tissue patches`)
-        } catch (extractErr) {
-          // Do NOT silently fall back — the user chose an image-based model
-          // Show the real error so they know the image wasn't used
-          throw new Error(
-            `Slide processing failed: ${extractErr.message}\n\n` +
-            `Make sure the AI server is running and the HuggingFace space is awake. ` +
-            `You can also skip the slide and use clinical-only mode.`
-          )
-        }
-
-        if (ptB64) {
-          setProgressLabel(t('doctor.uploading'))
-          setProgressPct(70)
-          const wsi = await doctorApi.wsiUploads.uploadPtBase64({
+          const presignRes = await doctorApi.wsiPresign({
+            filename: slideFile.name,
             patient_id: selectedPatient.id,
-            pt_b64: ptB64,
+          })
+          const { presigned_url, r2_key } = presignRes
+
+          setProgressLabel('Uploading slide to secure storage…')
+          setProgressPct(30)
+
+          // Upload directly to R2 — no server involved, no size limit
+          const uploadRes = await fetch(presigned_url, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: slideFile,
+          })
+          if (!uploadRes.ok) throw new Error(`R2 upload failed (${uploadRes.status})`)
+
+          setProgressPct(58)
+          setProgressLabel('Slide stored — registering…')
+
+          const wsi = await doctorApi.wsiUploads.uploadR2Key({
+            patient_id: selectedPatient.id,
+            r2_key,
             original_name: slideFile.name,
           })
           wsiUploadId = wsi.id
+          setProgressPct(62)
+
+        } else {
+          // TIFF/PNG/JPG: tile in browser using Canvas (fast, no server timeout)
+          setProgressLabel('Tiling slide image in browser…')
+          setProgressPct(28)
+
+          let ptB64 = null
+          try {
+            const imgBitmap = await createImageBitmap(slideFile)
+            const { width, height } = imgBitmap
+            const PATCH_SIZE = 256
+            const MAX_PATCHES = 500
+            const cols = Math.floor(width / PATCH_SIZE)
+            const rows = Math.floor(height / PATCH_SIZE)
+            const step = Math.max(1, Math.ceil((cols * rows) / MAX_PATCHES))
+            const canvas = document.createElement('canvas')
+            canvas.width = PATCH_SIZE; canvas.height = PATCH_SIZE
+            const ctx = canvas.getContext('2d')
+            const patches = []
+            let count = 0
+            for (let r = 0; r < rows && count < MAX_PATCHES; r += step) {
+              for (let c = 0; c < cols && count < MAX_PATCHES; c++) {
+                ctx.clearRect(0, 0, PATCH_SIZE, PATCH_SIZE)
+                ctx.drawImage(imgBitmap, c * PATCH_SIZE, r * PATCH_SIZE, PATCH_SIZE, PATCH_SIZE, 0, 0, PATCH_SIZE, PATCH_SIZE)
+                const pixels = ctx.getImageData(0, 0, PATCH_SIZE, PATCH_SIZE).data
+                let sum = 0
+                for (let i = 0; i < pixels.length; i += 4) sum += pixels[i]
+                if (sum / (pixels.length / 4) > 230) continue
+                const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.85))
+                patches.push({ blob, name: `patch_${r}_${c}.jpg` })
+                count++
+              }
+            }
+            imgBitmap.close()
+            if (patches.length === 0) throw new Error('No tissue patches found.')
+            setProgressLabel(`${patches.length} patches — running CONCH…`)
+            setProgressPct(45)
+            const JSZipModule = await import('jszip')
+            const zip = new JSZipModule.default()
+            patches.forEach(p => zip.file(p.name, p.blob))
+            const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 1 } })
+            setProgressPct(50)
+            const extractForm = new FormData()
+            extractForm.append('patches_zip', zipBlob, 'patches.zip')
+            const extractRes = await fetch(`${fastApiUrl}/extract`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${__HF_TOKEN__}` },
+              body: extractForm,
+            })
+            if (!extractRes.ok) {
+              const errData = await extractRes.json().catch(() => ({}))
+              throw new Error(errData.detail || `Feature extraction failed (${extractRes.status})`)
+            }
+            const extractData = await extractRes.json()
+            ptB64 = extractData.pt_b64
+            setProgressPct(65)
+            setProgressLabel(`${extractData.n_patches} patches processed`)
+          } catch (tileErr) {
+            throw new Error(`Image processing failed: ${tileErr.message}`)
+          }
+
+          if (ptB64) {
+            setProgressLabel(t('doctor.uploading'))
+            setProgressPct(70)
+            const wsi = await doctorApi.wsiUploads.uploadPtBase64({
+              patient_id: selectedPatient.id,
+              pt_b64: ptB64,
+              original_name: slideFile.name,
+            })
+            wsiUploadId = wsi.id
+          }
         }
         setProgressPct(75)
       }
@@ -747,7 +807,7 @@ export default function PredictionWizard({ onClose }) {
                           {(slideFile.size / 1024 / 1024).toFixed(1)} MB · Click to change
                         </p>
                       )}
-                      {!slideFile && <p className="text-xs text-slate-400 font-medium mt-1">PNG/JPG/TIFF: tiled in browser. SVS/NDPI: sent directly to AI server.</p>}
+                      {!slideFile && <p className="text-xs text-slate-400 font-medium mt-1">SVS/NDPI: uploaded to secure storage. PNG/JPG/TIFF: processed in browser.</p>}
                     </div>
                     <button
                       onClick={() => { setSlideFile(null); runPrediction() }}
