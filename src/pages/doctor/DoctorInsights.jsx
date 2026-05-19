@@ -1,36 +1,21 @@
-import { useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
+import { useState, useEffect, useMemo } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
 import {
-  Users, Brain, Activity, TrendingUp,
-  ArrowUpRight, Clock, CheckCircle2, AlertTriangle, FileText,
-  PlusCircle, ListChecks, Microscope, ChevronRight,
+  Users, Brain, Activity, TrendingUp, ArrowUpRight,
+  Clock, CheckCircle2, AlertTriangle, FileText,
+  ChevronRight, Zap, Sparkles,
 } from 'lucide-react'
-import { PageHeader, StatCard, SectionCard, Badge, Btn, stagger, fadeUp, Toast } from '@/components/shared'
-import { usePatientStore } from '@/stores/patientStore'
-import { cn } from '@/lib/utils'
-
-const SITES = ['Alpha-01', 'Beta-02', 'Gamma-03']
-
-function buildWeekly(patients) {
-  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
-  const today = new Date()
-  const out = []
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(today); d.setDate(today.getDate() - i)
-    const key = d.toISOString().slice(0, 10)
-    const dayLabel = days[d.getDay()]
-    const luminalA = patients.filter(p => p.date === key && p.lastPrediction === 'Luminal A').length
-    const nonLuminalA = patients.filter(p => p.date === key && p.lastPrediction !== 'Luminal A').length
-    // ensure visible bars even if sparse demo data
-    out.push({ day: dayLabel, luminalA: luminalA || Math.max(0, 3 - i), nonLuminalA: nonLuminalA || (i % 2) })
-  }
-  return out
-}
+import { SectionCard, stagger, fadeUp } from '@/components/shared'
+import { MetricTile, StatusPill } from '@/components/admin'
+import { useT } from '@/stores/i18nStore'
+import { useAuthStore } from '@/stores/authStore'
+import doctorApi from '@/api/api-client/doctor'
+import PredictionWizard from './PredictionWizard'
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
@@ -46,226 +31,280 @@ const CustomTooltip = ({ active, payload, label }) => {
 
 export default function DoctorInsights() {
   const navigate = useNavigate()
-  const patients = usePatientStore(s => s.patients)
-  const setStatus = usePatientStore(s => s.setStatus)
-  const [toast, setToast] = useState({ open: false, message: '', tone: 'teal' })
+  const t = useT()
+  const { user } = useAuthStore()
 
-  const stats = useMemo(() => {
-    const total = patients.length
-    const luminalA = patients.filter(p => p.lastPrediction === 'Luminal A').length
-    const pending = patients.filter(p => p.status === 'pending').length
-    const avgConf = total ? (patients.reduce((s, p) => s + (Number(p.prob) || 0), 0) / total) : 0
-    return { total, luminalA, pending, avgConf }
-  }, [patients])
+  const [kpis, setKpis] = useState(null)
+  const [predResults, setPredResults] = useState(null)
+  const [examsOverTime, setExamsOverTime] = useState([])
+  const [recentActivity, setRecentActivity] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showWizard, setShowWizard] = useState(false)
 
-  const subtypeData = useMemo(() => ([
-    { name: 'Luminal A', value: stats.luminalA, color: '#0BB592' },
-    { name: 'Non-Luminal A', value: Math.max(0, stats.total - stats.luminalA), color: '#F55486' },
-  ]), [stats])
-
-  const sitePerformance = useMemo(() => SITES.map(s => {
-    const list = patients.filter(p => p.site === s)
-    const cases = list.length
-    const avgProb = cases ? list.reduce((acc, p) => acc + (Number(p.prob) || 0), 0) / cases : 0
-    const conf = list.filter(p => p.status === 'confirmed').length
-    return {
-      site: `Site ${s}`,
-      cases,
-      recall: Math.round(80 + avgProb / 10),
-      precision: Math.round(78 + (cases ? (conf / cases) * 15 : 0)),
+  useEffect(() => {
+    const controller = new AbortController()
+    const fetchAll = async () => {
+      try {
+        const [kpisRes, predRes, examsRes, actRes] = await Promise.allSettled([
+          doctorApi.insights.kpis(),
+          doctorApi.insights.predictionResults(),
+          doctorApi.insights.examinationsOverTime(),
+          doctorApi.insights.recentActivity(),
+        ])
+        if (controller.signal.aborted) return
+        if (kpisRes.status === 'fulfilled')  setKpis(kpisRes.value)
+        if (predRes.status === 'fulfilled')  setPredResults(predRes.value)
+        if (examsRes.status === 'fulfilled') setExamsOverTime(examsRes.value || [])
+        if (actRes.status === 'fulfilled')   setRecentActivity(actRes.value || [])
+      } finally {
+        if (!controller.signal.aborted) setLoading(false)
+      }
     }
-  }), [patients])
+    fetchAll()
+    return () => controller.abort()
+  }, [])
 
-  const weeklyPredictions = useMemo(() => buildWeekly(patients), [patients])
+  const subtypeData = useMemo(() => [
+    { name: t('doctor.luminalA'),    value: predResults?.luminal_a ?? 0,     color: '#0BB592' },
+    { name: t('doctor.nonLuminalA'), value: predResults?.non_luminal_a ?? 0, color: '#F55486' },
+  ], [predResults, t])
 
-  const recentActivity = useMemo(() => {
-    const sorted = [...patients].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6)
-    return sorted.map(p => ({
-      id: p.id, patient: p.name.split(' ').map(n => n[0]).join('').slice(0, 2),
-      result: p.lastPrediction, prob: p.prob, status: p.status, date: p.date,
-    }))
-  }, [patients])
+  const examSeries = examsOverTime.map(d => ({
+    label: d.month?.slice(0, 7) || d.month,
+    count: d.count,
+  }))
 
-  const showToast = (message, tone = 'teal') => setToast({ open: true, message, tone })
+  const completionRate = kpis?.total_predictions > 0
+    ? Math.round((kpis.completed_predictions / kpis.total_predictions) * 100)
+    : 0
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show">
-      <PageHeader
-        title="Platform Insights"
-        subtitle="Federated Site Alpha-01 · Luminal A Molecular Subtyping Intelligence"
+
+      {/* ── Hero banner with Begin Prediction CTA ─────────────────────────── */}
+      <motion.div
+        variants={fadeUp}
+        className="relative overflow-hidden rounded-3xl mb-7 text-white shadow-xl"
+        style={{ background: 'linear-gradient(135deg, #072a5e 0%, #093A7A 45%, #0572B2 80%, #0BB592 100%)' }}
       >
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-teal-50 border border-teal-200">
-            <span className="w-2 h-2 rounded-full bg-[#0BB592] animate-pulse" />
-            <span className="text-[11px] font-bold uppercase tracking-widest text-teal-700">Live · 3 Sites</span>
-          </div>
-          <Btn variant="primary" size="md" onClick={() => navigate('/app/doctor/patients')}>
-            <PlusCircle className="w-4 h-4" /> New Patient
-          </Btn>
-        </div>
-      </PageHeader>
+        <div className="absolute inset-0 opacity-[0.06] pointer-events-none"
+          style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '22px 22px' }} />
+        <div className="absolute -right-24 -top-24 w-72 h-72 rounded-full bg-white/10 blur-3xl pointer-events-none" />
+        <div className="absolute -left-16 -bottom-24 w-72 h-72 rounded-full bg-[#0BB592]/20 blur-3xl pointer-events-none" />
 
-      {/* KPI Row */}
-      <motion.div variants={stagger} className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Total Patients" value={stats.total} sub="Live registry count" icon={Users} color="blue" trend="up" />
-        <StatCard label="Luminal A Cases" value={stats.luminalA} sub={`${stats.total ? Math.round((stats.luminalA / stats.total) * 100) : 0}% classification`} icon={CheckCircle2} color="teal" trend="up" />
-        <StatCard label="Pending Review" value={stats.pending} sub="Awaiting verdict" icon={Clock} color="amber" trend="down" />
-        <StatCard label="Avg. Confidence" value={`${stats.avgConf.toFixed(1)}%`} sub="Model v3.2 · Fed Rnd 8" icon={Brain} color="pink" trend="up" />
-      </motion.div>
-
-      {/* Quick Actions */}
-      <motion.div variants={fadeUp} className="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-6">
-        <QuickAction icon={ListChecks} label="Patient Registry" sub="Manage records" color="blue" onClick={() => navigate('/app/doctor/patients')} />
-        <QuickAction icon={Brain} label="Run Prediction" sub="Subtype an upload" color="teal" onClick={() => navigate('/app/doctor/predict')} />
-        <QuickAction icon={Microscope} label="XAI Lab" sub="Explainability" color="pink" onClick={() => navigate('/app/doctor/xai')} />
-        <QuickAction icon={FileText} label="Clinical Reports" sub="Print & export" color="slate" onClick={() => navigate('/app/doctor/reports')} />
-      </motion.div>
-
-      {/* Charts */}
-      <motion.div variants={stagger} className="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-6">
-        <SectionCard title="Weekly Prediction Volume" subtitle="Luminal A vs Non-Luminal A" icon={TrendingUp} iconColor="blue" className="xl:col-span-2">
-          <div className="px-4 pb-4 pt-2 h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={weeklyPredictions} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="luminalGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#0BB592" stopOpacity={0.2} />
-                    <stop offset="95%" stopColor="#0BB592" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="nonLuminalGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#F55486" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="#F55486" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 600 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 600 }} axisLine={false} tickLine={false} />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
-                <Area type="monotone" dataKey="luminalA" name="Luminal A" stroke="#0BB592" strokeWidth={2.5} fill="url(#luminalGrad)" dot={{ r: 4, fill: '#0BB592', strokeWidth: 0 }} />
-                <Area type="monotone" dataKey="nonLuminalA" name="Non-Luminal A" stroke="#F55486" strokeWidth={2.5} fill="url(#nonLuminalGrad)" dot={{ r: 4, fill: '#F55486', strokeWidth: 0 }} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </SectionCard>
-
-        <SectionCard title="Subtype Distribution" subtitle={`All-time · ${stats.total} cases`} icon={Activity} iconColor="teal">
-          <div className="px-4 pb-4 pt-2 h-56 flex flex-col items-center justify-center">
-            <ResponsiveContainer width="100%" height="75%">
-              <PieChart>
-                <Pie data={subtypeData} cx="50%" cy="50%" innerRadius={48} outerRadius={70} paddingAngle={4} dataKey="value">
-                  {subtypeData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                </Pie>
-                <Tooltip formatter={(v, n) => [`${v} cases`, n]} contentStyle={{ fontSize: 12, fontWeight: 700, borderRadius: 12, border: '1px solid #e2e8f0' }} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="flex gap-4 mt-1">
-              {subtypeData.map(d => (
-                <div key={d.name} className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: d.color }} />
-                  <span className="text-[11px] font-bold text-slate-600">{d.name}: {d.value}</span>
-                </div>
-              ))}
+        <div className="relative px-7 py-7 sm:px-9 sm:py-8 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-6">
+          <div className="max-w-xl">
+            <div className="inline-flex items-center gap-2 mb-3 px-2.5 py-1 rounded-full bg-white/10 border border-white/20 backdrop-blur">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#0BB592] animate-pulse" />
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/80">
+                {user?.organization?.name || 'BRECAI-FED'} · {t('doctor.dashTitle')}
+              </span>
             </div>
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tight leading-tight text-white mb-2">
+              {t('doctor.dashTitle')}
+            </h1>
+            <p className="text-sm text-white/70 leading-relaxed">{t('doctor.dashSubtitle')}</p>
           </div>
-        </SectionCard>
+
+          {/* Begin Prediction button */}
+          <motion.button
+            whileHover={{ scale: 1.03, y: -2 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setShowWizard(true)}
+            className="flex items-center gap-4 px-7 py-5 rounded-2xl bg-white text-[#0572B2] font-black text-base shadow-2xl hover:shadow-[#0572B2]/30 transition-all shrink-0"
+          >
+            <div className="w-12 h-12 rounded-xl bg-[#0572B2]/10 flex items-center justify-center">
+              <Zap className="w-6 h-6 text-[#0572B2]" />
+            </div>
+            <div className="text-left">
+              <p className="text-lg font-black text-[#0572B2]">{t('doctor.beginPrediction')}</p>
+              <p className="text-xs font-semibold text-slate-500">{t('doctor.beginDesc')}</p>
+            </div>
+            <Sparkles className="w-5 h-5 text-[#0BB592] ml-2" />
+          </motion.button>
+        </div>
       </motion.div>
 
-      {/* Bottom Row */}
-      <motion.div variants={stagger} className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <SectionCard title="Site Performance" subtitle="Recall & Precision" icon={ArrowUpRight} iconColor="blue">
-          <div className="px-4 pb-4 pt-2 h-48">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={sitePerformance} margin={{ top: 0, right: 0, left: -30, bottom: 0 }} barSize={10}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="site" tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 700 }} axisLine={false} tickLine={false} />
-                <YAxis domain={[60, 100]} tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 700 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ fontSize: 12, fontWeight: 700, borderRadius: 12, border: '1px solid #e2e8f0' }} />
-                <Bar dataKey="recall" name="Recall" fill="#0572B2" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="precision" name="Precision" fill="#0BB592" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+      {/* ── KPI tiles ─────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-7">
+        <MetricTile
+          label={t('doctor.totalPatients')}
+          value={loading ? '—' : (kpis?.total_patients ?? 0)}
+          sub={t('doctor.examinations') + ': ' + (kpis?.total_examinations ?? 0)}
+          icon={Users} color="blue"
+        />
+        <MetricTile
+          label={t('doctor.predictions')}
+          value={loading ? '—' : (kpis?.total_predictions ?? 0)}
+          sub={`${completionRate}% completed`}
+          icon={Brain} color="pink"
+          accent={{ label: t('doctor.pendingReview'), value: kpis?.pending_predictions ?? 0 }}
+        />
+        <MetricTile
+          label={t('doctor.luminalA')}
+          value={loading ? '—' : (predResults?.luminal_a ?? 0)}
+          sub={predResults?.total > 0 ? `${Math.round((predResults.luminal_a / predResults.total) * 100)}% of total` : '—'}
+          icon={CheckCircle2} color="teal"
+        />
+        <MetricTile
+          label={t('doctor.reports')}
+          value={loading ? '—' : (kpis?.total_reports ?? 0)}
+          sub={t('doctor.avgConfidence') + ': ' + (kpis?.avg_confidence ? `${(kpis.avg_confidence * 100).toFixed(1)}%` : '—')}
+          icon={FileText} color="amber"
+        />
+      </div>
+
+      {/* ── Charts row ────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-7">
+        <SectionCard
+          title={t('doctor.examinations')}
+          subtitle="Monthly — last 12 months"
+          icon={TrendingUp} iconColor="blue"
+          className="xl:col-span-2"
+        >
+          <div className="h-56 px-4 pb-4">
+            {loading ? (
+              <div className="h-full flex items-center justify-center">
+                <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-[#0572B2] animate-spin" />
+              </div>
+            ) : examSeries.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={examSeries}>
+                  <defs>
+                    <linearGradient id="examGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#0572B2" stopOpacity={0.3} />
+                      <stop offset="100%" stopColor="#0572B2" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="#f1f5f9" strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Area type="monotone" dataKey="count" name="Examinations" stroke="#0572B2" strokeWidth={2.5} fill="url(#examGrad)" dot={{ fill: '#0572B2', r: 3 }} activeDot={{ r: 6 }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-slate-400 text-sm font-semibold">
+                No examination data yet
+              </div>
+            )}
           </div>
         </SectionCard>
 
-        <SectionCard title="Recent Predictions" subtitle="Click to confirm or open" icon={Clock} iconColor="teal" className="xl:col-span-2">
-          <div className="divide-y divide-slate-50">
-            {recentActivity.length === 0 ? (
-              <p className="text-center text-xs text-slate-400 font-medium py-8">No recent activity</p>
-            ) : recentActivity.map((item, i) => (
-              <motion.div
-                key={item.id}
-                initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.06, ease: [0.16, 1, 0.3, 1] }}
-                className="flex items-center justify-between px-6 py-3.5 hover:bg-slate-50 transition-colors group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className={cn('w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black border',
-                    item.result === 'Luminal A' ? 'bg-teal-50 border-teal-200 text-teal-700' : 'bg-pink-50 border-pink-200 text-pink-700')}>
-                    {item.result === 'Luminal A' ? 'LA' : 'NL'}
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-slate-900">{item.id}</p>
-                    <p className="text-[11px] text-slate-400 font-medium">Patient {item.patient} · {item.date}</p>
-                  </div>
+        <SectionCard
+          title="Subtype Distribution"
+          subtitle={`${predResults?.total ?? 0} predictions`}
+          icon={Activity} iconColor="teal"
+        >
+          <div className="h-56 px-4 pb-4 flex flex-col items-center justify-center">
+            {loading ? (
+              <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-[#0BB592] animate-spin" />
+            ) : predResults?.total > 0 ? (
+              <>
+                <ResponsiveContainer width="100%" height="75%">
+                  <PieChart>
+                    <Pie data={subtypeData} cx="50%" cy="50%" innerRadius={48} outerRadius={70} paddingAngle={4} dataKey="value">
+                      {subtypeData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                    </Pie>
+                    <Tooltip formatter={(v, n) => [`${v} cases`, n]} contentStyle={{ fontSize: 12, fontWeight: 700, borderRadius: 12, border: '1px solid #e2e8f0' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex gap-4 mt-1">
+                  {subtypeData.map(d => (
+                    <div key={d.name} className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ background: d.color }} />
+                      <span className="text-[11px] font-bold text-slate-600">{d.name}: {d.value}</span>
+                    </div>
+                  ))}
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-bold text-slate-700 font-mono">{item.prob}%</span>
-                  <Badge color={item.status === 'pending' ? 'amber' : item.status === 'confirmed' ? 'teal' : 'blue'}>
-                    {item.status === 'pending' && <AlertTriangle className="w-3 h-3" />}
-                    {item.status === 'confirmed' && <CheckCircle2 className="w-3 h-3" />}
-                    {item.status}
-                  </Badge>
-                  {item.status === 'pending' ? (
+              </>
+            ) : (
+              <div className="text-slate-400 text-sm font-semibold text-center">
+                No predictions yet.<br />
+                <button onClick={() => setShowWizard(true)} className="mt-2 text-[#0572B2] font-black text-xs hover:underline">
+                  Run your first prediction →
+                </button>
+              </div>
+            )}
+          </div>
+        </SectionCard>
+      </div>
+
+      {/* ── Recent activity ───────────────────────────────────────────────── */}
+      <SectionCard
+        title={t('doctor.recentActivity')}
+        subtitle="Last 10 examinations"
+        icon={Clock} iconColor="amber"
+      >
+        {loading ? (
+          <div className="p-8 flex justify-center">
+            <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-amber-500 animate-spin" />
+          </div>
+        ) : recentActivity.length === 0 ? (
+          <div className="p-8 text-center">
+            <p className="text-slate-400 text-sm font-semibold mb-3">{t('doctor.noActivity')}</p>
+            <button
+              onClick={() => setShowWizard(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0572B2] text-white text-xs font-black hover:bg-[#0462a0] transition"
+            >
+              <Zap className="w-3.5 h-3.5" /> {t('doctor.beginPrediction')}
+            </button>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-50">
+            {recentActivity.map((item, i) => {
+              const pred = item.prediction
+              const isLumA = pred?.is_lum_a
+              const statusColor = item.status === 'concluded' ? 'teal' : item.status === 'predicted' ? 'blue' : 'amber'
+              return (
+                <motion.div
+                  key={item.id}
+                  initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  className="flex items-center justify-between px-6 py-3.5 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black border ${
+                      isLumA === true ? 'bg-teal-50 border-teal-200 text-teal-700' :
+                      isLumA === false ? 'bg-pink-50 border-pink-200 text-pink-700' :
+                      'bg-slate-50 border-slate-200 text-slate-500'
+                    }`}>
+                      {isLumA === true ? 'LA' : isLumA === false ? 'NL' : '?'}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">
+                        {item.patient?.patient_identifier || `Exam #${item.id}`}
+                      </p>
+                      <p className="text-[11px] text-slate-400 font-medium">
+                        {item.examined_at ? new Date(item.examined_at).toLocaleDateString() : '—'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {pred && (
+                      <span className="font-mono text-sm font-bold text-slate-700">
+                        {pred.confidence_lum_a != null ? `${(pred.confidence_lum_a * 100).toFixed(1)}%` : '—'}
+                      </span>
+                    )}
+                    <StatusPill tone={statusColor}>{item.status}</StatusPill>
                     <button
-                      onClick={() => { setStatus(item.id, 'confirmed'); showToast(`${item.id} confirmed`) }}
-                      className="text-[10px] font-black uppercase tracking-widest text-[#0BB592] hover:text-[#09a07f] flex items-center gap-1"
-                    >
-                      Confirm <CheckCircle2 className="w-3 h-3" />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => navigate('/app/doctor/patients')}
+                      onClick={() => navigate('/app/doctor/exam')}
                       className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-[#0572B2] flex items-center gap-1"
                     >
                       Open <ChevronRight className="w-3 h-3" />
                     </button>
-                  )}
-                </div>
-              </motion.div>
-            ))}
+                  </div>
+                </motion.div>
+              )
+            })}
           </div>
-        </SectionCard>
-      </motion.div>
+        )}
+      </SectionCard>
 
-      <Toast open={toast.open} onClose={() => setToast(t => ({ ...t, open: false }))} message={toast.message} tone={toast.tone} />
+      {/* ── Prediction Wizard ─────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {showWizard && <PredictionWizard onClose={() => setShowWizard(false)} />}
+      </AnimatePresence>
     </motion.div>
-  )
-}
-
-function QuickAction({ icon: Icon, label, sub, color, onClick }) {
-  const colors = {
-    blue: 'bg-blue-50 text-[#0572B2] border-blue-100',
-    teal: 'bg-teal-50 text-[#0BB592] border-teal-100',
-    pink: 'bg-pink-50 text-[#F55486] border-pink-100',
-    slate: 'bg-slate-100 text-slate-600 border-slate-200',
-  }
-  return (
-    <motion.button
-      variants={fadeUp}
-      whileHover={{ y: -2, boxShadow: '0 12px 28px rgba(9,58,122,0.09)' }}
-      whileTap={{ scale: 0.98 }}
-      onClick={onClick}
-      className="bg-white rounded-2xl border border-slate-200 p-4 text-left flex items-center gap-3"
-    >
-      <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center border', colors[color])}>
-        <Icon className="w-5 h-5" />
-      </div>
-      <div className="min-w-0">
-        <p className="text-sm font-extrabold text-slate-900 truncate">{label}</p>
-        <p className="text-[11px] font-medium text-slate-400 truncate">{sub}</p>
-      </div>
-      <ChevronRight className="w-4 h-4 text-slate-300 ml-auto" />
-    </motion.button>
   )
 }

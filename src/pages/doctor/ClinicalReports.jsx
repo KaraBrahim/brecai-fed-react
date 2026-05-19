@@ -1,516 +1,347 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+/**
+ * ClinicalReports.jsx — Real API + client-side PDF generation
+ */
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  FileText, Download, Search, Eye, Plus, Calendar, CheckCircle2, AlertTriangle,
-  Filter, MoreVertical, Trash2, Edit3, FileCheck2, Printer, X, Save, RefreshCcw, Brain, Users,
+  FileText, Download, Search, Eye, Plus, Calendar,
+  CheckCircle2, AlertTriangle, Loader2, RefreshCw,
+  FileCheck2, Printer, X, Brain,
 } from 'lucide-react'
-import {
-  PageHeader, Badge, Btn, SectionCard, EmptyState, stagger, fadeUp,
-  Modal, Field, inputClass, ConfirmDialog, Toast, StatCard,
-} from '@/components/shared'
-import { cn } from '@/lib/utils'
-import { useReportStore } from '@/stores/reportStore'
-import { usePatientStore } from '@/stores/patientStore'
-import { downloadReportPDF, previewReportPDF } from '@/lib/reportPdf'
+import { SectionCard, stagger, fadeUp } from '@/components/shared'
+import { StatusPill } from '@/components/admin'
+import { useT } from '@/stores/i18nStore'
+import { useAuthStore } from '@/stores/authStore'
+import doctorApi from '@/api/api-client/doctor'
 
-const TYPES = ['Molecular Subtyping', 'Follow-Up Assessment', 'Pre-Surgical Review', 'XAI Verification', 'Multidisciplinary Summary']
-const STATUSES = ['draft', 'signed']
+/* ── Client-side PDF generation ─────────────────────────────────────────── */
+function generateReportPDF(report, patient, doctor) {
+  const isLumA = report.prediction?.is_lum_a
+  const conf = report.prediction?.confidence_lum_a ?? 0
+  const date = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
 
-const emptyForm = {
-  patientId: '', patient: '', type: 'Molecular Subtyping',
-  result: 'Luminal A', prob: '', doctor: 'Dr. Benali M.',
-  date: new Date().toISOString().slice(0, 10),
-  status: 'draft', notes: '',
-}
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8"/>
+<title>Clinical Report — ${patient?.patient_identifier || 'Patient'}</title>
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 40px; color: #1e293b; }
+  .header { background: linear-gradient(135deg, #072a5e, #0572B2); color: white; padding: 32px 40px; border-radius: 12px; margin-bottom: 32px; }
+  .header h1 { margin: 0 0 4px; font-size: 28px; font-weight: 900; }
+  .header p { margin: 0; opacity: 0.7; font-size: 13px; }
+  .badge { display: inline-block; padding: 4px 14px; border-radius: 20px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-top: 12px; }
+  .badge-luma { background: rgba(11,181,146,0.2); color: #0BB592; border: 1px solid rgba(11,181,146,0.4); }
+  .badge-nonluma { background: rgba(245,84,134,0.2); color: #F55486; border: 1px solid rgba(245,84,134,0.4); }
+  .section { margin-bottom: 24px; }
+  .section-title { font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; color: #94a3b8; margin-bottom: 12px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; }
+  .card-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; margin-bottom: 4px; }
+  .card-value { font-size: 18px; font-weight: 900; color: #1e293b; }
+  .result-box { background: ${isLumA ? '#f0fdf4' : '#fff1f2'}; border: 2px solid ${isLumA ? '#86efac' : '#fda4af'}; border-radius: 12px; padding: 20px 24px; margin-bottom: 24px; }
+  .result-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: #94a3b8; }
+  .result-value { font-size: 32px; font-weight: 900; color: ${isLumA ? '#0BB592' : '#F55486'}; margin: 4px 0; }
+  .conf-bar { height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; margin-top: 8px; }
+  .conf-fill { height: 100%; background: ${isLumA ? '#0BB592' : '#F55486'}; border-radius: 4px; width: ${(conf * 100).toFixed(1)}%; }
+  .therapy { background: ${isLumA ? '#f0fdf4' : '#fff1f2'}; border-left: 4px solid ${isLumA ? '#0BB592' : '#F55486'}; padding: 14px 16px; border-radius: 0 8px 8px 0; font-size: 13px; line-height: 1.6; }
+  .notes { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; font-size: 13px; line-height: 1.7; color: #475569; }
+  .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; font-size: 11px; color: #94a3b8; }
+  .signature { margin-top: 40px; }
+  .sig-line { border-top: 1px solid #1e293b; width: 200px; margin-top: 40px; padding-top: 8px; font-size: 12px; font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="header">
+  <p>BRECAI-FED · Clinical Diagnostic Report</p>
+  <h1>${patient?.patient_identifier || 'Patient Report'}</h1>
+  <p>Generated: ${date}</p>
+  <span class="badge ${isLumA ? 'badge-luma' : 'badge-nonluma'}">${isLumA ? 'Luminal A' : 'Non-Luminal A'}</span>
+</div>
 
-function exportRowsCSV(rows, name = 'reports.csv') {
-  if (!rows.length) return
-  const cols = ['id','patientId','patient','type','result','prob','doctor','date','status','notes']
-  const esc = (v) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
-  const csv = [cols.join(','), ...rows.map(r => cols.map(c => esc(r[c])).join(','))].join('\n')
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a'); a.href = url; a.download = name; a.click()
-  URL.revokeObjectURL(url)
+<div class="section">
+  <div class="section-title">Patient Information</div>
+  <div class="grid">
+    <div class="card"><div class="card-label">Patient ID</div><div class="card-value">${patient?.patient_identifier || '—'}</div></div>
+    <div class="card"><div class="card-label">Age</div><div class="card-value">${patient?.age ?? '—'} years</div></div>
+    <div class="card"><div class="card-label">Stage</div><div class="card-value">Stage ${patient?.stage_num ?? '—'}</div></div>
+    <div class="card"><div class="card-label">ER / PR / HER2</div><div class="card-value">${patient?.er_status ? 'ER+' : 'ER-'} / ${patient?.pr_status ? 'PR+' : 'PR-'} / ${patient?.her2_binary ? 'HER2+' : 'HER2-'}</div></div>
+  </div>
+</div>
+
+<div class="result-box">
+  <div class="result-label">AI Prediction Result</div>
+  <div class="result-value">${isLumA ? 'Luminal A' : 'Non-Luminal A'}</div>
+  <p style="margin:0;font-size:13px;color:#475569;">Luminal A probability: <strong>${(conf * 100).toFixed(1)}%</strong></p>
+  <div class="conf-bar"><div class="conf-fill"></div></div>
+</div>
+
+<div class="section">
+  <div class="section-title">Therapy Recommendation</div>
+  <div class="therapy">
+    ${isLumA
+      ? '<strong>Luminal A</strong> subtype confirmed. Patient is a strong candidate for <strong>Endocrine (Hormonal) Therapy</strong> — Tamoxifen / Aromatase Inhibitors. Chemotherapy is likely not indicated given the low proliferation signature.'
+      : '<strong>Non-Luminal A</strong> subtype identified. Higher risk profile suggests <strong>Chemotherapy or Targeted Therapy</strong> may be required. Consult multi-disciplinary oncology board for escalation protocol.'}
+  </div>
+</div>
+
+${report.notes ? `<div class="section"><div class="section-title">Clinical Notes</div><div class="notes">${report.notes}</div></div>` : ''}
+
+<div class="signature">
+  <div class="sig-line">Dr. ${doctor?.name || 'Attending Physician'}</div>
+</div>
+
+<div class="footer">
+  <span>BRECAI-FED · Federated Medical AI Platform</span>
+  <span>Report generated: ${date}</span>
+  <span>Status: ${report.status === 'final' ? 'FINAL' : 'DRAFT'}</span>
+</div>
+</body>
+</html>`
+
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+  return URL.createObjectURL(blob)
 }
 
 export default function ClinicalReports() {
-  const reports = useReportStore(s => s.reports)
-  const addReport = useReportStore(s => s.addReport)
-  const updateReport = useReportStore(s => s.updateReport)
-  const deleteReport = useReportStore(s => s.deleteReport)
-  const deleteReports = useReportStore(s => s.deleteReports)
-  const signReport = useReportStore(s => s.signReport)
-  const bulkSign = useReportStore(s => s.bulkSign)
-  const resetSeed = useReportStore(s => s.resetSeed)
-  const patients = usePatientStore(s => s.patients)
-
+  const t = useT()
+  const { user } = useAuthStore()
+  const [reports, setReports] = useState([])
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState('all') // all | signed | draft | luminal | nonluminal
-  const [typeFilter, setTypeFilter] = useState('all')
-  const [checkedIds, setCheckedIds] = useState([])
-  const [openMenuId, setOpenMenuId] = useState(null)
-  const menuRef = useRef(null)
-
-  const [formMode, setFormMode] = useState(null)
-  const [editId, setEditId] = useState(null)
-  const [form, setForm] = useState(emptyForm)
-  const [previewReport, setPreviewReport] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
-  const [confirmDelete, setConfirmDelete] = useState(null)
-  const [confirmReset, setConfirmReset] = useState(false)
-  const [toast, setToast] = useState({ open: false, message: '', tone: 'teal' })
+  const [previewReport, setPreviewReport] = useState(null)
+  const [toast, setToast] = useState({ show: false, msg: '', ok: true })
 
-  const showToast = (message, tone = 'teal') => setToast({ open: true, message, tone })
+  const showToast = (msg, ok = true) => {
+    setToast({ show: true, msg, ok })
+    setTimeout(() => setToast(t => ({ ...t, show: false })), 3000)
+  }
 
-  useEffect(() => {
-    const onClick = (e) => {
-      if (openMenuId && menuRef.current && !menuRef.current.contains(e.target)) setOpenMenuId(null)
-    }
-    document.addEventListener('mousedown', onClick)
-    return () => document.removeEventListener('mousedown', onClick)
-  }, [openMenuId])
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await doctorApi.reports.list()
+      setReports(res.data || [])
+    } catch {}
+    finally { setLoading(false) }
+  }, [])
 
-  // ── Filtered list ────────────────────────────────────────────────────────
-  const filtered = useMemo(() => {
+  useEffect(() => { load() }, [load])
+
+  const filtered = reports.filter(r => {
     const q = search.toLowerCase()
-    return reports.filter(r => {
-      const matchSearch = !q || r.patient.toLowerCase().includes(q) || r.id.toLowerCase().includes(q) || (r.patientId || '').toLowerCase().includes(q)
-      let matchFilter = true
-      if (filter === 'signed') matchFilter = r.status === 'signed'
-      else if (filter === 'draft') matchFilter = r.status === 'draft'
-      else if (filter === 'luminal') matchFilter = r.result === 'Luminal A'
-      else if (filter === 'nonluminal') matchFilter = r.result !== 'Luminal A'
-      const matchType = typeFilter === 'all' || r.type === typeFilter
-      return matchSearch && matchFilter && matchType
-    })
-  }, [reports, search, filter, typeFilter])
+    return !q || r.patient?.patient_identifier?.toLowerCase().includes(q) || String(r.id).includes(q)
+  })
 
-  // ── Stats ────────────────────────────────────────────────────────────────
-  const stats = useMemo(() => {
-    const total = reports.length
-    const signed = reports.filter(r => r.status === 'signed').length
-    const draft = reports.filter(r => r.status === 'draft').length
-    const thisMonth = reports.filter(r => r.date && r.date.startsWith(new Date().toISOString().slice(0, 7))).length
-    return { total, signed, draft, thisMonth }
-  }, [reports])
-
-  // ── Form handlers ────────────────────────────────────────────────────────
-  const openAdd = () => {
-    setEditId(null)
-    setForm({ ...emptyForm, date: new Date().toISOString().slice(0, 10) })
-    setFormMode('add')
+  const handlePreview = async (report) => {
+    try {
+      const full = await doctorApi.reports.get(report.id)
+      const url = generateReportPDF(full, full.patient, user)
+      setPreviewReport(full)
+      setPreviewUrl(url)
+    } catch { showToast('Failed to load report', false) }
   }
 
-  const openGenerateFromPatient = (p) => {
-    setEditId(null)
-    setForm({
-      ...emptyForm,
-      patientId: p.id,
-      patient: p.name,
-      result: p.lastPrediction,
-      prob: p.prob,
-      date: new Date().toISOString().slice(0, 10),
-      notes: p.notes || '',
-    })
-    setFormMode('add')
+  const handleDownload = async (report) => {
+    try {
+      const full = await doctorApi.reports.get(report.id)
+      const url = generateReportPDF(full, full.patient, user)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `report-${full.patient?.patient_identifier || full.id}.html`
+      a.click()
+      URL.revokeObjectURL(url)
+      showToast('Report downloaded')
+    } catch { showToast('Failed to download report', false) }
   }
 
-  const openEdit = (r) => {
-    setEditId(r.id)
-    setForm({
-      patientId: r.patientId || '', patient: r.patient, type: r.type,
-      result: r.result, prob: r.prob, doctor: r.doctor, date: r.date,
-      status: r.status, notes: r.notes || '',
-    })
-    setFormMode('edit')
-  }
-
-  const closeForm = () => { setFormMode(null); setEditId(null); setForm(emptyForm) }
-
-  const handlePatientPick = (id) => {
-    const p = patients.find(x => x.id === id)
-    if (p) {
-      setForm(f => ({
-        ...f,
-        patientId: p.id,
-        patient: p.name,
-        result: f.result || p.lastPrediction,
-        prob: f.prob || p.prob,
-      }))
-    } else {
-      setForm(f => ({ ...f, patientId: id }))
+  const handleFinalize = async (report) => {
+    try {
+      await doctorApi.reports.finalize(report.id)
+      showToast('Report finalized')
+      load()
+    } catch (err) {
+      showToast(err?.response?.data?.message || 'Failed to finalize', false)
     }
   }
 
-  const submitForm = (e) => {
-    e?.preventDefault?.()
-    if (!form.patient?.trim()) { showToast('Patient name is required', 'pink'); return }
-    if (formMode === 'add') {
-      const r = addReport(form)
-      showToast(`Report ${r.id} created`)
-    } else if (formMode === 'edit' && editId) {
-      updateReport(editId, { ...form, prob: Number(form.prob) || 0 })
-      showToast(`Report ${editId} updated`, 'blue')
-    }
-    closeForm()
-  }
-
-  // ── PDF actions ──────────────────────────────────────────────────────────
-  const findPatient = (r) => patients.find(p => p.id === r.patientId) || patients.find(p => p.name === r.patient) || null
-
-  const handleDownload = (r) => {
-    downloadReportPDF(r, findPatient(r))
-    showToast(`${r.id}.pdf downloaded`, 'blue')
-  }
-  const handlePreview = (r) => {
-    const url = previewReportPDF(r, findPatient(r))
-    setPreviewReport(r)
-    setPreviewUrl(url)
-  }
   const closePreview = () => {
     if (previewUrl) URL.revokeObjectURL(previewUrl)
-    setPreviewReport(null); setPreviewUrl(null)
-  }
-  const handlePrint = (r) => {
-    const url = previewReportPDF(r, findPatient(r))
-    const w = window.open(url, '_blank')
-    if (w) setTimeout(() => w.print?.(), 600)
-    showToast(`Opening ${r.id} for print`, 'blue')
+    setPreviewReport(null)
+    setPreviewUrl(null)
   }
 
-  // ── Bulk handlers ────────────────────────────────────────────────────────
-  const toggleCheck = (id) => setCheckedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
-  const toggleAll = () => setCheckedIds(prev => prev.length === filtered.length ? [] : filtered.map(r => r.id))
-
-  const bulkSignAction = () => { bulkSign(checkedIds); showToast(`${checkedIds.length} report(s) signed`); setCheckedIds([]) }
-  const bulkExportCSV = () => { const rows = reports.filter(r => checkedIds.includes(r.id)); exportRowsCSV(rows, `reports-${Date.now()}.csv`); showToast(`Exported ${rows.length} CSV row(s)`, 'blue') }
-  const bulkExportPDFs = () => {
-    const rows = reports.filter(r => checkedIds.includes(r.id))
-    rows.forEach((r, i) => setTimeout(() => downloadReportPDF(r, findPatient(r)), i * 250))
-    showToast(`Generating ${rows.length} PDF(s)…`, 'blue')
-  }
-
-  // ── Delete ───────────────────────────────────────────────────────────────
-  const requestDelete = (ids) => setConfirmDelete({ ids })
-  const performDelete = () => {
-    if (!confirmDelete) return
-    const { ids } = confirmDelete
-    if (ids.length === 1) deleteReport(ids[0]); else deleteReports(ids)
-    setCheckedIds(prev => prev.filter(i => !ids.includes(i)))
-    showToast(`${ids.length} report(s) deleted`, 'pink')
-    setConfirmDelete(null)
+  const stats = {
+    total: reports.length,
+    final: reports.filter(r => r.status === 'final').length,
+    draft: reports.filter(r => r.status === 'draft').length,
   }
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show" className="relative">
-      <PageHeader title="Clinical Reports" subtitle="HIPAA-compliant diagnostic reports and PDF export center">
-        <div className="flex gap-2">
-          <Btn variant="ghost" onClick={() => setConfirmReset(true)}>
-            <RefreshCcw className="w-4 h-4" /> Reset
-          </Btn>
-          <Btn variant="secondary" onClick={() => exportRowsCSV(filtered, `reports-${Date.now()}.csv`)}>
-            <Download className="w-4 h-4" /> Export CSV
-          </Btn>
-          <Btn variant="primary" onClick={openAdd}>
-            <Plus className="w-4 h-4" /> Generate Report
-          </Btn>
+      {/* Header */}
+      <motion.div variants={fadeUp} className="mb-6">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">{t('doctor.reportsTitle')}</h1>
+            <p className="text-sm text-slate-500 font-medium mt-1">{t('doctor.reportsSubtitle')}</p>
+          </div>
+          <button onClick={load} className="p-2 rounded-xl border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition">
+            <RefreshCw className="w-4 h-4" />
+          </button>
         </div>
-      </PageHeader>
+      </motion.div>
 
       {/* Stats */}
-      <motion.div variants={fadeUp} className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Total Reports" value={stats.total} sub="All time" icon={FileText} color="blue" />
-        <StatCard label="Signed" value={stats.signed} sub="Final & locked" icon={FileCheck2} color="teal" />
-        <StatCard label="Drafts" value={stats.draft} sub="Awaiting signature" icon={AlertTriangle} color="amber" />
-        <StatCard label="This Month" value={stats.thisMonth} sub={new Date().toLocaleDateString('en-US', { month: 'long' })} icon={Calendar} color="pink" />
+      <motion.div variants={fadeUp} className="grid grid-cols-3 gap-4 mb-6">
+        {[
+          { label: 'Total', value: stats.total, color: 'text-[#0572B2]', bg: 'bg-blue-50', border: 'border-blue-200' },
+          { label: t('doctor.final'), value: stats.final, color: 'text-[#0BB592]', bg: 'bg-teal-50', border: 'border-teal-200' },
+          { label: t('doctor.draft'), value: stats.draft, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' },
+        ].map(s => (
+          <div key={s.label} className={`rounded-2xl border ${s.border} ${s.bg} px-4 py-4 text-center`}>
+            <p className={`text-3xl font-black ${s.color}`}>{s.value}</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mt-1">{s.label}</p>
+          </div>
+        ))}
       </motion.div>
 
-      {/* Filter Bar */}
-      <motion.div variants={fadeUp} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 mb-6 flex flex-col xl:flex-row gap-3 xl:items-center">
-        <div className="relative flex-1">
+      {/* Search */}
+      <motion.div variants={fadeUp} className="mb-5">
+        <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
-            value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search by patient, report ID or patient ID..."
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 border border-slate-100 text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0572B2]/20 transition"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search by patient ID or report ID…"
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-slate-200 text-sm font-semibold text-slate-900 outline-none focus:border-[#0572B2] focus:ring-2 focus:ring-[#0572B2]/10 transition"
           />
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 mr-1 flex items-center gap-1">
-            <Filter className="w-3 h-3" /> Quick:
-          </span>
-          {[
-            { v: 'all', l: 'All' }, { v: 'signed', l: 'Signed' }, { v: 'draft', l: 'Drafts' },
-            { v: 'luminal', l: 'Luminal A' }, { v: 'nonluminal', l: 'Non-Lum A' },
-          ].map(f => (
-            <button
-              key={f.v}
-              onClick={() => setFilter(f.v)}
-              className={cn(
-                'px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all border',
-                filter === f.v ? 'bg-[#0572B2] border-[#0572B2] text-white' : 'bg-white border-slate-100 text-slate-500 hover:bg-slate-50'
-              )}
-            >{f.l}</button>
-          ))}
-          <select
-            value={typeFilter}
-            onChange={e => setTypeFilter(e.target.value)}
-            className="ml-1 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider border border-slate-100 bg-white text-slate-600"
-          >
-            <option value="all">All Types</option>
-            {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
         </div>
       </motion.div>
 
-      {/* Bulk action bar */}
-      <AnimatePresence>
-        {checkedIds.length > 0 && (
-          <motion.div
-            initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }}
-            className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white rounded-2xl px-6 py-4 flex items-center gap-6 shadow-2xl border border-slate-700"
-          >
-            <div className="flex items-center gap-3 pr-6 border-r border-slate-700">
-              <span className="w-6 h-6 rounded-lg bg-[#0BB592] flex items-center justify-center text-[10px] font-black">{checkedIds.length}</span>
-              <p className="text-sm font-bold">Selected</p>
-            </div>
-            <div className="flex items-center gap-4">
-              <button onClick={bulkSignAction} className="flex items-center gap-2 text-xs font-bold hover:text-[#0BB592] transition"><FileCheck2 className="w-4 h-4" /> Sign All</button>
-              <button onClick={bulkExportPDFs} className="flex items-center gap-2 text-xs font-bold hover:text-[#0572B2] transition"><Download className="w-4 h-4" /> Download PDFs</button>
-              <button onClick={bulkExportCSV} className="flex items-center gap-2 text-xs font-bold hover:text-blue-300 transition"><FileText className="w-4 h-4" /> CSV</button>
-              <button onClick={() => requestDelete(checkedIds)} className="flex items-center gap-2 text-xs font-bold hover:text-[#F55486] transition"><Trash2 className="w-4 h-4" /> Delete</button>
-            </div>
-            <button onClick={() => setCheckedIds([])} className="text-slate-400 hover:text-white transition"><X className="w-5 h-5" /></button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Generate from patient (compact carousel) */}
-      <SectionCard title="Quick generate from patient" subtitle="Recent records ready for reporting" icon={Users} iconColor="blue" className="mb-6">
-        <div className="px-4 pb-4 pt-2 flex gap-3 overflow-x-auto">
-          {patients.slice(0, 8).map(p => (
-            <button
-              key={p.id}
-              onClick={() => openGenerateFromPatient(p)}
-              className="shrink-0 w-56 text-left p-3 rounded-xl border border-slate-100 hover:border-[#0572B2] hover:bg-blue-50/40 transition-all group"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <p className="font-mono text-[10px] font-bold text-slate-400">{p.id}</p>
-                <Badge color={p.lastPrediction === 'Luminal A' ? 'teal' : 'pink'}>{p.lastPrediction.replace('Non-', 'N-')}</Badge>
-              </div>
-              <p className="font-extrabold text-slate-900 text-sm truncate">{p.name}</p>
-              <p className="text-[11px] font-medium text-slate-400">{p.prob}% confidence · Site {p.site}</p>
-              <div className="mt-2 text-[10px] font-black uppercase tracking-widest text-[#0572B2] flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
-                <Plus className="w-3 h-3" /> Generate Report
-              </div>
-            </button>
-          ))}
-        </div>
-      </SectionCard>
-
       {/* Reports list */}
-      {filtered.length === 0 ? (
-        <EmptyState icon={FileText} title="No reports match your filters" description="Try adjusting filters or generate a new report." />
+      {loading ? (
+        <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 text-[#0572B2] animate-spin" /></div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-16">
+          <FileText className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+          <p className="text-slate-400 font-semibold">{t('doctor.noReports')}</p>
+          <p className="text-xs text-slate-400 mt-1">Complete an examination to generate a report.</p>
+        </div>
       ) : (
         <motion.div variants={stagger} className="space-y-3">
-          <div className="flex items-center gap-3 px-2">
-            <input type="checkbox" checked={checkedIds.length === filtered.length && filtered.length > 0} onChange={toggleAll} className="w-4 h-4 rounded border-slate-300 text-[#0572B2] focus:ring-[#0572B2]" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Select all visible · {filtered.length} report(s)</span>
-          </div>
-
-          {filtered.map((r) => (
+          {filtered.map(r => (
             <motion.div
               key={r.id}
               variants={fadeUp}
-              whileHover={{ y: -2, boxShadow: '0 8px 24px rgba(9,58,122,0.07)' }}
-              className={cn(
-                'bg-white rounded-2xl border p-5 flex flex-col sm:flex-row sm:items-center gap-4 cursor-default relative',
-                checkedIds.includes(r.id) ? 'border-[#0572B2] bg-blue-50/30' : 'border-slate-200',
-              )}
+              className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col sm:flex-row sm:items-center gap-4"
             >
-              <input type="checkbox" checked={checkedIds.includes(r.id)} onChange={() => toggleCheck(r.id)} className="w-4 h-4 rounded border-slate-300 text-[#0572B2] focus:ring-[#0572B2] shrink-0" />
-
-              <div className={cn('w-12 h-12 rounded-xl border flex items-center justify-center shrink-0',
-                r.result === 'Luminal A' ? 'bg-teal-50 border-teal-200 text-[#0BB592]' : 'bg-pink-50 border-pink-200 text-[#F55486]')}>
+              <div className={`w-12 h-12 rounded-xl border flex items-center justify-center shrink-0 ${
+                r.prediction?.is_lum_a === true ? 'bg-teal-50 border-teal-200 text-[#0BB592]' :
+                r.prediction?.is_lum_a === false ? 'bg-pink-50 border-pink-200 text-[#F55486]' :
+                'bg-slate-50 border-slate-200 text-slate-400'
+              }`}>
                 <FileText className="w-5 h-5" />
               </div>
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <span className="font-mono text-xs font-bold text-slate-400">{r.id}</span>
-                  <Badge color={r.status === 'signed' ? 'teal' : 'amber'}>
-                    {r.status === 'signed' ? <CheckCircle2 className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
+                  <span className="font-mono text-xs font-bold text-slate-400">#{r.id}</span>
+                  <StatusPill tone={r.status === 'final' ? 'teal' : 'amber'}>
+                    {r.status === 'final' ? <FileCheck2 className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
                     {r.status}
-                  </Badge>
-                  <Badge color={r.result === 'Luminal A' ? 'teal' : 'pink'}>{r.result}</Badge>
-                  <Badge color="slate">{r.type}</Badge>
+                  </StatusPill>
+                  {r.prediction?.is_lum_a != null && (
+                    <StatusPill tone={r.prediction.is_lum_a ? 'teal' : 'pink'}>
+                      {r.prediction.is_lum_a ? 'Luminal A' : 'Non-Luminal A'}
+                    </StatusPill>
+                  )}
                 </div>
-                <p className="font-bold text-slate-900">{r.patient} <span className="font-mono text-xs font-bold text-slate-400 ml-1">{r.patientId}</span></p>
-                <p className="text-xs text-slate-500 font-medium mt-0.5">{r.doctor}</p>
+                <p className="font-bold text-slate-900">{r.patient?.patient_identifier || `Patient #${r.patient_id}`}</p>
+                <p className="text-xs text-slate-400 font-medium mt-0.5 flex items-center gap-1">
+                  <Calendar className="w-3 h-3" />
+                  {r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}
+                </p>
               </div>
 
-              <div className="flex items-center gap-4 text-right shrink-0">
-                <div>
-                  <p className="font-mono text-lg font-extrabold text-slate-800">{Number(r.prob).toFixed(1)}%</p>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Confidence</p>
-                </div>
-                <div className="flex items-center gap-1 text-xs text-slate-400 font-medium">
-                  <Calendar className="w-3 h-3" />{r.date}
-                </div>
-                <div className="flex gap-2 relative">
-                  <button title="Preview PDF" onClick={() => handlePreview(r)}
-                    className="w-9 h-9 rounded-xl border border-slate-200 flex items-center justify-center text-slate-400 hover:text-[#0572B2] hover:border-[#0572B2] transition-colors">
-                    <Eye className="w-4 h-4" />
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => handlePreview(r)}
+                  className="w-9 h-9 rounded-xl border border-slate-200 flex items-center justify-center text-slate-400 hover:text-[#0572B2] hover:border-[#0572B2] transition"
+                  title={t('doctor.previewPDF')}
+                >
+                  <Eye className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleDownload(r)}
+                  className="w-9 h-9 rounded-xl bg-[#0572B2] flex items-center justify-center text-white hover:bg-[#0462a0] transition"
+                  title={t('doctor.downloadPDF')}
+                >
+                  <Download className="w-4 h-4" />
+                </button>
+                {r.status === 'draft' && (
+                  <button
+                    onClick={() => handleFinalize(r)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-teal-200 bg-teal-50 text-[#0BB592] text-xs font-black hover:bg-teal-100 transition"
+                    title={t('doctor.finalizeReport')}
+                  >
+                    <FileCheck2 className="w-3.5 h-3.5" /> {t('doctor.finalizeReport')}
                   </button>
-                  <button title="Download PDF" onClick={() => handleDownload(r)}
-                    className="w-9 h-9 rounded-xl bg-[#0572B2] flex items-center justify-center text-white shadow-sm hover:bg-[#0462a0] transition-colors">
-                    <Download className="w-4 h-4" />
-                  </button>
-                  <button title="More" onClick={() => setOpenMenuId(openMenuId === r.id ? null : r.id)}
-                    className="w-9 h-9 rounded-xl border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-900 hover:bg-slate-50 transition-colors">
-                    <MoreVertical className="w-4 h-4" />
-                  </button>
-                  <AnimatePresence>
-                    {openMenuId === r.id && (
-                      <motion.div
-                        ref={menuRef}
-                        initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-                        className="absolute right-0 top-11 z-30 w-52 bg-white border border-slate-200 rounded-xl shadow-xl py-1.5"
-                      >
-                        <MItem onClick={() => { handlePrint(r); setOpenMenuId(null) }} icon={Printer} color="blue">Print PDF</MItem>
-                        <MItem onClick={() => { openEdit(r); setOpenMenuId(null) }} icon={Edit3} color="slate">Edit details</MItem>
-                        {r.status === 'draft' && <MItem onClick={() => { signReport(r.id); showToast(`${r.id} signed`); setOpenMenuId(null) }} icon={FileCheck2} color="teal">Sign report</MItem>}
-                        <MItem onClick={() => { exportRowsCSV([r], `${r.id}.csv`); setOpenMenuId(null) }} icon={FileText} color="slate">Export CSV row</MItem>
-                        <div className="my-1 h-px bg-slate-100" />
-                        <MItem onClick={() => { requestDelete([r.id]); setOpenMenuId(null) }} icon={Trash2} color="pink">Delete report</MItem>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
+                )}
               </div>
             </motion.div>
           ))}
         </motion.div>
       )}
 
-      {/* Add / Edit modal */}
-      <Modal
-        open={!!formMode}
-        onClose={closeForm}
-        title={formMode === 'edit' ? 'Edit Report' : 'Generate New Report'}
-        subtitle={formMode === 'edit' ? `Updating ${form.id}` : 'Compose a clinical PDF report'}
-        size="lg"
-        footer={
-          <>
-            <Btn variant="secondary" onClick={closeForm}>Cancel</Btn>
-            <Btn variant="primary" onClick={submitForm}><Save className="w-4 h-4" /> {formMode === 'edit' ? 'Save changes' : 'Create report'}</Btn>
-          </>
-        }
-      >
-        <form onSubmit={submitForm} className="space-y-5">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            <Field label="Patient" className="col-span-2">
-              <select className={inputClass} value={form.patientId} onChange={e => handlePatientPick(e.target.value)}>
-                <option value="">— Select patient —</option>
-                {patients.map(p => <option key={p.id} value={p.id}>{p.name} · {p.id}</option>)}
-              </select>
-            </Field>
-            <Field label="Report Type">
-              <select className={inputClass} value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
-                {TYPES.map(t => <option key={t}>{t}</option>)}
-              </select>
-            </Field>
-            <Field label="Patient name (override)">
-              <input className={inputClass} value={form.patient} onChange={e => setForm(f => ({ ...f, patient: e.target.value }))} placeholder="e.g. Fatima A." />
-            </Field>
-            <Field label="Subtype">
-              <select className={inputClass} value={form.result} onChange={e => setForm(f => ({ ...f, result: e.target.value }))}>
-                <option>Luminal A</option><option>Non-Luminal A</option>
-              </select>
-            </Field>
-            <Field label="Confidence (%)">
-              <input type="number" min="0" max="100" className={inputClass} value={form.prob} onChange={e => setForm(f => ({ ...f, prob: e.target.value }))} />
-            </Field>
-            <Field label="Doctor">
-              <input className={inputClass} value={form.doctor} onChange={e => setForm(f => ({ ...f, doctor: e.target.value }))} />
-            </Field>
-            <Field label="Date">
-              <input type="date" className={inputClass} value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
-            </Field>
-            <Field label="Status">
-              <select className={inputClass} value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
-                {STATUSES.map(s => <option key={s}>{s}</option>)}
-              </select>
-            </Field>
-          </div>
-          <Field label="Clinical Notes">
-            <textarea rows="4" className={inputClass} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Recommendations, MDT decisions, follow-up plan..." />
-          </Field>
-          <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 text-[11px] font-medium text-slate-500 flex items-start gap-2">
-            <Brain className="w-4 h-4 text-[#0572B2] mt-0.5 shrink-0" />
-            <span>The PDF will automatically include patient demographics, biomarker panel (ER, PR, HER2, Ki-67), feature attribution and a therapy recommendation pulled from the patient registry when a patient is selected.</span>
-          </div>
-        </form>
-      </Modal>
-
-      {/* PDF preview modal */}
-      <Modal
-        open={!!previewReport}
-        onClose={closePreview}
-        title={previewReport ? `Preview · ${previewReport.id}` : ''}
-        subtitle={previewReport ? `${previewReport.patient} · ${previewReport.type}` : ''}
-        size="lg"
-        footer={previewReport ? (
-          <>
-            <Btn variant="secondary" onClick={closePreview}>Close</Btn>
-            <Btn variant="secondary" onClick={() => handlePrint(previewReport)}><Printer className="w-4 h-4" /> Print</Btn>
-            <Btn variant="primary" onClick={() => handleDownload(previewReport)}><Download className="w-4 h-4" /> Download PDF</Btn>
-          </>
-        ) : null}
-      >
+      {/* Preview modal */}
+      <AnimatePresence>
         {previewUrl && (
-          <div className="h-[60vh] rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
-            <iframe title="Report preview" src={previewUrl} className="w-full h-full" />
-          </div>
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80]"
+              onClick={closePreview}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }}
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[90] w-[calc(100%-2rem)] max-w-3xl bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden"
+            >
+              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                <p className="font-extrabold text-slate-900">
+                  Report Preview — {previewReport?.patient?.patient_identifier || `#${previewReport?.id}`}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => handleDownload(previewReport)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0572B2] text-white text-xs font-black hover:bg-[#0462a0] transition">
+                    <Download className="w-3.5 h-3.5" /> Download
+                  </button>
+                  <button onClick={closePreview} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+              <div className="h-[65vh]">
+                <iframe src={previewUrl} className="w-full h-full border-0" title="Report preview" />
+              </div>
+            </motion.div>
+          </>
         )}
-      </Modal>
+      </AnimatePresence>
 
-      <ConfirmDialog
-        open={!!confirmDelete}
-        onClose={() => setConfirmDelete(null)}
-        onConfirm={performDelete}
-        title="Delete report(s)?"
-        message={confirmDelete ? `This will permanently remove ${confirmDelete.ids.length} report(s). This action cannot be undone.` : ''}
-        confirmLabel="Delete"
-        danger
-      />
-
-      <ConfirmDialog
-        open={confirmReset}
-        onClose={() => setConfirmReset(false)}
-        onConfirm={() => { resetSeed(); setCheckedIds([]); showToast('Reports reset to demo data', 'blue') }}
-        title="Reset reports to demo data?"
-        message="This will replace all current reports with the original demo dataset."
-        confirmLabel="Reset"
-        danger
-      />
-
-      <Toast open={toast.open} onClose={() => setToast(t => ({ ...t, open: false }))} message={toast.message} tone={toast.tone} />
+      {/* Toast */}
+      <AnimatePresence>
+        {toast.show && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
+            className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] px-5 py-3 rounded-2xl shadow-xl text-sm font-bold flex items-center gap-2 ${
+              toast.ok ? 'bg-[#0BB592] text-white' : 'bg-[#F55486] text-white'
+            }`}
+          >
+            {toast.ok ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+            {toast.msg}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
-  )
-}
-
-function MItem({ icon: Icon, color, children, onClick }) {
-  const colors = {
-    teal: 'text-[#0BB592] hover:bg-teal-50',
-    blue: 'text-[#0572B2] hover:bg-blue-50',
-    pink: 'text-[#F55486] hover:bg-pink-50',
-    slate: 'text-slate-700 hover:bg-slate-50',
-  }
-  return (
-    <button onClick={onClick} className={cn('w-full text-left px-3 py-2 text-xs font-bold flex items-center gap-2.5 transition', colors[color])}>
-      <Icon className="w-3.5 h-3.5" /> {children}
-    </button>
   )
 }

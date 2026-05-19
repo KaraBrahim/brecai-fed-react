@@ -254,6 +254,18 @@ const doctor = {
     },
   },
 
+    // ─── AI Models (public list for doctor) ─────────────────────────────────────
+
+  aiModels: {
+    /**
+     * GET /api/doctor/ai-models — active models visible to the doctor
+     * @returns {Promise<Array>}
+     */
+    list() {
+      return client.get('/doctor/ai-models').then((r) => r.data);
+    },
+  },
+
   // ─── Predictions ─────────────────────────────────────────────────────────────
 
   predictions: {

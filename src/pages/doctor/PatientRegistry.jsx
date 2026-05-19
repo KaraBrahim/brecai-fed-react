@@ -1,745 +1,440 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+/**
+ * PatientRegistry.jsx — Real API connected
+ * Lists patients from the backend, allows create/edit/delete.
+ */
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
 import {
-  Search, Filter, User, Calendar, Activity, Brain,
-  MoreVertical, Download, CheckCircle2, AlertTriangle,
-  ArrowUpDown, ExternalLink, Trash2, ShieldCheck, Edit3,
-  FileText, Microscope, Clock, Plus, X, RefreshCcw,
-  Beaker, Stethoscope, ChevronDown, Save
+  Search, User, Plus, Loader2, RefreshCw, Edit3, Trash2,
+  ChevronLeft, ChevronRight, X, Save, Brain, Microscope,
 } from 'lucide-react'
-import {
-  PageHeader, Badge, Btn, EmptyState, stagger, fadeUp, StatCard,
-  Modal, Field, inputClass, ConfirmDialog, Toast,
-} from '@/components/shared'
+import { stagger, fadeUp } from '@/components/shared'
+import { StatusPill, MetricTile } from '@/components/admin'
 import { cn } from '@/lib/utils'
-import { usePatientStore } from '@/stores/patientStore'
+import { useT } from '@/stores/i18nStore'
+import doctorApi from '@/api/api-client/doctor'
+import PredictionWizard from './PredictionWizard'
 
-const StatusBadge = ({ status }) => ({
-  confirmed:  <Badge color="teal">Confirmed</Badge>,
-  pending:    <Badge color="amber">Pending</Badge>,
-  overridden: <Badge color="blue">Modified</Badge>,
-}[status] || <Badge color="slate">{status}</Badge>)
+/* ── Patient form ────────────────────────────────────────────────────────── */
+function PatientForm({ initial, onSave, onCancel, loading, error }) {
+  const t = useT()
+  const [f, setF] = useState(initial || {
+    patient_identifier: '', er_status: true, pr_status: true,
+    her2_binary: false, age: '', stage_num: 2,
+    er_status_missing: false, pr_status_missing: false,
+    fraction_genome_altered: '', buffa_hypoxia_score: '',
+    ragnum_hypoxia_score: '', winter_hypoxia_score: '',
+  })
+  const set = (k, v) => setF(p => ({ ...p, [k]: v }))
+  const inputCls = 'w-full rounded-xl border-2 border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none focus:border-[#0572B2] focus:bg-white transition'
 
-const RiskDot = ({ risk }) => ({
-  low:    <span title="Low risk" className="w-2 h-2 rounded-full bg-[#0BB592]" />,
-  medium: <span title="Medium risk" className="w-2 h-2 rounded-full bg-amber-400" />,
-  high:   <span title="High risk" className="w-2 h-2 rounded-full bg-[#F55486]" />,
-}[risk] || null)
-
-const SITES = ['Alpha-01', 'Beta-02', 'Gamma-03']
-const RISKS = ['low', 'medium', 'high']
-const PREDICTIONS = ['Luminal A', 'Non-Luminal A']
-const STATUSES = ['pending', 'confirmed', 'overridden']
-const HER2_OPTIONS = ['Negative', 'Positive', 'Equivocal']
-const LYMPH_OPTIONS = ['Negative', 'Positive']
-
-const emptyForm = {
-  name: '', age: '', dob: '', tumorSize: '', lymphSite: 'Negative',
-  er: '', pr: '', her2: 'Negative', ki67: '',
-  lastPrediction: 'Luminal A', prob: '', status: 'pending',
-  date: new Date().toISOString().slice(0, 10),
-  site: 'Alpha-01', risk: 'low', notes: '',
-}
-
-function exportToCSV(rows, filename = 'patients.csv') {
-  if (!rows.length) return
-  const cols = ['id','name','age','dob','site','tumorSize','lymphSite','er','pr','her2','ki67','lastPrediction','prob','status','risk','date','notes']
-  const escape = (v) => {
-    const s = v == null ? '' : String(v)
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-  }
-  const csv = [cols.join(','), ...rows.map(r => cols.map(c => escape(r[c])).join(','))].join('\n')
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url; a.download = filename; a.click()
-  URL.revokeObjectURL(url)
-}
-
-export default function PatientRegistry() {
-  const navigate = useNavigate()
-  const patients = usePatientStore(s => s.patients)
-  const addPatient = usePatientStore(s => s.addPatient)
-  const updatePatient = usePatientStore(s => s.updatePatient)
-  const deletePatient = usePatientStore(s => s.deletePatient)
-  const deletePatients = usePatientStore(s => s.deletePatients)
-  const setStatus = usePatientStore(s => s.setStatus)
-  const bulkSetStatus = usePatientStore(s => s.bulkSetStatus)
-  const resetSeed = usePatientStore(s => s.resetSeed)
-
-  const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState('all')
-  const [siteFilter, setSiteFilter] = useState('all')
-  const [sortAsc, setSortAsc] = useState(false)
-  const [selectedId, setSelectedId] = useState(null)
-  const [checkedIds, setCheckedIds] = useState([])
-
-  const [formMode, setFormMode] = useState(null) // 'add' | 'edit' | null
-  const [form, setForm] = useState(emptyForm)
-  const [editId, setEditId] = useState(null)
-
-  const [confirmDelete, setConfirmDelete] = useState(null) // { ids: [], multi }
-  const [confirmReset, setConfirmReset] = useState(false)
-  const [toast, setToast] = useState({ open: false, message: '', tone: 'teal' })
-  const [openMenuId, setOpenMenuId] = useState(null)
-  const menuRef = useRef(null)
-
-  const selectedPatient = useMemo(() => patients.find(p => p.id === selectedId) || null, [patients, selectedId])
-
-  useEffect(() => {
-    const onClick = (e) => {
-      if (openMenuId && menuRef.current && !menuRef.current.contains(e.target)) setOpenMenuId(null)
-    }
-    document.addEventListener('mousedown', onClick)
-    return () => document.removeEventListener('mousedown', onClick)
-  }, [openMenuId])
-
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase()
-    let list = patients.filter(p => {
-      const matchSearch = !q || p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q) || p.site.toLowerCase().includes(q)
-      let matchFilter = true
-      if (filter === 'pending') matchFilter = p.status === 'pending'
-      else if (filter === 'confirmed') matchFilter = p.status === 'confirmed'
-      else if (filter === 'luminal-a') matchFilter = p.lastPrediction === 'Luminal A'
-      else if (filter === 'high-risk') matchFilter = p.risk === 'high'
-      const matchSite = siteFilter === 'all' || p.site === siteFilter
-      return matchSearch && matchFilter && matchSite
-    })
-    list = [...list].sort((a, b) => sortAsc ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date))
-    return list
-  }, [patients, search, filter, siteFilter, sortAsc])
-
-  const toggleCheck = (id) => {
-    setCheckedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
-  }
-  const toggleAll = () => {
-    setCheckedIds(prev => prev.length === filtered.length ? [] : filtered.map(p => p.id))
-  }
-
-  const showToast = (message, tone = 'teal') => setToast({ open: true, message, tone })
-
-  // ── Form handlers ────────────────────────────────────────────────────────
-  const openAdd = () => {
-    setEditId(null)
-    setForm(emptyForm)
-    setFormMode('add')
-  }
-  const openEdit = (p) => {
-    setEditId(p.id)
-    setForm({
-      name: p.name, age: p.age, dob: p.dob, tumorSize: p.tumorSize, lymphSite: p.lymphSite,
-      er: p.er ?? '', pr: p.pr ?? '', her2: p.her2 ?? 'Negative', ki67: p.ki67 ?? '',
-      lastPrediction: p.lastPrediction, prob: p.prob, status: p.status,
-      date: p.date, site: p.site, risk: p.risk, notes: p.notes ?? '',
-    })
-    setFormMode('edit')
-  }
-  const closeForm = () => { setFormMode(null); setEditId(null); setForm(emptyForm) }
-
-  const submitForm = (e) => {
-    e?.preventDefault?.()
-    if (!form.name?.trim()) { showToast('Patient name is required', 'pink'); return }
-    if (formMode === 'add') {
-      const p = addPatient(form)
-      showToast(`Patient ${p.name} added (${p.id})`)
-    } else if (formMode === 'edit' && editId) {
-      updatePatient(editId, {
-        ...form,
-        age: Number(form.age) || 0,
-        tumorSize: Number(form.tumorSize) || 0,
-        er: Number(form.er) || 0,
-        pr: Number(form.pr) || 0,
-        ki67: Number(form.ki67) || 0,
-        prob: Number(form.prob) || 0,
-      })
-      showToast(`Patient ${form.name} updated`, 'blue')
-    }
-    closeForm()
-  }
-
-  // ── Delete handlers ──────────────────────────────────────────────────────
-  const requestDelete = (ids, multi = false) => setConfirmDelete({ ids, multi })
-  const performDelete = () => {
-    if (!confirmDelete) return
-    const { ids } = confirmDelete
-    if (ids.length === 1) deletePatient(ids[0])
-    else deletePatients(ids)
-    setCheckedIds(prev => prev.filter(i => !ids.includes(i)))
-    if (selectedId && ids.includes(selectedId)) setSelectedId(null)
-    showToast(`${ids.length} record(s) deleted`, 'pink')
-    setConfirmDelete(null)
-  }
-
-  // ── Status / bulk handlers ───────────────────────────────────────────────
-  const confirmOne = (id) => { setStatus(id, 'confirmed'); showToast('Verdict confirmed') }
-  const overrideOne = (id) => { setStatus(id, 'overridden'); showToast('Marked as modified', 'blue') }
-  const bulkConfirm = () => { bulkSetStatus(checkedIds, 'confirmed'); showToast(`${checkedIds.length} record(s) confirmed`); setCheckedIds([]) }
-  const exportSelection = () => {
-    const rows = patients.filter(p => checkedIds.includes(p.id))
-    exportToCSV(rows, `patients-selection-${Date.now()}.csv`)
-    showToast(`Exported ${rows.length} record(s)`, 'blue')
-  }
-  const exportAll = () => {
-    exportToCSV(filtered, `patients-${Date.now()}.csv`)
-    showToast(`Exported ${filtered.length} record(s)`, 'blue')
-  }
+  const BoolSelect = ({ label, k }) => (
+    <div>
+      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{label}</label>
+      <select className={inputCls} value={f[k] ? '1' : '0'} onChange={e => set(k, e.target.value === '1')}>
+        <option value="1">{t('doctor.positive')}</option>
+        <option value="0">{t('doctor.negative')}</option>
+      </select>
+    </div>
+  )
 
   return (
-    <motion.div variants={stagger} initial="hidden" animate="show" className="relative">
-      <PageHeader
-        title="Patient Registry"
-        subtitle="Full clinical database with multi-site federated data management"
-      >
-        <div className="flex gap-2">
-          <Btn variant="ghost" size="md" onClick={() => setConfirmReset(true)}>
-            <RefreshCcw className="w-4 h-4" /> Reset
-          </Btn>
-          <Btn variant="secondary" size="md" onClick={exportAll}>
-            <Download className="w-4 h-4" /> Export CSV
-          </Btn>
-          <Btn variant="primary" size="md" onClick={openAdd}>
-            <Plus className="w-4 h-4" /> Add Patient
-          </Btn>
+    <form onSubmit={e => { e.preventDefault(); onSave(f) }} className="space-y-4">
+      <div>
+        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{t('doctor.patientId')} *</label>
+        <input className={inputCls} value={f.patient_identifier} onChange={e => set('patient_identifier', e.target.value)} placeholder="e.g. DZ-CONST-042" required />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{t('doctor.age')} *</label>
+          <input type="number" min="0" max="120" className={inputCls} value={f.age} onChange={e => set('age', e.target.value)} placeholder="e.g. 52" required />
         </div>
-      </PageHeader>
-
-      {/* Stats */}
-      <motion.div variants={fadeUp} className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard label="Active Records" value={patients.length} sub="Across 3 sites" icon={User} color="blue" />
-        <StatCard label="Pending Action" value={patients.filter(p => p.status === 'pending').length} sub="Requires human verdict" icon={Clock} color="amber" />
-        <StatCard label="Luminal A" value={patients.filter(p => p.lastPrediction === 'Luminal A').length} sub="Predicted subtype" icon={ShieldCheck} color="teal" />
-        <StatCard label="High Risk" value={patients.filter(p => p.risk === 'high').length} sub="Immediate priority" icon={AlertTriangle} color="pink" />
-      </motion.div>
-
-      {/* Filter Bar */}
-      <motion.div variants={fadeUp} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 mb-6 flex flex-col xl:flex-row gap-4 xl:items-center">
-        <div className="relative flex-1 w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search by name, ID, or site..."
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 border border-slate-100 text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0572B2]/20 transition"
-          />
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 mr-1 flex items-center gap-1">
-            <Filter className="w-3 h-3" /> Quick:
-          </span>
-          {[
-            { v: 'all', l: 'All' }, { v: 'pending', l: 'Pending' },
-            { v: 'confirmed', l: 'Confirmed' }, { v: 'luminal-a', l: 'Luminal A' },
-            { v: 'high-risk', l: 'High Risk' },
-          ].map(f => (
-            <button
-              key={f.v}
-              onClick={() => setFilter(f.v)}
-              className={cn(
-                'px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all border',
-                filter === f.v
-                  ? 'bg-[#0572B2] border-[#0572B2] text-white'
-                  : 'bg-white border-slate-100 text-slate-500 hover:bg-slate-50'
-              )}
-            >
-              {f.l}
-            </button>
-          ))}
-          <select
-            value={siteFilter}
-            onChange={e => setSiteFilter(e.target.value)}
-            className="ml-1 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider border border-slate-100 bg-white text-slate-600"
-          >
-            <option value="all">All Sites</option>
-            {SITES.map(s => <option key={s} value={s}>Site {s}</option>)}
+        <div>
+          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{t('doctor.stage')} *</label>
+          <select className={inputCls} value={f.stage_num} onChange={e => set('stage_num', e.target.value)}>
+            {[1,2,3,4].map(s => <option key={s} value={s}>Stage {s}</option>)}
           </select>
         </div>
-      </motion.div>
-
-      {/* Bulk Actions Bar */}
-      <AnimatePresence>
-        {checkedIds.length > 0 && (
-          <motion.div
-            initial={{ y: 50, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 50, opacity: 0 }}
-            className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white rounded-2xl px-6 py-4 flex items-center gap-6 shadow-2xl border border-slate-700"
-          >
-            <div className="flex items-center gap-3 pr-6 border-r border-slate-700">
-              <span className="w-6 h-6 rounded-lg bg-[#0BB592] flex items-center justify-center text-[10px] font-black">
-                {checkedIds.length}
-              </span>
-              <p className="text-sm font-bold">Selected</p>
-            </div>
-            <div className="flex items-center gap-4">
-              <button onClick={bulkConfirm} className="flex items-center gap-2 text-xs font-bold hover:text-[#0BB592] transition">
-                <CheckCircle2 className="w-4 h-4" /> Confirm All
-              </button>
-              <button onClick={exportSelection} className="flex items-center gap-2 text-xs font-bold hover:text-[#0572B2] transition">
-                <Download className="w-4 h-4" /> Export Selection
-              </button>
-              <button onClick={() => requestDelete(checkedIds, true)} className="flex items-center gap-2 text-xs font-bold hover:text-[#F55486] transition">
-                <Trash2 className="w-4 h-4" /> Delete
-              </button>
-            </div>
-            <button onClick={() => setCheckedIds([])} className="text-slate-400 hover:text-white transition">
-              <X className="w-5 h-5" />
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Table */}
-      <motion.div variants={fadeUp} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-visible">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/50">
-                <th className="px-5 py-4 text-left">
-                  <input type="checkbox" checked={checkedIds.length === filtered.length && filtered.length > 0} onChange={toggleAll} className="w-4 h-4 rounded border-slate-300 text-[#0572B2] focus:ring-[#0572B2]" />
-                </th>
-                <th className="px-5 py-4 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">Patient & ID</th>
-                <th className="px-5 py-4 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">Site</th>
-                <th className="px-5 py-4 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">Metrics</th>
-                <th className="px-5 py-4 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">AI Verdict</th>
-                <th className="px-5 py-4 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">Status</th>
-                <th className="px-5 py-4 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">
-                  <button onClick={() => setSortAsc(s => !s)} className="flex items-center gap-1 hover:text-slate-700 transition">
-                    Date <ArrowUpDown className="w-3 h-3" />
-                  </button>
-                </th>
-                <th className="px-5 py-4 text-right text-[10px] font-black uppercase tracking-widest text-slate-400">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {filtered.length === 0 ? (
-                <tr><td colSpan={8}><EmptyState icon={User} title="No patient data found" description="Adjust your filters or add a new patient" /></td></tr>
-              ) : filtered.map((p, i) => (
-                <motion.tr
-                  key={p.id}
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(i * 0.02, 0.2) }}
-                  className={cn(
-                    "group transition-all cursor-pointer",
-                    selectedId === p.id ? "bg-blue-50/50" : "hover:bg-slate-50/50",
-                    checkedIds.includes(p.id) ? "bg-blue-50/30" : ""
-                  )}
-                  onClick={() => setSelectedId(p.id)}
-                >
-                  <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
-                    <input type="checkbox" checked={checkedIds.includes(p.id)} onChange={() => toggleCheck(p.id)} className="w-4 h-4 rounded border-slate-300 text-[#0572B2] focus:ring-[#0572B2]" />
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs border border-white shadow-sm">
-                        {p.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                      </div>
-                      <div>
-                        <p className="font-bold text-slate-900 flex items-center gap-1.5">
-                          {p.name} <RiskDot risk={p.risk} />
-                        </p>
-                        <p className="text-[11px] font-mono font-bold text-slate-400">{p.id}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-[#0572B2] sonar" />
-                      <p className="text-xs font-bold text-slate-700">{p.site}</p>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2"><span className="text-[10px] font-bold text-slate-400 w-8">AGE</span><span className="text-xs font-bold text-slate-700">{p.age}y</span></div>
-                      <div className="flex items-center gap-2"><span className="text-[10px] font-bold text-slate-400 w-8">SIZE</span><span className="text-xs font-bold text-slate-700">{p.tumorSize}mm</span></div>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 h-1.5 w-16 bg-slate-100 rounded-full overflow-hidden">
-                        <div className={cn("h-full rounded-full", p.lastPrediction === 'Luminal A' ? 'bg-[#0BB592]' : 'bg-[#F55486]')} style={{ width: `${p.prob}%` }} />
-                      </div>
-                      <p className="text-xs font-black text-slate-700 w-10">{p.prob}%</p>
-                      <Badge color={p.lastPrediction === 'Luminal A' ? 'teal' : 'pink'}>{p.lastPrediction.replace('Non-', 'N-')}</Badge>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4"><StatusBadge status={p.status} /></td>
-                  <td className="px-5 py-4 text-xs font-bold text-slate-500">{p.date}</td>
-                  <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center justify-end gap-1 relative">
-                      <button title="Open detail" onClick={() => setSelectedId(p.id)} className="p-2 rounded-lg text-slate-400 hover:text-[#0572B2] hover:bg-blue-50 transition-all">
-                        <ExternalLink className="w-4 h-4" />
-                      </button>
-                      <button title="Edit" onClick={() => openEdit(p)} className="p-2 rounded-lg text-slate-400 hover:text-[#0BB592] hover:bg-teal-50 transition-all">
-                        <Edit3 className="w-4 h-4" />
-                      </button>
-                      <button title="More" onClick={() => setOpenMenuId(openMenuId === p.id ? null : p.id)} className="p-2 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-all">
-                        <MoreVertical className="w-4 h-4" />
-                      </button>
-                      <AnimatePresence>
-                        {openMenuId === p.id && (
-                          <motion.div
-                            ref={menuRef}
-                            initial={{ opacity: 0, y: -4 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -4 }}
-                            className="absolute right-0 top-10 z-30 w-52 bg-white border border-slate-200 rounded-xl shadow-xl py-1.5"
-                          >
-                            <MenuItem onClick={() => { confirmOne(p.id); setOpenMenuId(null) }} icon={CheckCircle2} color="teal">Confirm verdict</MenuItem>
-                            <MenuItem onClick={() => { overrideOne(p.id); setOpenMenuId(null) }} icon={Edit3} color="blue">Mark as modified</MenuItem>
-                            <MenuItem onClick={() => { navigate('/app/doctor/predict'); setOpenMenuId(null) }} icon={Brain} color="slate">Re-run prediction</MenuItem>
-                            <MenuItem onClick={() => { exportToCSV([p], `${p.id}.csv`); setOpenMenuId(null); showToast(`${p.id} exported`, 'blue') }} icon={Download} color="slate">Export record</MenuItem>
-                            <div className="my-1 h-px bg-slate-100" />
-                            <MenuItem onClick={() => { requestDelete([p.id]); setOpenMenuId(null) }} icon={Trash2} color="pink">Delete patient</MenuItem>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  </td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </motion.div>
-
-      {/* Detail Side Panel */}
-      <AnimatePresence>
-        {selectedPatient && (
-          <DetailPanel
-            patient={selectedPatient}
-            onClose={() => setSelectedId(null)}
-            onEdit={() => openEdit(selectedPatient)}
-            onConfirm={() => confirmOne(selectedPatient.id)}
-            onOverride={() => overrideOne(selectedPatient.id)}
-            onDelete={() => requestDelete([selectedPatient.id])}
-            onSaveNotes={(notes) => { updatePatient(selectedPatient.id, { notes }); showToast('Notes saved', 'blue') }}
-            onPredict={() => navigate('/app/doctor/predict')}
-            onReport={() => navigate('/app/doctor/reports')}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Add / Edit Modal */}
-      <Modal
-        open={!!formMode}
-        onClose={closeForm}
-        title={formMode === 'edit' ? 'Edit Patient Record' : 'New Patient Record'}
-        subtitle={formMode === 'edit' ? `Updating ${form.name}` : 'Enter clinical metadata for AI subtyping'}
-        size="lg"
-        footer={
-          <>
-            <Btn variant="secondary" onClick={closeForm}>Cancel</Btn>
-            <Btn variant="primary" onClick={submitForm}>
-              <Save className="w-4 h-4" /> {formMode === 'edit' ? 'Save Changes' : 'Create Patient'}
-            </Btn>
-          </>
-        }
-      >
-        <PatientForm form={form} setForm={setForm} onSubmit={submitForm} />
-      </Modal>
-
-      <ConfirmDialog
-        open={!!confirmDelete}
-        onClose={() => setConfirmDelete(null)}
-        onConfirm={performDelete}
-        title="Delete patient record(s)?"
-        message={confirmDelete ? `This will permanently remove ${confirmDelete.ids.length} record(s) from the registry. This action cannot be undone.` : ''}
-        confirmLabel="Delete"
-        danger
-      />
-
-      <ConfirmDialog
-        open={confirmReset}
-        onClose={() => setConfirmReset(false)}
-        onConfirm={() => { resetSeed(); setCheckedIds([]); setSelectedId(null); showToast('Registry reset to demo data', 'blue') }}
-        title="Reset registry to demo data?"
-        message="This will replace all current records with the original demo dataset."
-        confirmLabel="Reset"
-        danger
-      />
-
-      <Toast open={toast.open} onClose={() => setToast(t => ({ ...t, open: false }))} message={toast.message} tone={toast.tone} />
-    </motion.div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-
-function MenuItem({ icon: Icon, color, children, onClick }) {
-  const colors = {
-    teal: 'text-[#0BB592] hover:bg-teal-50',
-    blue: 'text-[#0572B2] hover:bg-blue-50',
-    pink: 'text-[#F55486] hover:bg-pink-50',
-    slate: 'text-slate-700 hover:bg-slate-50',
-  }
-  return (
-    <button onClick={onClick} className={cn('w-full text-left px-3 py-2 text-xs font-bold flex items-center gap-2.5 transition', colors[color])}>
-      <Icon className="w-3.5 h-3.5" /> {children}
-    </button>
-  )
-}
-
-function PatientForm({ form, setForm, onSubmit }) {
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
-  return (
-    <form onSubmit={onSubmit} className="space-y-5">
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-        <Field label="Full name" className="col-span-2"><input className={inputClass} value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Fatima A." /></Field>
-        <Field label="DOB"><input type="date" className={inputClass} value={form.dob} onChange={e => set('dob', e.target.value)} /></Field>
-        <Field label="Age"><input type="number" min="0" className={inputClass} value={form.age} onChange={e => set('age', e.target.value)} /></Field>
-        <Field label="Tumor size (mm)"><input type="number" min="0" className={inputClass} value={form.tumorSize} onChange={e => set('tumorSize', e.target.value)} /></Field>
-        <Field label="Lymph node">
-          <select className={inputClass} value={form.lymphSite} onChange={e => set('lymphSite', e.target.value)}>
-            {LYMPH_OPTIONS.map(o => <option key={o}>{o}</option>)}
-          </select>
-        </Field>
       </div>
-
+      <div className="grid grid-cols-3 gap-3">
+        <BoolSelect label={t('doctor.erStatus')} k="er_status" />
+        <BoolSelect label={t('doctor.prStatus')} k="pr_status" />
+        <BoolSelect label={t('doctor.her2')} k="her2_binary" />
+      </div>
       <div className="pt-2 border-t border-slate-100">
-        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-1.5"><Beaker className="w-3 h-3" /> Biomarkers</p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <Field label="ER (%)" hint="Estrogen receptor"><input type="number" min="0" max="100" className={inputClass} value={form.er} onChange={e => set('er', e.target.value)} /></Field>
-          <Field label="PR (%)" hint="Progesterone receptor"><input type="number" min="0" max="100" className={inputClass} value={form.pr} onChange={e => set('pr', e.target.value)} /></Field>
-          <Field label="Ki-67 (%)" hint="Proliferation"><input type="number" min="0" max="100" className={inputClass} value={form.ki67} onChange={e => set('ki67', e.target.value)} /></Field>
-          <Field label="HER2">
-            <select className={inputClass} value={form.her2} onChange={e => set('her2', e.target.value)}>
-              {HER2_OPTIONS.map(o => <option key={o}>{o}</option>)}
-            </select>
-          </Field>
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Genomic Data (optional)</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Fraction Genome Altered</label>
+            <input type="number" step="0.01" min="0" max="1" className={inputCls} value={f.fraction_genome_altered} onChange={e => set('fraction_genome_altered', e.target.value)} placeholder="0.0 – 1.0" />
+          </div>
+          <div>
+            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Buffa Hypoxia Score</label>
+            <input type="number" step="0.01" className={inputCls} value={f.buffa_hypoxia_score} onChange={e => set('buffa_hypoxia_score', e.target.value)} placeholder="e.g. -3.2" />
+          </div>
         </div>
       </div>
-
-      <div className="pt-2 border-t border-slate-100">
-        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-1.5"><Brain className="w-3 h-3" /> AI Verdict & Workflow</p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          <Field label="Predicted subtype">
-            <select className={inputClass} value={form.lastPrediction} onChange={e => set('lastPrediction', e.target.value)}>
-              {PREDICTIONS.map(o => <option key={o}>{o}</option>)}
-            </select>
-          </Field>
-          <Field label="Confidence (%)"><input type="number" min="0" max="100" className={inputClass} value={form.prob} onChange={e => set('prob', e.target.value)} /></Field>
-          <Field label="Status">
-            <select className={inputClass} value={form.status} onChange={e => set('status', e.target.value)}>
-              {STATUSES.map(o => <option key={o}>{o}</option>)}
-            </select>
-          </Field>
-          <Field label="Federated site">
-            <select className={inputClass} value={form.site} onChange={e => set('site', e.target.value)}>
-              {SITES.map(o => <option key={o}>Site {o}</option>)}
-            </select>
-          </Field>
-          <Field label="Risk">
-            <select className={inputClass} value={form.risk} onChange={e => set('risk', e.target.value)}>
-              {RISKS.map(o => <option key={o}>{o}</option>)}
-            </select>
-          </Field>
-          <Field label="Date"><input type="date" className={inputClass} value={form.date} onChange={e => set('date', e.target.value)} /></Field>
-        </div>
+      {error && <p className="text-[#F55486] text-xs font-semibold bg-pink-50 border border-pink-200 rounded-xl px-3 py-2">{error}</p>}
+      <div className="flex gap-2 pt-1">
+        <button type="button" onClick={onCancel} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-bold hover:bg-slate-50 transition">Cancel</button>
+        <button type="submit" disabled={loading} className="flex-[2] py-2.5 rounded-xl bg-[#0572B2] text-white text-sm font-black hover:bg-[#0462a0] transition disabled:opacity-60 flex items-center justify-center gap-2">
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          {loading ? 'Saving…' : 'Save Patient'}
+        </button>
       </div>
-
-      <Field label="Clinical notes">
-        <textarea rows="3" className={inputClass} value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Add MDT recommendations, history, or follow-up notes..." />
-      </Field>
     </form>
   )
 }
 
-function DetailPanel({ patient, onClose, onEdit, onConfirm, onOverride, onDelete, onSaveNotes, onPredict, onReport }) {
-  const [notes, setNotes] = useState(patient.notes || '')
-  const [showAdvanced, setShowAdvanced] = useState(false)
-  useEffect(() => { setNotes(patient.notes || '') }, [patient.id, patient.notes])
+export default function PatientRegistry() {
+  const t = useT()
+  const [patients, setPatients] = useState([])
+  const [meta, setMeta] = useState({ current_page: 1, last_page: 1, total: 0 })
+  const [page, setPage] = useState(1)
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const searchTimer = useRef(null)
 
-  const isLuminalA = patient.lastPrediction === 'Luminal A'
-  const features = [
-    { name: 'ER Expression', val: patient.er ?? 0 },
-    { name: 'PR Expression', val: patient.pr ?? 0 },
-    { name: 'Ki-67 Index', val: patient.ki67 ?? 0, invert: true },
-    { name: 'Tumor Size', val: Math.min(100, (patient.tumorSize ?? 0) * 2) },
-  ]
+  const [formMode, setFormMode] = useState(null) // 'add' | 'edit'
+  const [editPatient, setEditPatient] = useState(null)
+  const [formLoading, setFormLoading] = useState(false)
+  const [formError, setFormError] = useState('')
+
+  const [deleteId, setDeleteId] = useState(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+
+  const [selectedPatient, setSelectedPatient] = useState(null)
+  const [showWizard, setShowWizard] = useState(false)
+  const [wizardPatient, setWizardPatient] = useState(null)
+
+  const [toast, setToast] = useState({ show: false, msg: '', ok: true })
+  const showToast = (msg, ok = true) => {
+    setToast({ show: true, msg, ok })
+    setTimeout(() => setToast(t => ({ ...t, show: false })), 3000)
+  }
+
+  const load = useCallback(async (p = 1, q = '') => {
+    setLoading(true)
+    try {
+      const res = await doctorApi.patients.list({ page: p, search: q || undefined })
+      setPatients(res.data || [])
+      setMeta({ current_page: res.current_page ?? 1, last_page: res.last_page ?? 1, total: res.total ?? 0 })
+    } catch {}
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { load(page, search) }, [page])
+
+  const handleSearch = (val) => {
+    setSearch(val)
+    clearTimeout(searchTimer.current)
+    searchTimer.current = setTimeout(() => { setPage(1); load(1, val) }, 400)
+  }
+
+  const handleSave = async (f) => {
+    setFormLoading(true)
+    setFormError('')
+    try {
+      const payload = {
+        patient_identifier: f.patient_identifier,
+        er_status: f.er_status,
+        pr_status: f.pr_status,
+        her2_binary: f.her2_binary,
+        age: parseInt(f.age),
+        stage_num: parseInt(f.stage_num),
+        er_status_missing: f.er_status_missing || false,
+        pr_status_missing: f.pr_status_missing || false,
+        fraction_genome_altered: f.fraction_genome_altered !== '' ? parseFloat(f.fraction_genome_altered) : null,
+        buffa_hypoxia_score: f.buffa_hypoxia_score !== '' ? parseFloat(f.buffa_hypoxia_score) : null,
+        ragnum_hypoxia_score: f.ragnum_hypoxia_score !== '' ? parseFloat(f.ragnum_hypoxia_score) : null,
+        winter_hypoxia_score: f.winter_hypoxia_score !== '' ? parseFloat(f.winter_hypoxia_score) : null,
+      }
+      if (formMode === 'add') {
+        await doctorApi.patients.create(payload)
+        showToast('Patient created')
+      } else {
+        await doctorApi.patients.update(editPatient.id, payload)
+        showToast('Patient updated')
+      }
+      setFormMode(null)
+      setEditPatient(null)
+      load(page, search)
+    } catch (err) {
+      setFormError(err?.response?.data?.message || 'Failed to save patient')
+    } finally {
+      setFormLoading(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteId) return
+    setDeleteLoading(true)
+    try {
+      await doctorApi.patients.delete(deleteId)
+      showToast('Patient deleted', true)
+      setDeleteId(null)
+      load(page, search)
+    } catch (err) {
+      showToast(err?.response?.data?.message || 'Cannot delete patient', false)
+      setDeleteId(null)
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
+
+  const stats = {
+    total: meta.total,
+    erPositive: patients.filter(p => p.er_status).length,
+    her2Positive: patients.filter(p => p.her2_binary).length,
+    stage3Plus: patients.filter(p => p.stage_num >= 3).length,
+  }
 
   return (
-    <>
-      <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        onClick={onClose}
-        className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-[60]"
-      />
-      <motion.div
-        initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-        className="fixed top-0 right-0 h-screen w-full max-w-xl bg-white shadow-2xl z-[70] border-l border-slate-200 overflow-y-auto"
-      >
-        <div className="p-8">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-[#0572B2]/10 border border-[#0572B2]/20 flex items-center justify-center text-[#0572B2] text-xl font-black">
-                {patient.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-              </div>
-              <div>
-                <h2 className="text-2xl font-black text-slate-900 tracking-tight">{patient.name}</h2>
-                <div className="flex items-center gap-2 mt-1">
-                  <p className="font-mono text-sm font-bold text-slate-400">{patient.id}</p>
-                  <StatusBadge status={patient.status} />
-                </div>
-              </div>
-            </div>
-            <button onClick={onClose} className="p-2 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors">
-              <X className="w-5 h-5" />
+    <motion.div variants={stagger} initial="hidden" animate="show" className="relative">
+      {/* Header */}
+      <motion.div variants={fadeUp} className="mb-6">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">Patient Registry</h1>
+            <p className="text-sm text-slate-500 font-medium mt-1">Manage your organization's patient records</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => load(page, search)} className="p-2 rounded-xl border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition">
+              <RefreshCw className="w-4 h-4" />
             </button>
-          </div>
-
-          {/* Quick metadata */}
-          <div className="grid grid-cols-2 gap-3 mb-6">
-            <DetailTile label="Federated Site" value={patient.site} icon={<span className="w-2 h-2 rounded-full bg-[#0572B2] sonar" />} />
-            <DetailTile label="Created" value={patient.date} icon={<Calendar className="w-4 h-4 text-[#0BB592]" />} />
-            <DetailTile label="Date of Birth" value={patient.dob || '—'} icon={<Calendar className="w-4 h-4 text-slate-400" />} />
-            <DetailTile label="Risk" value={<span className="capitalize">{patient.risk}</span>} icon={<RiskDot risk={patient.risk} />} />
-          </div>
-
-          {/* Clinical Profile */}
-          <div className="mb-6">
-            <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">
-              <Microscope className="w-4 h-4" /> Clinical Profile
-            </h3>
-            <div className="grid grid-cols-2 gap-y-5 gap-x-6 p-5 rounded-2xl bg-slate-50/60 border border-slate-100">
-              <Stat label="Biological Age" value={`${patient.age} y`} />
-              <Stat label="Tumor Size" value={`${patient.tumorSize} mm`} />
-              <Stat label="Lymph Node" value={
-                <span className="inline-flex items-center gap-1.5">
-                  <CheckCircle2 className={cn('w-4 h-4', patient.lymphSite === 'Negative' ? 'text-[#0BB592]' : 'text-[#F55486]')} />
-                  {patient.lymphSite}
-                </span>
-              } />
-              <Stat label="Subtype" value={<Badge color={isLuminalA ? 'teal' : 'pink'}>{patient.lastPrediction}</Badge>} />
-            </div>
-          </div>
-
-          {/* Biomarkers */}
-          <div className="mb-6">
-            <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">
-              <Beaker className="w-4 h-4" /> Biomarker Panel
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <BioTile label="ER" value={`${patient.er ?? 0}%`} good={patient.er >= 50} />
-              <BioTile label="PR" value={`${patient.pr ?? 0}%`} good={patient.pr >= 20} />
-              <BioTile label="HER2" value={patient.her2 ?? '—'} good={patient.her2 === 'Negative'} />
-              <BioTile label="Ki-67" value={`${patient.ki67 ?? 0}%`} good={(patient.ki67 ?? 0) < 20} />
-            </div>
-          </div>
-
-          {/* AI Attribution */}
-          <div className="p-6 rounded-3xl bg-slate-900 text-white mb-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                <Brain className="w-4 h-4 text-[#0BB592]" /> AI Attribution
-              </h3>
-              <div className="text-right">
-                <p className={cn('text-2xl font-black', isLuminalA ? 'text-[#0BB592]' : 'text-[#F55486]')}>{patient.prob}%</p>
-                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Confidence</p>
-              </div>
-            </div>
-            <div className="space-y-3">
-              {features.map((f, idx) => (
-                <div key={f.name} className="space-y-1.5">
-                  <div className="flex justify-between text-[10px] font-bold">
-                    <span className="text-slate-400">{f.name}</span>
-                    <span className="text-white">{f.val}{typeof f.val === 'number' ? '%' : ''}</span>
-                  </div>
-                  <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${Math.min(100, Number(f.val) || 0)}%` }}
-                      transition={{ delay: idx * 0.05 }}
-                      className="h-full bg-gradient-to-r from-[#0572B2] to-[#0BB592]"
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-5 flex items-center justify-between gap-2">
-              <Btn variant="teal" size="sm" onClick={onPredict}><Brain className="w-3.5 h-3.5" /> Re-run prediction</Btn>
-              <button onClick={() => setShowAdvanced(s => !s)} className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-white flex items-center gap-1">
-                Advanced <ChevronDown className={cn('w-3 h-3 transition-transform', showAdvanced && 'rotate-180')} />
-              </button>
-            </div>
-            {showAdvanced && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="mt-4 pt-4 border-t border-slate-800 space-y-2 text-[11px] font-mono text-slate-400">
-                <p>Model: brecai-v3.2 · Federated Round 8</p>
-                <p>SHAP top-3: ER (+0.41), Ki-67 (-0.22), Tumor Size (+0.14)</p>
-                <p>Grad-CAM: 3 attention regions detected on WSI patch</p>
-                <p>Aggregation sites: Alpha-01, Beta-02, Gamma-03</p>
-              </motion.div>
-            )}
-          </div>
-
-          {/* Notes */}
-          <div className="mb-6">
-            <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
-              <Stethoscope className="w-4 h-4" /> Clinical Notes
-            </h3>
-            <textarea
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              rows="3"
-              placeholder="Add follow-up plan, MDT recommendations, or therapy notes..."
-              className={inputClass}
-            />
-            <div className="mt-2 flex justify-end">
-              <Btn variant="secondary" size="sm" onClick={() => onSaveNotes(notes)}>
-                <Save className="w-3.5 h-3.5" /> Save Notes
-              </Btn>
-            </div>
-          </div>
-
-          {/* Action footer */}
-          <div className="pt-6 border-t border-slate-100 grid grid-cols-2 gap-3">
-            <Btn variant="primary" size="lg" className="justify-center" onClick={onReport}>
-              <FileText className="w-4 h-4" /> Full Report
-            </Btn>
-            <Btn variant="secondary" size="lg" className="justify-center" onClick={onEdit}>
-              <Edit3 className="w-4 h-4" /> Edit Record
-            </Btn>
-            <Btn variant="teal" size="lg" className="justify-center" onClick={onConfirm}>
-              <CheckCircle2 className="w-4 h-4" /> Confirm Verdict
-            </Btn>
-            <Btn variant="secondary" size="lg" className="justify-center" onClick={onOverride}>
-              <Activity className="w-4 h-4" /> Mark Modified
-            </Btn>
-            <Btn variant="danger" size="lg" className="col-span-2 justify-center" onClick={onDelete}>
-              <Trash2 className="w-4 h-4" /> Delete Patient
-            </Btn>
+            <button
+              onClick={() => { setFormMode('add'); setEditPatient(null); setFormError('') }}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#0572B2] text-white text-sm font-black hover:bg-[#0462a0] transition"
+            >
+              <Plus className="w-4 h-4" /> Add Patient
+            </button>
           </div>
         </div>
       </motion.div>
-    </>
-  )
-}
 
-function DetailTile({ label, value, icon }) {
-  return (
-    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
-      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{label}</p>
-      <p className="text-sm font-bold text-slate-900 flex items-center gap-2">{icon}{value}</p>
-    </div>
-  )
-}
-function Stat({ label, value }) {
-  return (
-    <div>
-      <p className="text-[11px] font-bold text-slate-400 mb-0.5">{label}</p>
-      <div className="text-base font-black text-slate-800">{value}</div>
-    </div>
-  )
-}
-function BioTile({ label, value, good }) {
-  return (
-    <div className={cn('p-3 rounded-xl border text-center', good ? 'bg-teal-50 border-teal-100' : 'bg-pink-50 border-pink-100')}>
-      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</p>
-      <p className={cn('text-base font-black mt-0.5', good ? 'text-[#0BB592]' : 'text-[#F55486]')}>{value}</p>
-    </div>
+      {/* Stats */}
+      <motion.div variants={fadeUp} className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <MetricTile label="Total Patients" value={meta.total} sub="In your org" icon={User} color="blue" />
+        <MetricTile label="ER Positive" value={stats.erPositive} sub="This page" icon={Microscope} color="teal" />
+        <MetricTile label="HER2 Positive" value={stats.her2Positive} sub="This page" icon={Brain} color="pink" />
+        <MetricTile label="Stage III+" value={stats.stage3Plus} sub="This page" icon={User} color="amber" />
+      </motion.div>
+
+      {/* Search */}
+      <motion.div variants={fadeUp} className="mb-5">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            value={search}
+            onChange={e => handleSearch(e.target.value)}
+            placeholder="Search by patient ID…"
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-slate-200 text-sm font-semibold text-slate-900 outline-none focus:border-[#0572B2] focus:ring-2 focus:ring-[#0572B2]/10 transition"
+          />
+        </div>
+      </motion.div>
+
+      {/* Table */}
+      {loading ? (
+        <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 text-[#0572B2] animate-spin" /></div>
+      ) : patients.length === 0 ? (
+        <div className="text-center py-16">
+          <User className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+          <p className="text-slate-400 font-semibold">No patients found</p>
+          <button onClick={() => { setFormMode('add'); setEditPatient(null) }} className="mt-3 text-[#0572B2] text-xs font-black hover:underline">
+            Add your first patient →
+          </button>
+        </div>
+      ) : (
+        <motion.div variants={fadeUp} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50/50">
+                  <th className="px-5 py-4 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">Patient ID</th>
+                  <th className="px-5 py-4 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">Age / Stage</th>
+                  <th className="px-5 py-4 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">Biomarkers</th>
+                  <th className="px-5 py-4 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">Genomics</th>
+                  <th className="px-5 py-4 text-right text-[10px] font-black uppercase tracking-widest text-slate-400">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {patients.map((p, i) => (
+                  <motion.tr
+                    key={p.id}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: Math.min(i * 0.03, 0.3) }}
+                    className={cn('hover:bg-slate-50/50 transition cursor-pointer', selectedPatient?.id === p.id && 'bg-blue-50/30')}
+                    onClick={() => setSelectedPatient(selectedPatient?.id === p.id ? null : p)}
+                  >
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#0572B2] to-[#0BB592] flex items-center justify-center text-white text-xs font-black shrink-0">
+                          {p.patient_identifier.slice(0, 2).toUpperCase()}
+                        </div>
+                        <span className="font-mono font-bold text-slate-900">{p.patient_identifier}</span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-4">
+                      <p className="font-bold text-slate-900">{p.age}y</p>
+                      <p className="text-xs text-slate-400 font-medium">Stage {p.stage_num}</p>
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="flex gap-1 flex-wrap">
+                        {[
+                          { label: p.er_status ? 'ER+' : 'ER-', pos: p.er_status },
+                          { label: p.pr_status ? 'PR+' : 'PR-', pos: p.pr_status },
+                          { label: p.her2_binary ? 'HER2+' : 'HER2-', pos: p.her2_binary },
+                        ].map(b => (
+                          <span key={b.label} className={cn(
+                            'text-[9px] font-black uppercase tracking-wide px-2 py-0.5 rounded-full border',
+                            b.pos ? 'bg-teal-50 border-teal-200 text-teal-700' : 'bg-pink-50 border-pink-200 text-[#F55486]'
+                          )}>{b.label}</span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-5 py-4">
+                      <StatusPill tone={p.fraction_genome_altered != null ? 'blue' : 'slate'} dot={false}>
+                        {p.fraction_genome_altered != null ? `FGA: ${p.fraction_genome_altered.toFixed(2)}` : 'DZ mode'}
+                      </StatusPill>
+                    </td>
+                    <td className="px-5 py-4 text-right" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => { setWizardPatient(p); setShowWizard(true) }}
+                          className="p-2 rounded-lg text-slate-400 hover:text-[#0BB592] hover:bg-teal-50 transition"
+                          title="Run prediction"
+                        >
+                          <Brain className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => { setEditPatient(p); setFormMode('edit'); setFormError('') }}
+                          className="p-2 rounded-lg text-slate-400 hover:text-[#0572B2] hover:bg-blue-50 transition"
+                          title="Edit"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setDeleteId(p.id)}
+                          className="p-2 rounded-lg text-slate-400 hover:text-[#F55486] hover:bg-pink-50 transition"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </motion.tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {meta.last_page > 1 && (
+            <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-400">{meta.total} patients · Page {meta.current_page} of {meta.last_page}</span>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="p-1.5 rounded-lg border border-slate-200 text-slate-400 hover:text-slate-700 disabled:opacity-40 transition">
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button onClick={() => setPage(p => Math.min(meta.last_page, p + 1))} disabled={page === meta.last_page} className="p-1.5 rounded-lg border border-slate-200 text-slate-400 hover:text-slate-700 disabled:opacity-40 transition">
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+        </motion.div>
+      )}
+
+      {/* Add/Edit modal */}
+      <AnimatePresence>
+        {formMode && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[80]"
+              onClick={() => setFormMode(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: 20 }}
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[90] w-[calc(100%-2rem)] max-w-lg bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden"
+            >
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="font-extrabold text-slate-900">{formMode === 'add' ? 'Add Patient' : 'Edit Patient'}</h3>
+                <button onClick={() => setFormMode(null)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="px-6 py-5 max-h-[70vh] overflow-y-auto">
+                <PatientForm
+                  initial={editPatient ? {
+                    patient_identifier: editPatient.patient_identifier,
+                    er_status: editPatient.er_status,
+                    pr_status: editPatient.pr_status,
+                    her2_binary: editPatient.her2_binary,
+                    age: editPatient.age,
+                    stage_num: editPatient.stage_num,
+                    er_status_missing: editPatient.er_status_missing,
+                    pr_status_missing: editPatient.pr_status_missing,
+                    fraction_genome_altered: editPatient.fraction_genome_altered ?? '',
+                    buffa_hypoxia_score: editPatient.buffa_hypoxia_score ?? '',
+                    ragnum_hypoxia_score: editPatient.ragnum_hypoxia_score ?? '',
+                    winter_hypoxia_score: editPatient.winter_hypoxia_score ?? '',
+                  } : null}
+                  onSave={handleSave}
+                  onCancel={() => setFormMode(null)}
+                  loading={formLoading}
+                  error={formError}
+                />
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Delete confirm */}
+      <AnimatePresence>
+        {deleteId && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[80]"
+              onClick={() => setDeleteId(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }}
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[90] w-[calc(100%-2rem)] max-w-sm bg-white rounded-2xl border border-slate-200 shadow-2xl p-6"
+            >
+              <h3 className="font-extrabold text-slate-900 mb-2">Delete patient?</h3>
+              <p className="text-sm text-slate-500 font-medium mb-5">This will permanently remove the patient record. Cannot be undone.</p>
+              <div className="flex gap-3">
+                <button onClick={() => setDeleteId(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-bold hover:bg-slate-50 transition">Cancel</button>
+                <button onClick={handleDelete} disabled={deleteLoading} className="flex-1 py-2.5 rounded-xl bg-[#F55486] text-white text-sm font-black hover:bg-[#e04070] transition disabled:opacity-60 flex items-center justify-center gap-2">
+                  {deleteLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  Delete
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Prediction wizard */}
+      <AnimatePresence>
+        {showWizard && <PredictionWizard onClose={() => { setShowWizard(false); setWizardPatient(null) }} />}
+      </AnimatePresence>
+
+      {/* Toast */}
+      <AnimatePresence>
+        {toast.show && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
+            className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] px-5 py-3 rounded-2xl shadow-xl text-sm font-bold ${
+              toast.ok ? 'bg-[#0BB592] text-white' : 'bg-[#F55486] text-white'
+            }`}
+          >
+            {toast.msg}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   )
 }
