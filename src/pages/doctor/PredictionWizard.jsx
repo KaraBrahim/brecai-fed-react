@@ -429,26 +429,62 @@ export default function PredictionWizard({ onClose }) {
       setProgressPct(20)
       await doctorApi.examinations.submit(exam.id)
 
-      // Step 3: Upload WSI if provided
+      // Step 3: Upload WSI if provided — goes DIRECTLY to FastAPI, not Laravel
       let wsiUploadId = null
       if (slideFile && requiresWSI) {
         setProgressStep(3)
         setProgressLabel(t('doctor.uploading'))
         setProgressPct(35)
+
+        // Get FastAPI URL — injected at build time from vite.config.js
+        const fastApiUrl = __FASTAPI_URL__
+
+        // Upload WSI directly to FastAPI /extract/wsi
+        // This bypasses Laravel's POST size limit entirely
+        const formData = new FormData()
+        formData.append('wsi_file', slideFile)
+        formData.append('patch_size', '256')
+        formData.append('max_patches', '1000')
+
+        setProgressLabel(t('doctor.extracting'))
+        setProgressPct(40)
+
+        let ptB64 = null
+        try {
+          const extractRes = await fetch(`${fastApiUrl}/extract/wsi`, {
+            method: 'POST',
+            body: formData,
+          })
+          if (!extractRes.ok) {
+            const err = await extractRes.json().catch(() => ({}))
+            throw new Error(err.detail || `FastAPI returned ${extractRes.status}`)
+          }
+          const extractData = await extractRes.json()
+          ptB64 = extractData.pt_b64
+          setProgressPct(70)
+        } catch (extractErr) {
+          throw new Error(`Feature extraction failed: ${extractErr.message}`)
+        }
+
+        // Decode base64 .pt and upload to Laravel as a small file
+        setProgressLabel('Saving features to server…')
+        setProgressPct(75)
+
+        const ptBytes = Uint8Array.from(atob(ptB64), c => c.charCodeAt(0))
+        const ptBlob  = new Blob([ptBytes], { type: 'application/octet-stream' })
+        const ptFile  = new File([ptBlob], 'features.pt', { type: 'application/octet-stream' })
+
         const wsi = await doctorApi.wsiUploads.upload(
-          { patient_id: selectedPatient.id, file: slideFile },
+          { patient_id: selectedPatient.id, file: ptFile },
           (e) => {
-            const pct = Math.round((e.loaded / e.total) * 30)
-            setProgressPct(35 + pct)
+            const pct = Math.round((e.loaded / e.total) * 5)
+            setProgressPct(75 + pct)
           }
         )
         wsiUploadId = wsi.id
 
-        // Step 4: Extract features
-        setProgressStep(4)
-        setProgressLabel(t('doctor.extracting'))
-        setProgressPct(70)
-        await doctorApi.wsiUploads.extractFeatures(wsiUploadId)
+        // Mark as ready (features already extracted)
+        setProgressPct(80)
       }
 
       // Step 5: Dispatch prediction

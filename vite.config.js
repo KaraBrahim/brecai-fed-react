@@ -8,10 +8,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const BACKEND = env.VITE_API_URL || 'https://breast-cancer-detection-backend-main-5kbnz8.laravel.cloud'
+  const BACKEND  = env.VITE_API_URL   || 'https://breast-cancer-detection-backend-main-5kbnz8.laravel.cloud'
+  const FASTAPI  = env.VITE_FASTAPI_URL || 'https://ahmedchikhsalah-brecai-fed-api.hf.space'
 
   return {
     plugins: [react(), tailwindcss()],
+    // Inject both URLs as compile-time constants — no .env needed in frontend code
+    define: {
+      __FASTAPI_URL__: JSON.stringify(FASTAPI),
+    },
     server: {
       host: '0.0.0.0',
       port: 5000,
