@@ -321,7 +321,7 @@ function Navbar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const navLinks = ["Product", "Platform", "Security"];
+  const navLinks = [];
 
   return (
     <>
@@ -481,8 +481,8 @@ function Hero() {
           transition={{ delay: 1.2, duration: 0.8 }}
           className="text-lg max-w-2xl mx-auto mb-10 font-medium" style={{ color: P.slate }}
         >
-          The first federated platform to fuse <strong>histopathological whole-slide images</strong> with 
-          <strong> clinical biomarkers</strong> and <strong>EHR metadata</strong> for Luminal A breast cancer subtyping. 
+          The first federated platform to fuse <strong>histopathological whole-slide images</strong> with
+          <strong> clinical biomarkers</strong> and <strong>EHR metadata</strong> for Luminal A breast cancer subtyping.
           Deep learning meets deep medicine — across institutions, without moving patient data.
         </motion.p>
 
@@ -516,7 +516,7 @@ function Hero() {
           </Magnetic>
         </motion.div>
 
-        <motion.div
+        {/*         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 2 }}
@@ -530,7 +530,7 @@ function Hero() {
           >
             <motion.div animate={{ opacity: [1, 0], y: [0, 12] }} transition={{ duration: 1.5, repeat: Infinity }} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: P.blue }} />
           </motion.div>
-        </motion.div>
+        </motion.div> */}
       </motion.div>
     </section>
   );
@@ -540,7 +540,7 @@ function Hero() {
    MARQUEE
    ════════════════════════════════════════════════════════════════════════ */
 function Marquee() {
-  const words = ["MULTIMODAL", "WSI + CLINICAL", "PRIVACY", "XAI", "HISTOPATHOLOGY", "ZERO TRUST", "FEDERATED", "REGULATORY"];
+  const words = ["MULTIMODAL", "WSI + CLINICAL", "PRIVACY", "XAI", "HISTOPATHOLOGY", "TRUST", "FEDERATED"];
   return (
     <div className="py-6 overflow-hidden" style={{ backgroundColor: P.ink }}>
       <motion.div
@@ -728,10 +728,6 @@ function Card({ card, scrollY, enterStart, enterEnd, pushStart, pushEnd, targetS
 HORIZONTAL SCROLL GALLERY
    ════════════════════════════════════════════════════════════════════════ */
 function HorizontalRoles() {
-  const containerRef = useRef(null);
-  const { scrollYProgress } = useScroll({ target: containerRef });
-  const x = useTransform(scrollYProgress, [0, 1], ["0%", "-75%"]);
-
   const roles = [
     { title: "CLINICIAN", subtitle: "Doctor", desc: "AI-assisted multimodal subtyping at point of care. WSI analysis fused with biomarker panels, EHR context, and clinical guidelines.", icon: HeartPulse, color: P.blue, gradient: "from-blue-600 to-blue-400" },
     { title: "RESEARCHER", subtitle: "Instructor", desc: "Orchestrate federated rounds across multimodal datasets. Model architecture, gradient aggregation, and cross-site validation.", icon: Brain, color: P.teal, gradient: "from-teal-600 to-teal-400" },
@@ -740,51 +736,53 @@ function HorizontalRoles() {
   ];
 
   return (
-    <section id="platform" ref={containerRef} className="relative" style={{ backgroundColor: P.ink, height: "300vh" }}>
-      <div className="sticky top-0 h-screen flex items-center overflow-hidden">
-        <div className="absolute top-8 left-8 z-10">
-          <span className="text-xs font-black text-white/30 uppercase tracking-widest flex items-center gap-2">
-            Scroll <ChevronDown size={12} />
-          </span>
-        </div>
-        <div className="relative w-full overflow-x-hidden">
-          <motion.div style={{ x }} className="flex gap-8 px-8" style={{ width: "fit-content" }}>
-            {roles.map((role, i) => (
-              <motion.div
-                key={role.title}
-                initial={{ opacity: 0, rotateY: 45 }}
-                whileInView={{ opacity: 1, rotateY: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.1 }}
-                className="min-w-[80vw] md:min-w-[35vw] h-[70vh] rounded-3xl bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl border border-white/10 p-10 flex flex-col justify-between"
-                style={{ perspective: 1000 }}
-              >
-                <div>
-                  <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gradient-to-r ${role.gradient} mb-6`}>
-                    <role.icon size={14} className="text-white" />
-                    <span className="text-[10px] font-black text-white uppercase tracking-wider">{role.subtitle}</span>
+    <section id="platform" className="relative py-24 overflow-hidden" style={{ backgroundColor: P.ink }}>
+      <div className="absolute top-8 left-8 z-10">
+        <span className="text-xs font-black text-white/30 uppercase tracking-widest flex items-center gap-2">
+          Platform Roles
+        </span>
+      </div>
+      <div className="w-full mt-12 pb-8 flex pl-8">
+        <motion.div
+          animate={{ x: ["-50%", "0%"] }}
+          transition={{ duration: 40, repeat: Infinity, ease: "linear" }}
+          className="flex w-max"
+        >
+          {/* Duplicate the array twice to create a seamless infinite loop */}
+          {[0, 1].map((setIndex) => (
+            <div key={setIndex} className="flex gap-8 pr-8">
+              {roles.map((role) => (
+                <div
+                  key={`${setIndex}-${role.title}`}
+                  className="w-[85vw] md:w-[45vw] lg:w-[35vw] h-[60vh] min-h-[450px] rounded-3xl bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl border border-white/10 p-10 flex flex-col justify-between shrink-0 hover:bg-white/10 transition-colors"
+                >
+                  <div>
+                    <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gradient-to-r ${role.gradient} mb-6`}>
+                      <role.icon size={14} className="text-white" />
+                      <span className="text-[10px] font-black text-white uppercase tracking-wider">{role.subtitle}</span>
+                    </div>
+                    <h3 className="text-4xl md:text-5xl lg:text-6xl font-black text-white tracking-tighter mb-4">{role.title}</h3>
+                    <p className="text-white/60 text-base md:text-lg max-w-sm">{role.desc}</p>
                   </div>
-                  <h3 className="text-5xl md:text-6xl font-black text-white tracking-tighter mb-4">{role.title}</h3>
-                  <p className="text-white/60 text-lg max-w-sm">{role.desc}</p>
+                  <div className="flex flex-wrap gap-2 mt-8">
+                    {["WSI Analysis", "Biomarkers", "EHR Fusion", "Reports"].map((f) => (
+                      <span key={f} className="px-3 py-1 rounded-lg text-[10px] font-bold bg-white/10 text-white/50 border border-white/5">
+                        {f}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {["WSI Analysis", "Biomarkers", "EHR Fusion", "Reports"].map((f) => (
-                    <span key={f} className="px-3 py-1 rounded-lg text-[10px] font-bold bg-white/10 text-white/50 border border-white/5">
-                      {f}
-                    </span>
-                  ))}
-                </div>
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
+              ))}
+            </div>
+          ))}
+        </motion.div>
       </div>
     </section>
   );
 }
 
 /* ════════════════════════════════════════════════════════════════════════
-   ANIMATED COUNTER
+  ANIMATED COUNTER
    ════════════════════════════════════════════════════════════════════════ */
 function AnimatedCounter({ value, suffix = "" }) {
   const ref = useRef(null);
@@ -1148,7 +1146,7 @@ function HowItWorks() {
             </span>
           </h2>
           <p className="text-lg max-w-2xl mx-auto" style={{ color: P.slate }}>
-            Federated learning fuses histopathology and clinical data without ever moving a single patient record. 
+            Federated learning fuses histopathology and clinical data without ever moving a single patient record.
             Every architectural decision starts with the assumption that data must stay local — while intelligence must be shared.
           </p>
         </motion.div>
@@ -1165,7 +1163,7 @@ function HowItWorks() {
               className="relative p-8 rounded-3xl border border-black/5 group"
               style={{ backgroundColor: P.cream }}
             >
-              <div className="text-7xl font-black mb-6 leading-none select-none" style={{ color: step.color + "15" }}>
+              <div className="text-7xl font-black mb-6 leading-none select-none" style={{ color: step.color}}>
                 {step.number}
               </div>
               <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-5" style={{ backgroundColor: step.color + "15" }}>

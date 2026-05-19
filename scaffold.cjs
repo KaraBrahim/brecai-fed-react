@@ -33,7 +33,6 @@ const pages = [
   ['admin', 'AIModelRegistry'],
   ['admin', 'FederatedRegistry'],
   ['admin', 'AuditLogs'],
-  // Landing
   ['landing', 'LandingPage'],
 ]
 
