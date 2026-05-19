@@ -166,7 +166,11 @@ export default function FinalExamination() {
                         <StatusPill tone="blue"><Brain className="w-3 h-3" /> AI Model</StatusPill>
                       </div>
                       <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight mt-1">
-                        {isLumA === true ? 'Luminal A' : isLumA === false ? 'Non-Luminal A' : 'Processing…'}
+                        {isLumA === true ? 'Luminal A' :
+                         isLumA === false ? 'Non-Luminal A' :
+                         pred?.status === 'processing' ? t('doctor.analyzing') :
+                         pred?.status === 'pending' ? 'Queued…' :
+                         'Awaiting result'}
                       </h2>
                       {pred?.confidence_lum_a != null && (
                         <p className={`text-sm font-semibold mt-1 ${isLumA ? 'text-teal-700' : 'text-[#F55486]'}`}>

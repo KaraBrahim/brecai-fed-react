@@ -8,7 +8,7 @@ import {
 import {
   Users, Brain, Activity, TrendingUp, ArrowUpRight,
   Clock, CheckCircle2, AlertTriangle, FileText,
-  ChevronRight, Zap, Sparkles,
+  ChevronRight, Zap, Sparkles, BarChart3, Activity, Users, Brain, TrendingUp,
 } from 'lucide-react'
 import { SectionCard, stagger, fadeUp } from '@/components/shared'
 import { MetricTile, StatusPill } from '@/components/admin'
@@ -38,6 +38,7 @@ export default function DoctorInsights() {
   const [predResults, setPredResults] = useState(null)
   const [examsOverTime, setExamsOverTime] = useState([])
   const [recentActivity, setRecentActivity] = useState([])
+  const [avgConf, setAvgConf] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showWizard, setShowWizard] = useState(false)
 
@@ -45,17 +46,19 @@ export default function DoctorInsights() {
     const controller = new AbortController()
     const fetchAll = async () => {
       try {
-        const [kpisRes, predRes, examsRes, actRes] = await Promise.allSettled([
+        const [kpisRes, predRes, examsRes, actRes, confRes] = await Promise.allSettled([
           doctorApi.insights.kpis(),
           doctorApi.insights.predictionResults(),
           doctorApi.insights.examinationsOverTime(),
           doctorApi.insights.recentActivity(),
+          doctorApi.insights.averageConfidence(),
         ])
         if (controller.signal.aborted) return
         if (kpisRes.status === 'fulfilled')  setKpis(kpisRes.value)
         if (predRes.status === 'fulfilled')  setPredResults(predRes.value)
         if (examsRes.status === 'fulfilled') setExamsOverTime(examsRes.value || [])
         if (actRes.status === 'fulfilled')   setRecentActivity(actRes.value || [])
+        if (confRes.status === 'fulfilled')  setAvgConf(confRes.value)
       } finally {
         if (!controller.signal.aborted) setLoading(false)
       }
@@ -149,12 +152,40 @@ export default function DoctorInsights() {
         <MetricTile
           label={t('doctor.reports')}
           value={loading ? '—' : (kpis?.my_reports ?? 0)}
-          sub={t('doctor.avgConfidence') + ': ' + (kpis?.avg_confidence ? `${(kpis.avg_confidence * 100).toFixed(1)}%` : '—')}
+          sub={avgConf?.avg_confidence_lum_a > 0
+            ? `${t('doctor.avgConfidence')}: ${(avgConf.avg_confidence_lum_a * 100).toFixed(1)}%`
+            : t('doctor.avgConfidence') + ': —'}
           icon={FileText} color="amber"
         />
       </div>
 
-      {/* ── Charts row ────────────────────────────────────────────────────── */}
+      {/* ── Quick actions ─────────────────────────────────────────────────── */}
+      <motion.div variants={fadeUp} className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-7">
+        {[
+          { label: t('nav.patients'),     icon: Users,       to: '/app/doctor/patients',     color: 'blue'   },
+          { label: t('nav.examinations'), icon: FileText,    to: '/app/doctor/examinations', color: 'amber'  },
+          { label: t('nav.predictions'),  icon: Brain,       to: '/app/doctor/predictions',  color: 'pink'   },
+          { label: t('nav.finalExam'),    icon: CheckCircle2,to: '/app/doctor/exam',         color: 'teal'   },
+          { label: t('nav.reports'),      icon: BarChart3,   to: '/app/doctor/reports',      color: 'slate'  },
+          { label: t('nav.xai'),          icon: Activity,    to: '/app/doctor/xai',          color: 'violet' },
+        ].map(a => (
+          <button key={a.to} onClick={() => navigate(a.to)}
+            className="group bg-white rounded-2xl border border-slate-200 p-4 text-left hover:border-[#0572B2] hover:shadow-md transition-all"
+          >
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${
+              a.color === 'blue'   ? 'bg-blue-50 text-[#0572B2]' :
+              a.color === 'amber'  ? 'bg-amber-50 text-amber-600' :
+              a.color === 'pink'   ? 'bg-pink-50 text-[#F55486]' :
+              a.color === 'teal'   ? 'bg-teal-50 text-[#0BB592]' :
+              a.color === 'violet' ? 'bg-violet-50 text-violet-600' :
+              'bg-slate-100 text-slate-600'
+            }`}>
+              <a.icon className="w-4 h-4" />
+            </div>
+            <p className="text-xs font-extrabold text-slate-900">{a.label}</p>
+          </button>
+        ))}
+      </motion.div>
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-7">
         <SectionCard
           title={t('doctor.examinations')}

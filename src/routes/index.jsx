@@ -25,6 +25,8 @@ import PredictionEngine  from '@/pages/doctor/PredictionEngine'
 import FinalExamination  from '@/pages/doctor/FinalExamination'
 import ClinicalReports   from '@/pages/doctor/ClinicalReports'
 import XaiDeepDive       from '@/pages/doctor/XaiDeepDive'
+import ExaminationsList  from '@/pages/doctor/ExaminationsList'
+import PredictionsList   from '@/pages/doctor/PredictionsList'
 
 // Instructor
 import InstructorDashboard from '@/pages/instructor/InstructorDashboard'
@@ -130,12 +132,14 @@ export const router = createBrowserRouter([
           { index: true, element: <Navigate to="/app/doctor" replace /> },
 
           // Doctor (role: doctor)
-          { path: 'doctor',          element: <RequireAuth role={RoleEnum.DOCTOR}><DoctorInsights /></RequireAuth> },
-          { path: 'doctor/patients', element: <RequireAuth role={RoleEnum.DOCTOR}><PatientRegistry /></RequireAuth> },
-          { path: 'doctor/predict',  element: <RequireAuth role={RoleEnum.DOCTOR}><PredictionEngine /></RequireAuth> },
-          { path: 'doctor/exam',     element: <RequireAuth role={RoleEnum.DOCTOR}><FinalExamination /></RequireAuth> },
-          { path: 'doctor/reports',  element: <RequireAuth role={RoleEnum.DOCTOR}><ClinicalReports /></RequireAuth> },
-          { path: 'doctor/xai',      element: <RequireAuth role={RoleEnum.DOCTOR}><XaiDeepDive /></RequireAuth> },
+          { path: 'doctor',               element: <RequireAuth role={RoleEnum.DOCTOR}><DoctorInsights /></RequireAuth> },
+          { path: 'doctor/patients',      element: <RequireAuth role={RoleEnum.DOCTOR}><PatientRegistry /></RequireAuth> },
+          { path: 'doctor/examinations',  element: <RequireAuth role={RoleEnum.DOCTOR}><ExaminationsList /></RequireAuth> },
+          { path: 'doctor/predictions',   element: <RequireAuth role={RoleEnum.DOCTOR}><PredictionsList /></RequireAuth> },
+          { path: 'doctor/predict',       element: <RequireAuth role={RoleEnum.DOCTOR}><PredictionEngine /></RequireAuth> },
+          { path: 'doctor/exam',          element: <RequireAuth role={RoleEnum.DOCTOR}><FinalExamination /></RequireAuth> },
+          { path: 'doctor/reports',       element: <RequireAuth role={RoleEnum.DOCTOR}><ClinicalReports /></RequireAuth> },
+          { path: 'doctor/xai',           element: <RequireAuth role={RoleEnum.DOCTOR}><XaiDeepDive /></RequireAuth> },
 
           // Instructor (role: instructor)
           { path: 'instructor',                element: <RequireAuth role={RoleEnum.INSTRUCTOR}><InstructorDashboard /></RequireAuth> },

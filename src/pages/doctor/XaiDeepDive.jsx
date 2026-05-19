@@ -142,7 +142,11 @@ export default function XaiDeepDive() {
 
       {!loading && predictions.length > 0 && xaiError && !xaiLoading && (
         <div className="text-center py-12">
-          <p className="text-slate-400 font-semibold">{xaiError}</p>
+          <Brain className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+          <p className="text-slate-700 font-bold mb-2">No XAI data for this prediction</p>
+          <p className="text-slate-400 text-sm font-medium">
+            This was a clinical-only prediction. XAI heatmaps require a WSI slide image. Run a new prediction with an image to see attention maps.
+          </p>
         </div>
       )}
 
@@ -268,7 +272,10 @@ export default function XaiDeepDive() {
           {topPatches.length === 0 && clinicalChartData.length === 0 && !fusionGate && (
             <div className="text-center py-12">
               <Brain className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-              <p className="text-slate-400 font-semibold">{t('doctor.noXaiData')}</p>
+              <p className="text-slate-700 font-bold mb-2">Clinical-only prediction</p>
+              <p className="text-slate-400 text-sm font-medium max-w-sm mx-auto">
+                This prediction used clinical data only (no WSI image). XAI feature attribution is not available for clinical-only mode. Upload a slide image in the wizard to get patch attention heatmaps.
+              </p>
             </div>
           )}
         </>

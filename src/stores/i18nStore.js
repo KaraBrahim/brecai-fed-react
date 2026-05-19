@@ -24,6 +24,8 @@ export const translations = {
       aggLogs:      'Aggregation Logs',
       contributions:'Contributions',
       signOut:      'Sign out',
+      predictions:  'Predictions',
+      finalExam:    'Final Exam',
     },
     // Topbar
     topbar: {
@@ -312,6 +314,8 @@ export const translations = {
       aggLogs:      'Journaux d\'agrégation',
       contributions:'Contributions',
       signOut:      'Se déconnecter',
+      predictions:  'Prédictions',
+      finalExam:    'Examen final',
     },
     topbar: {
       systemActive: 'Système actif',
@@ -580,6 +584,8 @@ export const translations = {
       aggLogs:      'سجلات التجميع',
       contributions:'المساهمات',
       signOut:      'تسجيل الخروج',
+      predictions:  'التنبؤات',
+      finalExam:    'الفحص النهائي',
     },
     topbar: {
       systemActive: 'النظام نشط',

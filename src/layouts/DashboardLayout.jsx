@@ -14,12 +14,13 @@ import { useAuthStore, ROLE_META } from '@/stores/authStore'
 import { useI18nStore, LANGUAGES, useT, useIsRTL } from '@/stores/i18nStore'
 
 const doctorNav = [
-  { labelKey: 'nav.insights',    path: '/app/doctor',          icon: Activity,       label: 'Insights' },
-  { labelKey: 'nav.patients',    path: '/app/doctor/patients', icon: Users,          label: 'Patients' },
-  { labelKey: 'nav.aiModels',    path: '/app/doctor/predict',  icon: Brain,          label: 'AI Prediction' },
-  { labelKey: 'nav.examinations',path: '/app/doctor/exam',     icon: FileText,       label: 'Final Exam' },
-  { labelKey: 'nav.reports',     path: '/app/doctor/reports',  icon: BarChart3,      label: 'Reports' },
-  { labelKey: 'nav.xai',         path: '/app/doctor/xai',      icon: Stethoscope,    label: 'XAI Lab' },
+  { labelKey: 'nav.insights',     path: '/app/doctor',               icon: Activity,       label: 'Insights' },
+  { labelKey: 'nav.patients',     path: '/app/doctor/patients',      icon: Users,          label: 'Patients' },
+  { labelKey: 'nav.examinations', path: '/app/doctor/examinations',  icon: FileText,       label: 'Examinations' },
+  { labelKey: 'nav.predictions',  path: '/app/doctor/predictions',   icon: Brain,          label: 'Predictions' },
+  { labelKey: 'nav.finalExam',    path: '/app/doctor/exam',          icon: Stethoscope,    label: 'Final Exam' },
+  { labelKey: 'nav.reports',      path: '/app/doctor/reports',       icon: BarChart3,      label: 'Reports' },
+  { labelKey: 'nav.xai',          path: '/app/doctor/xai',           icon: Activity,       label: 'XAI Lab' },
 ]
 
 const instructorNav = [

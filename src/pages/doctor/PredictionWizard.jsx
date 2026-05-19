@@ -499,10 +499,10 @@ export default function PredictionWizard({ onClose }) {
       if (predRes.status === 'completed') {
         setPrediction(predRes)
         setProgressPct(100)
-        try {
-          const xaiData = await doctorApi.predictions.getXai(predRes.prediction_id)
-          setXai(xaiData)
-        } catch {}
+        // XAI is optional — fetch it but don't block results on it
+        doctorApi.predictions.getXai(predRes.prediction_id)
+          .then(xaiData => setXai(xaiData))
+          .catch(() => {}) // clinical-only has no XAI — that's fine
         setStep('results')
         return
       }
@@ -518,10 +518,10 @@ export default function PredictionWizard({ onClose }) {
         if (status.status === 'completed') {
           setPrediction(status)
           setProgressPct(100)
-          try {
-            const xaiData = await doctorApi.predictions.getXai(predRes.prediction_id)
-            setXai(xaiData)
-          } catch {}
+          // XAI is optional — fetch async, don't block
+          doctorApi.predictions.getXai(predRes.prediction_id)
+            .then(xaiData => setXai(xaiData))
+            .catch(() => {})
           setStep('results')
           return
         }
