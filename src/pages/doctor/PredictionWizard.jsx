@@ -418,7 +418,7 @@ export default function PredictionWizard({ onClose }) {
     try {
       // Step 1: Create examination
       setProgressStep(1)
-      setProgressLabel('Creating examination…')
+      setProgressLabel(t('doctor.step1Title'))
       setProgressPct(5)
       const exam = await doctorApi.examinations.create({
         patient_id: selectedPatient.id,
@@ -430,7 +430,7 @@ export default function PredictionWizard({ onClose }) {
 
       // Step 2: Submit examination
       setProgressStep(2)
-      setProgressLabel('Submitting examination…')
+      setProgressLabel(t('doctor.step2Title'))
       setProgressPct(15)
       await doctorApi.examinations.submit(exam.id)
       setProgressPct(20)
@@ -468,7 +468,7 @@ export default function PredictionWizard({ onClose }) {
         }
 
         if (ptB64) {
-          setProgressLabel('Saving features…')
+          setProgressLabel(t('doctor.uploading'))
           setProgressPct(70)
           const wsi = await doctorApi.wsiUploads.uploadPtBase64({
             patient_id: selectedPatient.id,
@@ -491,9 +491,23 @@ export default function PredictionWizard({ onClose }) {
       })
       setPredictionId(predRes.prediction_id)
 
-      // Step 5: Poll for result
+      // Step 5: Poll for result — or use immediate result if clinical-only (synchronous)
       setProgressStep(5)
-      setProgressLabel('Waiting for AI result…')
+      setProgressLabel(t('doctor.analyzing'))
+
+      // If the prediction already completed synchronously, use it directly
+      if (predRes.status === 'completed') {
+        setPrediction(predRes)
+        setProgressPct(100)
+        try {
+          const xaiData = await doctorApi.predictions.getXai(predRes.prediction_id)
+          setXai(xaiData)
+        } catch {}
+        setStep('results')
+        return
+      }
+
+      // Otherwise poll (A6 fusion with WSI — takes 3-5 min)
       let attempts = 0
       const maxAttempts = 120
       while (attempts < maxAttempts) {
@@ -767,8 +781,8 @@ export default function PredictionWizard({ onClose }) {
 
                 {/* Steps */}
                 <div className="space-y-3">
-                  <ProgressStep label="Create examination" done={progressStep > 1} active={progressStep === 1} />
-                  <ProgressStep label="Submit examination" done={progressStep > 2} active={progressStep === 2} />
+                  <ProgressStep label={t('doctor.step1Title')} done={progressStep > 1} active={progressStep === 1} />
+                  <ProgressStep label={t('doctor.step2Title')} done={progressStep > 2} active={progressStep === 2} />
                   {requiresWSI && <ProgressStep label={t('doctor.uploading')} done={progressStep > 3} active={progressStep === 3} />}
                   {requiresWSI && <ProgressStep label={t('doctor.extracting')} done={progressStep > 4} active={progressStep === 4} />}
                   <ProgressStep label={t('doctor.analyzing')} done={progressStep > 5} active={progressStep === 5} />
