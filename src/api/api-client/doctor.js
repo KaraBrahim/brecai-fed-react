@@ -271,6 +271,10 @@ const doctor = {
     uploadR2Key(data) {
       return client.post('/doctor/wsi-uploads/from-r2-key', data).then((r) => r.data);
     },
+
+    /**
+     * POST /api/doctor/wsi-uploads/from-features  (JSON)
+     * Upload pre-extracted CONCH features as base64 — bypasses PHP upload_max_filesize.
      * @param {{ patient_id: number, pt_b64: string, original_name: string }} data
      * @returns {Promise<import('./types.js').WsiUpload>}
      */
