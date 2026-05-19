@@ -8,7 +8,7 @@ import {
 import {
   Users, Brain, Activity, TrendingUp, ArrowUpRight,
   Clock, CheckCircle2, AlertTriangle, FileText,
-  ChevronRight, Zap, Sparkles, BarChart3, Activity, Users, Brain, TrendingUp,
+  ChevronRight, Zap, Sparkles, BarChart3,
 } from 'lucide-react'
 import { SectionCard, stagger, fadeUp } from '@/components/shared'
 import { MetricTile, StatusPill } from '@/components/admin'
