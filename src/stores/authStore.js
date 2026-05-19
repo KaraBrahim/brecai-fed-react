@@ -237,10 +237,6 @@ export const useAuthStore = create(
       /* ── getRoleHome ──────────────────────────────────── */
       getRoleHome: () => {
         const role = get().userRole()
-        if (!role) {
-          get().fetchUser({ force: true })
-          return '/auth'
-        }
         const home = ROLE_HOME[role] || '/app/doctor'
         log.debug('AUTH', `getRoleHome → role="${role}" → "${home}"`)
         return home
