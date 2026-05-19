@@ -56,8 +56,8 @@ export default function DoctorInsights() {
         if (controller.signal.aborted) return
         if (kpisRes.status === 'fulfilled')  setKpis(kpisRes.value)
         if (predRes.status === 'fulfilled')  setPredResults(predRes.value)
-        if (examsRes.status === 'fulfilled') setExamsOverTime(examsRes.value || [])
-        if (actRes.status === 'fulfilled')   setRecentActivity(actRes.value || [])
+        if (examsRes.status === 'fulfilled') setExamsOverTime(Array.isArray(examsRes.value) ? examsRes.value : examsRes.value?.data || [])
+        if (actRes.status === 'fulfilled')   setRecentActivity(Array.isArray(actRes.value) ? actRes.value : actRes.value?.data || [])
         if (confRes.status === 'fulfilled')  setAvgConf(confRes.value)
       } finally {
         if (!controller.signal.aborted) setLoading(false)
@@ -72,7 +72,7 @@ export default function DoctorInsights() {
     { name: t('doctor.nonLuminalA'), value: predResults?.non_luminal_a ?? 0, color: '#F55486' },
   ], [predResults, t])
 
-  const examSeries = examsOverTime.map(d => ({
+  const examSeries = (Array.isArray(examsOverTime) ? examsOverTime : []).map(d => ({
     label: d.month?.slice(0, 7) || d.month,
     count: d.count,
   }))
