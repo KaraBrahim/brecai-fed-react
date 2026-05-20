@@ -1,6 +1,6 @@
 // Centralized seed data for the Admin module.
 // Static demo data so all admin pages can render rich content immediately.
-
+/* 
 export const seedUsers = [
   { id: 'USR-001', name: 'Dr. Mounia Benali',     email: 'mounia.benali@chu-oran.dz',  role: 'Doctor',     org: 'CHU Oran',         status: 'active',  lastLogin: '2026-04-26 09:14', mfa: true,  cases: 142 },
   { id: 'USR-002', name: 'Dr. Yasmine Kebir',     email: 'y.kebir@chu-algiers.dz',     role: 'Doctor',     org: 'CHU Algiers',      status: 'active',  lastLogin: '2026-04-25 18:02', mfa: true,  cases: 98 },
@@ -117,3 +117,4 @@ export const seedAuditLogs = [
   { id: 'LOG-99202', ts: '2026-04-25 14:08:00', actor: 'k.saidi@chu-constantine.dz', action: 'PATIENT_UPDATE',  target: 'PT-0037',  severity: 'info',    ip: '154.72.13.4',   detail: 'Updated biomarker values' },
   { id: 'LOG-99201', ts: '2026-04-25 11:14:00', actor: 'a.larbaoui@chu-tlemcen.dz', action: 'LOGIN_FAILED',    target: 'USR-008',  severity: 'critical', ip: '197.0.4.18',   detail: '5 failed attempts · account suspended' },
 ]
+ */
