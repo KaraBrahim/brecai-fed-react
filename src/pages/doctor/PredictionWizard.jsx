@@ -413,6 +413,14 @@ export default function PredictionWizard({ onClose }) {
     setProgressPct(0)
     setProgressStep(0)
 
+    // Use Modal GPU for extraction if configured, otherwise HF CPU
+    const extractUrl = (typeof __MODAL_URL__ !== 'undefined' && __MODAL_URL__)
+      ? `${__MODAL_URL__}/extract`
+      : `${__FASTAPI_URL__}/extract`
+    const extractHeaders = (typeof __MODAL_URL__ !== 'undefined' && __MODAL_URL__)
+      ? {}
+      : { 'Authorization': `Bearer ${__HF_TOKEN__}` }
+
     let examId = null
 
     try {
@@ -447,93 +455,145 @@ export default function PredictionWizard({ onClose }) {
         const isSVS = slideFile.name.toLowerCase().match(/\.(svs|ndpi|scn|mrxs)$/)
 
         if (isSVS) {
-          // SVS/NDPI: multipart upload to R2 (reliable for large files), FastAPI downloads from R2
-          const CHUNK_SIZE = 50 * 1024 * 1024 // 50 MB per part
-          const totalParts = Math.ceil(slideFile.size / CHUNK_SIZE)
-
-          setProgressLabel('Initialising secure upload…')
+          // SVS/NDPI: read in browser as TIFF (SVS is a multi-resolution TIFF internally)
+          // Tile in browser → send patches ZIP to FastAPI /extract → no R2 upload needed
+          setProgressLabel('Reading slide in browser…')
           setProgressPct(28)
 
-          // Step 1: initiate multipart upload
-          const { upload_id, r2_key } = await doctorApi.wsiMultipart.init({
-            filename: slideFile.name,
-            patient_id: selectedPatient.id,
-          })
-
-          // Step 2: get presigned URLs for all parts
-          const { part_urls } = await doctorApi.wsiMultipart.parts({
-            upload_id,
-            r2_key,
-            part_count: totalParts,
-          })
-
-          setProgressLabel(`Uploading slide (${(slideFile.size / (1024 * 1024)).toFixed(0)} MB) in ${totalParts} parts…`)
-          setProgressPct(30)
-
-          // Step 3: upload parts — 3 concurrent, with progress tracking
-          const completedParts = []
-          let uploadedParts = 0
-
-          const uploadPart = async (partNumber, url) => {
-            const start  = (partNumber - 1) * CHUNK_SIZE
-            const end    = Math.min(start + CHUNK_SIZE, slideFile.size)
-            const chunk  = slideFile.slice(start, end)
-
-            const res = await fetch(url, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/octet-stream' },
-              body: chunk,
-            })
-            if (!res.ok) {
-              const body = await res.text().catch(() => '')
-              throw new Error(`Part ${partNumber} failed (HTTP ${res.status}): ${body.slice(0, 150)}`)
-            }
-
-            // ETag may be quoted ("abc123") — keep as-is, R2 requires the quotes
-            const rawEtag = res.headers.get('ETag') || res.headers.get('etag') || `part-${partNumber}`
-            // Ensure quotes are present (some browsers strip them)
-            const etag = rawEtag.startsWith('"') ? rawEtag : `"${rawEtag}"`
-            uploadedParts++
-            const pct = Math.round(30 + (uploadedParts / totalParts) * 28) // 30 → 58
-            setProgressPct(pct)
-            setProgressLabel(`Uploading… ${uploadedParts}/${totalParts} parts done`)
-            return { PartNumber: partNumber, ETag: etag }
-          }
-
-          // Upload with concurrency = 3
-          const CONCURRENCY = 3
+          let ptB64 = null
           try {
-            for (let i = 0; i < totalParts; i += CONCURRENCY) {
-              const batch = part_urls
-                .slice(i, i + CONCURRENCY)
-                .map((url, idx) => uploadPart(i + idx + 1, url))
-              const results = await Promise.all(batch)
-              completedParts.push(...results)
+            // Load UTIF.js dynamically for TIFF/SVS parsing
+            const UTIF = await import('https://cdn.jsdelivr.net/npm/utif@3.1.0/UTIF.js').catch(() => null)
+
+            let imgBitmap = null
+
+            if (UTIF) {
+              try {
+                const arrayBuffer = await slideFile.arrayBuffer()
+                const ifds = UTIF.decode(arrayBuffer)
+
+                // SVS pyramid levels: level 0 = full res (huge), level 1+ = downsampled
+                // We need a level that gives us at least 800 patches of 256px
+                // Minimum size: sqrt(800) * 256 ≈ 7200px — so we want ~8000px wide
+                // Pick the SMALLEST level that is still >= 6000px wide
+                // This avoids loading the full 498MB level 0
+                let bestIfd = null
+                const candidates = []
+
+                for (let i = 0; i < ifds.length; i++) {
+                  const ifd = ifds[i]
+                  const w = ifd.t256?.[0] || ifd.width || 0
+                  const h = ifd.t257?.[0] || ifd.height || 0
+                  if (w > 0 && h > 0) candidates.push({ ifd, w, h, i })
+                }
+
+                // Sort by width descending, pick smallest that's >= 6000px
+                // If none >= 6000px, pick the largest available
+                candidates.sort((a, b) => a.w - b.w)
+                for (const c of candidates) {
+                  if (c.w >= 6000) { bestIfd = c.ifd; break }
+                }
+                if (!bestIfd && candidates.length > 0) {
+                  bestIfd = candidates[candidates.length - 1].ifd // largest available
+                }
+                if (!bestIfd) bestIfd = ifds[0]
+
+                setProgressLabel(`Decoding slide level (${bestIfd.t256?.[0] || '?'}×${bestIfd.t257?.[0] || '?'})…`)
+                setProgressPct(30)
+
+                UTIF.decodeImage(arrayBuffer, bestIfd)
+                const rgba = UTIF.toRGBA8(bestIfd)
+                const w = bestIfd.width
+                const h = bestIfd.height
+
+                const canvas2 = document.createElement('canvas')
+                canvas2.width = w; canvas2.height = h
+                const ctx2 = canvas2.getContext('2d')
+                const imgData = ctx2.createImageData(w, h)
+                imgData.data.set(rgba)
+                ctx2.putImageData(imgData, 0, 0)
+                imgBitmap = await createImageBitmap(canvas2)
+              } catch (utifErr) {
+                // UTIF failed — fall back to createImageBitmap (works for TIFF)
+                imgBitmap = await createImageBitmap(slideFile).catch(() => null)
+              }
+            } else {
+              imgBitmap = await createImageBitmap(slideFile).catch(() => null)
             }
-          } catch (uploadErr) {
-            // Abort the multipart upload to avoid orphaned parts in R2
-            await doctorApi.wsiMultipart.abort({ upload_id, r2_key }).catch(() => {})
-            throw uploadErr
+
+            if (!imgBitmap) throw new Error('Could not read slide file in browser. Try converting to TIFF or PNG first.')
+
+            const { width, height } = imgBitmap
+            setProgressLabel(`Slide loaded (${width}×${height}) — tiling tissue…`)
+            setProgressPct(32)
+
+            const PATCH_SIZE = 256
+            const MAX_PATCHES = 800
+            const cols = Math.floor(width / PATCH_SIZE)
+            const rows = Math.floor(height / PATCH_SIZE)
+            const step = Math.max(1, Math.ceil((cols * rows) / MAX_PATCHES))
+            const canvas = document.createElement('canvas')
+            canvas.width = PATCH_SIZE; canvas.height = PATCH_SIZE
+            const ctx = canvas.getContext('2d')
+            const patches = []
+            let count = 0
+            for (let r = 0; r < rows && count < MAX_PATCHES; r += step) {
+              for (let c = 0; c < cols && count < MAX_PATCHES; c++) {
+                ctx.clearRect(0, 0, PATCH_SIZE, PATCH_SIZE)
+                ctx.drawImage(imgBitmap, c * PATCH_SIZE, r * PATCH_SIZE, PATCH_SIZE, PATCH_SIZE, 0, 0, PATCH_SIZE, PATCH_SIZE)
+                const pixels = ctx.getImageData(0, 0, PATCH_SIZE, PATCH_SIZE).data
+                let sum = 0
+                for (let i = 0; i < pixels.length; i += 4) sum += pixels[i]
+                if (sum / (pixels.length / 4) > 230) continue // skip white background
+                const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.85))
+                patches.push({ blob, name: `patch_${r}_${c}.jpg` })
+                count++
+              }
+            }
+            imgBitmap.close()
+
+            if (patches.length === 0) throw new Error('No tissue patches found in slide.')
+
+            setProgressLabel(`${patches.length} patches extracted — running CONCH…`)
+            setProgressPct(45)
+
+            const JSZipModule = await import('jszip')
+            const zip = new JSZipModule.default()
+            patches.forEach(p => zip.file(p.name, p.blob))
+            const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 1 } })
+            setProgressPct(52)
+
+            const extractForm = new FormData()
+            extractForm.append('patches_zip', zipBlob, 'patches.zip')
+            setProgressLabel(`Sending ${patches.length} patches to AI (GPU)…`)
+            const extractRes = await fetch(extractUrl, {
+              method: 'POST',
+              headers: extractHeaders,
+              body: extractForm,
+            })
+            if (!extractRes.ok) {
+              const errData = await extractRes.json().catch(() => ({}))
+              throw new Error(errData.detail || `Feature extraction failed (${extractRes.status})`)
+            }
+            const extractData = await extractRes.json()
+            ptB64 = extractData.pt_b64
+            setProgressPct(65)
+            setProgressLabel(`${extractData.n_patches} patches processed`)
+          } catch (svsErr) {
+            throw new Error(`SVS processing failed: ${svsErr.message}`)
           }
 
-          // Step 4: complete — tell R2 to assemble the parts
-          setProgressLabel('Finalising upload…')
-          setProgressPct(58)
-          await doctorApi.wsiMultipart.complete({
-            upload_id,
-            r2_key,
-            parts: completedParts.sort((a, b) => a.PartNumber - b.PartNumber),
-          })
-
-          setProgressLabel('Slide stored — registering…')
-
-          const wsi = await doctorApi.wsiUploads.uploadR2Key({
-            patient_id: selectedPatient.id,
-            r2_key,
-            original_name: slideFile.name,
-          })
-          wsiUploadId = wsi.id
-          setProgressPct(62)
+          if (ptB64) {
+            setProgressLabel('Registering features…')
+            setProgressPct(70)
+            const wsi = await doctorApi.wsiUploads.uploadPtBase64({
+              patient_id: selectedPatient.id,
+              pt_b64: ptB64,
+              original_name: slideFile.name,
+            })
+            wsiUploadId = wsi.id
+          }
+          setProgressPct(75)
 
         } else {
           // TIFF/PNG/JPG: tile in browser using Canvas (fast, no server timeout)
@@ -578,9 +638,10 @@ export default function PredictionWizard({ onClose }) {
             setProgressPct(50)
             const extractForm = new FormData()
             extractForm.append('patches_zip', zipBlob, 'patches.zip')
-            const extractRes = await fetch(`${fastApiUrl}/extract`, {
+            setProgressLabel(`Sending ${patches.length} patches to AI (GPU)…`)
+            const extractRes = await fetch(extractUrl, {
               method: 'POST',
-              headers: { 'Authorization': `Bearer ${__HF_TOKEN__}` },
+              headers: extractHeaders,
               body: extractForm,
             })
             if (!extractRes.ok) {
@@ -622,7 +683,10 @@ export default function PredictionWizard({ onClose }) {
 
       // Step 5: Poll for result — or use immediate result if clinical-only (synchronous)
       setProgressStep(5)
-      setProgressLabel(t('doctor.analyzing'))
+      const engineLabel = (typeof __MODAL_URL__ !== 'undefined' && __MODAL_URL__)
+        ? 'Running AI analysis (GPU)…'
+        : 'Running AI analysis (CPU)…'
+      setProgressLabel(engineLabel)
 
       // If the prediction already completed synchronously, use it directly
       if (predRes.status === 'completed') {
@@ -640,20 +704,22 @@ export default function PredictionWizard({ onClose }) {
         return
       }
 
-      // Otherwise poll (A6 fusion with WSI — large slides can take 30+ min on CPU)
+      // Otherwise poll (A6 fusion with WSI — Modal GPU: 3-5 min, HF CPU: 20-30 min)
       let attempts = 0
-      const maxAttempts = 600 // 600 × 5s = 50 minutes
-      const fastApiUrl = __FASTAPI_URL__
+      const maxAttempts = 600 // 600 × 5s = 50 minutes max
+      // Progress moves from 78→94 — faster when Modal is available (GPU)
+      const hasModal = typeof __MODAL_URL__ !== 'undefined' && __MODAL_URL__
+      const progressPerAttempt = hasModal ? 0.08 : 0.027 // GPU: ~200 attempts to reach 94; CPU: ~600
       while (attempts < maxAttempts) {
         await new Promise(r => setTimeout(r, 5000))
 
         // Keep-alive pings every 30s — prevents Laravel Cloud + HF Space from sleeping
         if (attempts % 6 === 0) {
-          fetch(`${fastApiUrl}/health`, { method: 'GET' }).catch(() => {})
+          fetch(`${__FASTAPI_URL__}/health`, { method: 'GET' }).catch(() => {})
         }
 
         const status = await doctorApi.predictions.getStatus(predRes.prediction_id)
-        const pct = Math.min(94, 78 + Math.round((attempts / maxAttempts) * 16))
+        const pct = Math.min(94, 78 + Math.round(attempts * progressPerAttempt))
         setProgressPct(pct)
         if (status.status === 'completed') {
           setPrediction(status)
