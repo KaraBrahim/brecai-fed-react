@@ -455,131 +455,43 @@ export default function PredictionWizard({ onClose }) {
         const isSVS = slideFile.name.toLowerCase().match(/\.(svs|ndpi|scn|mrxs)$/)
 
         if (isSVS) {
-          // SVS/NDPI: read in browser as TIFF (SVS is a multi-resolution TIFF internally)
-          // Tile in browser → send patches ZIP to FastAPI /extract → no R2 upload needed
-          setProgressLabel('Reading slide in browser…')
-          setProgressPct(28)
+          // SVS/NDPI: send directly to Modal GPU — OpenSlide handles tiling server-side
+          // Browser cannot decode SVS (proprietary JPEG2000 compression), Modal has OpenSlide
+          setProgressLabel(`Uploading slide to GPU server (${(slideFile.size / (1024*1024)).toFixed(0)} MB)…`)
+          setProgressPct(30)
+
+          let uploadPct = 30
+          const ticker = setInterval(() => {
+            uploadPct = Math.min(57, uploadPct + 1)
+            setProgressPct(uploadPct)
+          }, 2000)
 
           let ptB64 = null
           try {
-            // Load UTIF.js dynamically for TIFF/SVS parsing
-            const UTIF = await import('https://cdn.jsdelivr.net/npm/utif@3.1.0/UTIF.js').catch(() => null)
+            const modalBase = (typeof __MODAL_URL__ !== 'undefined' && __MODAL_URL__)
+              ? __MODAL_URL__.replace('--brecai-extract.modal.run', '--brecai-extract-svs.modal.run')
+              : null
 
-            let imgBitmap = null
+            if (!modalBase) throw new Error('Modal GPU endpoint not configured.')
 
-            if (UTIF) {
-              try {
-                const arrayBuffer = await slideFile.arrayBuffer()
-                const ifds = UTIF.decode(arrayBuffer)
+            const svsForm = new FormData()
+            svsForm.append('svs_file', slideFile, slideFile.name)
 
-                // SVS pyramid levels: level 0 = full res (huge), level 1+ = downsampled
-                // We need a level that gives us at least 800 patches of 256px
-                // Minimum size: sqrt(800) * 256 ≈ 7200px — so we want ~8000px wide
-                // Pick the SMALLEST level that is still >= 6000px wide
-                // This avoids loading the full 498MB level 0
-                let bestIfd = null
-                const candidates = []
+            const svsRes = await fetch(modalBase, { method: 'POST', body: svsForm })
+            clearInterval(ticker)
+            setProgressPct(62)
 
-                for (let i = 0; i < ifds.length; i++) {
-                  const ifd = ifds[i]
-                  const w = ifd.t256?.[0] || ifd.width || 0
-                  const h = ifd.t257?.[0] || ifd.height || 0
-                  if (w > 0 && h > 0) candidates.push({ ifd, w, h, i })
-                }
-
-                // Sort by width descending, pick smallest that's >= 6000px
-                // If none >= 6000px, pick the largest available
-                candidates.sort((a, b) => a.w - b.w)
-                for (const c of candidates) {
-                  if (c.w >= 6000) { bestIfd = c.ifd; break }
-                }
-                if (!bestIfd && candidates.length > 0) {
-                  bestIfd = candidates[candidates.length - 1].ifd // largest available
-                }
-                if (!bestIfd) bestIfd = ifds[0]
-
-                setProgressLabel(`Decoding slide level (${bestIfd.t256?.[0] || '?'}×${bestIfd.t257?.[0] || '?'})…`)
-                setProgressPct(30)
-
-                UTIF.decodeImage(arrayBuffer, bestIfd)
-                const rgba = UTIF.toRGBA8(bestIfd)
-                const w = bestIfd.width
-                const h = bestIfd.height
-
-                const canvas2 = document.createElement('canvas')
-                canvas2.width = w; canvas2.height = h
-                const ctx2 = canvas2.getContext('2d')
-                const imgData = ctx2.createImageData(w, h)
-                imgData.data.set(rgba)
-                ctx2.putImageData(imgData, 0, 0)
-                imgBitmap = await createImageBitmap(canvas2)
-              } catch (utifErr) {
-                // UTIF failed — fall back to createImageBitmap (works for TIFF)
-                imgBitmap = await createImageBitmap(slideFile).catch(() => null)
-              }
-            } else {
-              imgBitmap = await createImageBitmap(slideFile).catch(() => null)
+            if (!svsRes.ok) {
+              const errData = await svsRes.json().catch(() => ({}))
+              throw new Error(errData.error || `Modal SVS extraction failed (${svsRes.status})`)
             }
 
-            if (!imgBitmap) throw new Error('Could not read slide file in browser. Try converting to TIFF or PNG first.')
-
-            const { width, height } = imgBitmap
-            setProgressLabel(`Slide loaded (${width}×${height}) — tiling tissue…`)
-            setProgressPct(32)
-
-            const PATCH_SIZE = 256
-            const MAX_PATCHES = 800
-            const cols = Math.floor(width / PATCH_SIZE)
-            const rows = Math.floor(height / PATCH_SIZE)
-            const step = Math.max(1, Math.ceil((cols * rows) / MAX_PATCHES))
-            const canvas = document.createElement('canvas')
-            canvas.width = PATCH_SIZE; canvas.height = PATCH_SIZE
-            const ctx = canvas.getContext('2d')
-            const patches = []
-            let count = 0
-            for (let r = 0; r < rows && count < MAX_PATCHES; r += step) {
-              for (let c = 0; c < cols && count < MAX_PATCHES; c++) {
-                ctx.clearRect(0, 0, PATCH_SIZE, PATCH_SIZE)
-                ctx.drawImage(imgBitmap, c * PATCH_SIZE, r * PATCH_SIZE, PATCH_SIZE, PATCH_SIZE, 0, 0, PATCH_SIZE, PATCH_SIZE)
-                const pixels = ctx.getImageData(0, 0, PATCH_SIZE, PATCH_SIZE).data
-                let sum = 0
-                for (let i = 0; i < pixels.length; i += 4) sum += pixels[i]
-                if (sum / (pixels.length / 4) > 230) continue // skip white background
-                const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.85))
-                patches.push({ blob, name: `patch_${r}_${c}.jpg` })
-                count++
-              }
-            }
-            imgBitmap.close()
-
-            if (patches.length === 0) throw new Error('No tissue patches found in slide.')
-
-            setProgressLabel(`${patches.length} patches extracted — running CONCH…`)
-            setProgressPct(45)
-
-            const JSZipModule = await import('jszip')
-            const zip = new JSZipModule.default()
-            patches.forEach(p => zip.file(p.name, p.blob))
-            const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 1 } })
-            setProgressPct(52)
-
-            const extractForm = new FormData()
-            extractForm.append('patches_zip', zipBlob, 'patches.zip')
-            setProgressLabel(`Sending ${patches.length} patches to AI (GPU)…`)
-            const extractRes = await fetch(extractUrl, {
-              method: 'POST',
-              headers: extractHeaders,
-              body: extractForm,
-            })
-            if (!extractRes.ok) {
-              const errData = await extractRes.json().catch(() => ({}))
-              throw new Error(errData.detail || `Feature extraction failed (${extractRes.status})`)
-            }
-            const extractData = await extractRes.json()
-            ptB64 = extractData.pt_b64
+            const svsData = await svsRes.json()
+            ptB64 = svsData.pt_b64
+            setProgressLabel(`${svsData.n_patches} patches extracted on GPU`)
             setProgressPct(65)
-            setProgressLabel(`${extractData.n_patches} patches processed`)
           } catch (svsErr) {
+            clearInterval(ticker)
             throw new Error(`SVS processing failed: ${svsErr.message}`)
           }
 
@@ -593,6 +505,8 @@ export default function PredictionWizard({ onClose }) {
             })
             wsiUploadId = wsi.id
           }
+          setProgressPct(75)
+
           setProgressPct(75)
 
         } else {
