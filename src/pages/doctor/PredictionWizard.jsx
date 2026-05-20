@@ -686,9 +686,12 @@ export default function PredictionWizard({ onClose }) {
       // Otherwise poll (A6 fusion with WSI — Modal GPU: 3-5 min, HF CPU: 20-30 min)
       let attempts = 0
       const maxAttempts = 600 // 600 × 5s = 50 minutes max
-      // Progress moves from 78→94 — faster when Modal is available (GPU)
+      // Calibrate progress to the realistic completion window so the bar
+      // actually advances during the wait instead of jumping at the end.
+      // - With Modal: target ~3 min total (≈ 36 polls × 5 s) for 78 → 94.
+      // - Without Modal (CPU only): target ~25 min (≈ 300 polls × 5 s).
       const hasModal = typeof __MODAL_URL__ !== 'undefined' && __MODAL_URL__
-      const progressPerAttempt = hasModal ? 0.08 : 0.027 // GPU: ~200 attempts to reach 94; CPU: ~600
+      const expectedPolls = hasModal ? 36 : 300
       while (attempts < maxAttempts) {
         await new Promise(r => setTimeout(r, 5000))
 
@@ -698,7 +701,10 @@ export default function PredictionWizard({ onClose }) {
         }
 
         const status = await doctorApi.predictions.getStatus(predRes.prediction_id)
-        const pct = Math.min(94, 78 + Math.round(attempts * progressPerAttempt))
+        // Eased curve: fast early, slows as it approaches 94 — never quite gets there
+        // until the actual completion event fires. ratio ∈ [0, ~1).
+        const ratio = 1 - Math.exp(-(attempts + 1) / expectedPolls)
+        const pct = Math.min(94, Math.round(78 + ratio * 16))
         setProgressPct(pct)
         if (status.status === 'completed') {
           setPrediction(status)
