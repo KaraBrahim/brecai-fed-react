@@ -455,11 +455,11 @@ export default function PredictionWizard({ onClose }) {
         const isSVS = slideFile.name.toLowerCase().match(/\.(svs|ndpi|scn|mrxs)$/)
 
         if (isSVS) {
-          // SVS/NDPI: upload to R2 in chunks (multipart), then have Modal pull it server-to-server.
-          // Why: direct browser → Modal POST of a multi-GB SVS over a single TCP stream
-          // gets killed by NAT/proxy/network blips ("NetworkError when attempting to fetch").
-          // R2 multipart is resilient (each part retries independently) and the browser
-          // never has to hold a single huge connection open.
+          // SVS/NDPI: upload to R2 in chunks (multipart), register the r2_key with
+          // Laravel, then let the prediction job run the FULL pipeline on Modal
+          // (download + tile + CONCH + A6 fusion + XAI) in one round-trip.
+          // This skips the .pt round-trip we used to do and cuts ~2 minutes
+          // off the wait by avoiding HF Free CPU for the fusion step.
 
           const PART_SIZE = 16 * 1024 * 1024 // 16 MB
           const MAX_RETRIES = 4
@@ -505,7 +505,7 @@ export default function PredictionWizard({ onClose }) {
               }
               uploadedParts.push({ PartNumber: i + 1, ETag: etag })
 
-              const pct = 28 + Math.round(((i + 1) / partCount) * 32) // 28→60
+              const pct = 28 + Math.round(((i + 1) / partCount) * 40) // 28→68
               setProgressPct(pct)
               setProgressLabel(`Uploading slide ${i + 1}/${partCount} parts…`)
             }
@@ -523,55 +523,16 @@ export default function PredictionWizard({ onClose }) {
             throw new Error(`Slide upload failed: ${upErr.message}`)
           }
 
-          // 5. Get a presigned GET URL so Modal can pull the SVS directly from R2
-          setProgressLabel('Sending to GPU server for tiling…')
-          setProgressPct(62)
-          const { presigned_url: slideUrl } = await doctorApi.wsiMultipart.presignGet({ r2_key: r2Key })
-
-          // 6. Tell Modal to download from R2, tile, run CONCH
-          let ptB64 = null
-          try {
-            const modalBase = (typeof __MODAL_URL__ !== 'undefined' && __MODAL_URL__)
-              ? __MODAL_URL__.replace(/\/extract.*$/, '') + '/extract-r2'
-              : null
-            if (!modalBase) throw new Error('Modal GPU endpoint not configured.')
-
-            // Light progress ticker while Modal works (download + tile + CONCH ~ 1-3 min on T4)
-            let workingPct = 62
-            const ticker = setInterval(() => {
-              workingPct = Math.min(70, workingPct + 1)
-              setProgressPct(workingPct)
-            }, 4000)
-
-            const r2Res = await fetch(modalBase, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ slide_url: slideUrl, original_name: slideFile.name }),
-            })
-            clearInterval(ticker)
-
-            if (!r2Res.ok) {
-              const errData = await r2Res.json().catch(() => ({}))
-              throw new Error(errData.detail || errData.error || `Modal extraction failed (${r2Res.status})`)
-            }
-            const data = await r2Res.json()
-            ptB64 = data.pt_b64
-            setProgressLabel(`${data.n_patches} patches extracted on GPU`)
-            setProgressPct(72)
-          } catch (modalErr) {
-            throw new Error(`SVS processing failed: ${modalErr.message}`)
-          }
-
-          if (ptB64) {
-            setProgressLabel('Registering features…')
-            setProgressPct(74)
-            const wsi = await doctorApi.wsiUploads.uploadPtBase64({
-              patient_id: selectedPatient.id,
-              pt_b64: ptB64,
-              original_name: slideFile.name,
-            })
-            wsiUploadId = wsi.id
-          }
+          // 5. Register the R2 upload as a WsiUpload in Laravel (so prediction
+          //    job sees an r2_key and routes to Modal automatically).
+          setProgressLabel('Registering slide…')
+          setProgressPct(72)
+          const wsi = await doctorApi.wsiUploads.uploadR2Key({
+            patient_id: selectedPatient.id,
+            r2_key: r2Key,
+            original_name: slideFile.name,
+          })
+          wsiUploadId = wsi.id
           setProgressPct(75)
 
         } else {
@@ -683,15 +644,13 @@ export default function PredictionWizard({ onClose }) {
         return
       }
 
-      // Otherwise poll (A6 fusion with WSI — Modal GPU: 3-5 min, HF CPU: 20-30 min)
+      // Otherwise poll. With Modal doing the full pipeline, A6 inference takes
+      // ~60-90 s on a warm T4 container. Without Modal we fall back to HF CPU
+      // which is much slower (~25 min). Calibrate accordingly.
       let attempts = 0
-      const maxAttempts = 600 // 600 × 5s = 50 minutes max
-      // Calibrate progress to the realistic completion window so the bar
-      // actually advances during the wait instead of jumping at the end.
-      // - With Modal: target ~3 min total (≈ 36 polls × 5 s) for 78 → 94.
-      // - Without Modal (CPU only): target ~25 min (≈ 300 polls × 5 s).
+      const maxAttempts = 600 // 600 × 5 s = 50 min ceiling
       const hasModal = typeof __MODAL_URL__ !== 'undefined' && __MODAL_URL__
-      const expectedPolls = hasModal ? 36 : 300
+      const expectedPolls = hasModal ? 18 : 300  // 18 × 5 s ≈ 90 s; 300 × 5 s = 25 min
       while (attempts < maxAttempts) {
         await new Promise(r => setTimeout(r, 5000))
 
