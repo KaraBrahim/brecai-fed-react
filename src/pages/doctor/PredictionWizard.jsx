@@ -643,8 +643,15 @@ export default function PredictionWizard({ onClose }) {
       // Otherwise poll (A6 fusion with WSI — large slides can take 30+ min on CPU)
       let attempts = 0
       const maxAttempts = 600 // 600 × 5s = 50 minutes
+      const fastApiUrl = __FASTAPI_URL__
       while (attempts < maxAttempts) {
         await new Promise(r => setTimeout(r, 5000))
+
+        // Keep-alive pings every 30s — prevents Laravel Cloud + HF Space from sleeping
+        if (attempts % 6 === 0) {
+          fetch(`${fastApiUrl}/health`, { method: 'GET' }).catch(() => {})
+        }
+
         const status = await doctorApi.predictions.getStatus(predRes.prediction_id)
         const pct = Math.min(94, 78 + Math.round((attempts / maxAttempts) * 16))
         setProgressPct(pct)
