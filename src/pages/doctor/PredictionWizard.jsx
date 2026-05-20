@@ -640,9 +640,9 @@ export default function PredictionWizard({ onClose }) {
         return
       }
 
-      // Otherwise poll (A6 fusion with WSI — takes 3-5 min)
+      // Otherwise poll (A6 fusion with WSI — takes 3-5 min on HF, up to 20 min for large slides)
       let attempts = 0
-      const maxAttempts = 120
+      const maxAttempts = 300 // 300 × 3s = 15 minutes
       while (attempts < maxAttempts) {
         await new Promise(r => setTimeout(r, 3000))
         const status = await doctorApi.predictions.getStatus(predRes.prediction_id)
