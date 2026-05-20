@@ -10,8 +10,14 @@ export function GuestOnly({ children }) {
   const { isAuthenticated, getRoleHome, userRole } = useAuthStore()
 
   if (isAuthenticated) {
+    const role = userRole()
+    if (!role) {
+      // Role is null — don't redirect to app, stay on auth page so user can re-login
+      log.warn('GUARD', 'GuestOnly — authenticated but role is null, staying on auth page')
+      return children
+    }
     const home = getRoleHome()
-    log.info('GUARD', `GuestOnly — authenticated [${userRole()}], redirecting to "${home}"`)
+    log.info('GUARD', `GuestOnly — authenticated [${role}], redirecting to "${home}"`)
     return <Navigate to={home} replace />
   }
 
@@ -35,6 +41,12 @@ export function RequireAuth({ children, role }) {
   }
 
   const current = userRole()
+
+  // If authenticated but role is null, the session is corrupt — force re-login
+  if (!current) {
+    log.warn('GUARD', 'RequireAuth — authenticated but role is null, redirecting to /auth')
+    return <Navigate to="/auth" replace />
+  }
 
   if (role && current && current !== role) {
     const home = getRoleHome()
