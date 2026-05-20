@@ -233,6 +233,10 @@ const doctor = {
     abort(data) {
       return client.post('/doctor/wsi/multipart/abort', data).then((r) => r.data);
     },
+    /** Presigned GET URL — used by Modal to pull the SVS server-to-server. */
+    presignGet(data) {
+      return client.post('/doctor/wsi/presign-get', data).then((r) => r.data);
+    },
   },
 
   // ─── WSI Uploads ─────────────────────────────────────────────────────────────

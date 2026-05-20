@@ -455,49 +455,116 @@ export default function PredictionWizard({ onClose }) {
         const isSVS = slideFile.name.toLowerCase().match(/\.(svs|ndpi|scn|mrxs)$/)
 
         if (isSVS) {
-          // SVS/NDPI: send directly to Modal GPU — OpenSlide handles tiling server-side
-          // Browser cannot decode SVS (proprietary JPEG2000 compression), Modal has OpenSlide
-          setProgressLabel(`Uploading slide to GPU server (${(slideFile.size / (1024*1024)).toFixed(0)} MB)…`)
-          setProgressPct(30)
+          // SVS/NDPI: upload to R2 in chunks (multipart), then have Modal pull it server-to-server.
+          // Why: direct browser → Modal POST of a multi-GB SVS over a single TCP stream
+          // gets killed by NAT/proxy/network blips ("NetworkError when attempting to fetch").
+          // R2 multipart is resilient (each part retries independently) and the browser
+          // never has to hold a single huge connection open.
 
-          let uploadPct = 30
-          const ticker = setInterval(() => {
-            uploadPct = Math.min(57, uploadPct + 1)
-            setProgressPct(uploadPct)
-          }, 2000)
+          const PART_SIZE = 16 * 1024 * 1024 // 16 MB
+          const MAX_RETRIES = 4
+          const partCount = Math.max(1, Math.ceil(slideFile.size / PART_SIZE))
 
+          setProgressLabel(`Initializing upload (${partCount} parts)…`)
+          setProgressPct(28)
+
+          // 1. Init multipart upload
+          const init = await doctorApi.wsiMultipart.init({
+            filename: slideFile.name,
+            patient_id: selectedPatient.id,
+          })
+          const { upload_id: uploadId, r2_key: r2Key } = init
+
+          // 2. Get presigned PUT URLs for every part
+          const { part_urls: partUrls } = await doctorApi.wsiMultipart.parts({
+            upload_id: uploadId,
+            r2_key: r2Key,
+            part_count: partCount,
+          })
+
+          // 3. Upload each part with retries — stable, resumable per-part
+          const uploadedParts = []
+          try {
+            for (let i = 0; i < partCount; i++) {
+              const start = i * PART_SIZE
+              const end = Math.min(start + PART_SIZE, slideFile.size)
+              const blob = slideFile.slice(start, end)
+
+              let etag = null
+              for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+                try {
+                  const r = await fetch(partUrls[i], { method: 'PUT', body: blob })
+                  if (!r.ok) throw new Error(`HTTP ${r.status}`)
+                  etag = r.headers.get('ETag') || r.headers.get('etag')
+                  if (!etag) throw new Error('Missing ETag header')
+                  break
+                } catch (e) {
+                  if (attempt === MAX_RETRIES) throw new Error(`Part ${i + 1}/${partCount} failed: ${e.message}`)
+                  await new Promise(r => setTimeout(r, 1500 * attempt))
+                }
+              }
+              uploadedParts.push({ PartNumber: i + 1, ETag: etag })
+
+              const pct = 28 + Math.round(((i + 1) / partCount) * 32) // 28→60
+              setProgressPct(pct)
+              setProgressLabel(`Uploading slide ${i + 1}/${partCount} parts…`)
+            }
+
+            // 4. Complete multipart upload — assembles the parts in R2
+            await doctorApi.wsiMultipart.complete({
+              upload_id: uploadId,
+              r2_key: r2Key,
+              parts: uploadedParts,
+            })
+          } catch (upErr) {
+            try {
+              await doctorApi.wsiMultipart.abort({ upload_id: uploadId, r2_key: r2Key })
+            } catch {}
+            throw new Error(`Slide upload failed: ${upErr.message}`)
+          }
+
+          // 5. Get a presigned GET URL so Modal can pull the SVS directly from R2
+          setProgressLabel('Sending to GPU server for tiling…')
+          setProgressPct(62)
+          const { presigned_url: slideUrl } = await doctorApi.wsiMultipart.presignGet({ r2_key: r2Key })
+
+          // 6. Tell Modal to download from R2, tile, run CONCH
           let ptB64 = null
           try {
             const modalBase = (typeof __MODAL_URL__ !== 'undefined' && __MODAL_URL__)
-              ? __MODAL_URL__.replace('/extract', '') + '/extract-svs'
+              ? __MODAL_URL__.replace(/\/extract.*$/, '') + '/extract-r2'
               : null
-
             if (!modalBase) throw new Error('Modal GPU endpoint not configured.')
 
-            const svsForm = new FormData()
-            svsForm.append('svs_file', slideFile, slideFile.name)
+            // Light progress ticker while Modal works (download + tile + CONCH ~ 1-3 min on T4)
+            let workingPct = 62
+            const ticker = setInterval(() => {
+              workingPct = Math.min(70, workingPct + 1)
+              setProgressPct(workingPct)
+            }, 4000)
 
-            const svsRes = await fetch(modalBase, { method: 'POST', body: svsForm })
+            const r2Res = await fetch(modalBase, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ slide_url: slideUrl, original_name: slideFile.name }),
+            })
             clearInterval(ticker)
-            setProgressPct(62)
 
-            if (!svsRes.ok) {
-              const errData = await svsRes.json().catch(() => ({}))
-              throw new Error(errData.error || `Modal SVS extraction failed (${svsRes.status})`)
+            if (!r2Res.ok) {
+              const errData = await r2Res.json().catch(() => ({}))
+              throw new Error(errData.detail || errData.error || `Modal extraction failed (${r2Res.status})`)
             }
-
-            const svsData = await svsRes.json()
-            ptB64 = svsData.pt_b64
-            setProgressLabel(`${svsData.n_patches} patches extracted on GPU`)
-            setProgressPct(65)
-          } catch (svsErr) {
-            clearInterval(ticker)
-            throw new Error(`SVS processing failed: ${svsErr.message}`)
+            const data = await r2Res.json()
+            ptB64 = data.pt_b64
+            setProgressLabel(`${data.n_patches} patches extracted on GPU`)
+            setProgressPct(72)
+          } catch (modalErr) {
+            throw new Error(`SVS processing failed: ${modalErr.message}`)
           }
 
           if (ptB64) {
             setProgressLabel('Registering features…')
-            setProgressPct(70)
+            setProgressPct(74)
             const wsi = await doctorApi.wsiUploads.uploadPtBase64({
               patient_id: selectedPatient.id,
               pt_b64: ptB64,
@@ -505,8 +572,6 @@ export default function PredictionWizard({ onClose }) {
             })
             wsiUploadId = wsi.id
           }
-          setProgressPct(75)
-
           setProgressPct(75)
 
         } else {
