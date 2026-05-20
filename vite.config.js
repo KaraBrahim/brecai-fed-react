@@ -18,6 +18,7 @@ export default defineConfig(({ mode }) => {
     define: {
       __FASTAPI_URL__: JSON.stringify(FASTAPI),
       __HF_TOKEN__:    JSON.stringify(HF_TOKEN),
+      __BACKEND_URL__: JSON.stringify(BACKEND),
     },
     server: {
       host: '0.0.0.0',
