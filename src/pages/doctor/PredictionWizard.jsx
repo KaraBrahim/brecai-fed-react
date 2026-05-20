@@ -469,7 +469,7 @@ export default function PredictionWizard({ onClose }) {
           let ptB64 = null
           try {
             const modalBase = (typeof __MODAL_URL__ !== 'undefined' && __MODAL_URL__)
-              ? __MODAL_URL__.replace('--brecai-extract.modal.run', '--brecai-extract-svs.modal.run')
+              ? __MODAL_URL__.replace('/extract', '') + '/extract-svs'
               : null
 
             if (!modalBase) throw new Error('Modal GPU endpoint not configured.')
