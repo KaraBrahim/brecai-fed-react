@@ -413,6 +413,14 @@ export default function PredictionWizard({ onClose }) {
     setProgressPct(0)
     setProgressStep(0)
 
+    // Use Modal GPU for extraction if configured, otherwise HF CPU
+    const extractUrl = (typeof __MODAL_URL__ !== 'undefined' && __MODAL_URL__)
+      ? `${__MODAL_URL__}/extract`
+      : `${__FASTAPI_URL__}/extract`
+    const extractHeaders = (typeof __MODAL_URL__ !== 'undefined' && __MODAL_URL__)
+      ? {}
+      : { 'Authorization': `Bearer ${__HF_TOKEN__}` }
+
     let examId = null
 
     try {
@@ -447,93 +455,59 @@ export default function PredictionWizard({ onClose }) {
         const isSVS = slideFile.name.toLowerCase().match(/\.(svs|ndpi|scn|mrxs)$/)
 
         if (isSVS) {
-          // SVS/NDPI: multipart upload to R2 (reliable for large files), FastAPI downloads from R2
-          const CHUNK_SIZE = 50 * 1024 * 1024 // 50 MB per part
-          const totalParts = Math.ceil(slideFile.size / CHUNK_SIZE)
-
-          setProgressLabel('Initialising secure upload…')
-          setProgressPct(28)
-
-          // Step 1: initiate multipart upload
-          const { upload_id, r2_key } = await doctorApi.wsiMultipart.init({
-            filename: slideFile.name,
-            patient_id: selectedPatient.id,
-          })
-
-          // Step 2: get presigned URLs for all parts
-          const { part_urls } = await doctorApi.wsiMultipart.parts({
-            upload_id,
-            r2_key,
-            part_count: totalParts,
-          })
-
-          setProgressLabel(`Uploading slide (${(slideFile.size / (1024 * 1024)).toFixed(0)} MB) in ${totalParts} parts…`)
+          // SVS/NDPI: send directly to Modal GPU — OpenSlide handles tiling server-side
+          // Browser cannot decode SVS (proprietary JPEG2000 compression), Modal has OpenSlide
+          setProgressLabel(`Uploading slide to GPU server (${(slideFile.size / (1024*1024)).toFixed(0)} MB)…`)
           setProgressPct(30)
 
-          // Step 3: upload parts — 3 concurrent, with progress tracking
-          const completedParts = []
-          let uploadedParts = 0
+          let uploadPct = 30
+          const ticker = setInterval(() => {
+            uploadPct = Math.min(57, uploadPct + 1)
+            setProgressPct(uploadPct)
+          }, 2000)
 
-          const uploadPart = async (partNumber, url) => {
-            const start  = (partNumber - 1) * CHUNK_SIZE
-            const end    = Math.min(start + CHUNK_SIZE, slideFile.size)
-            const chunk  = slideFile.slice(start, end)
-
-            const res = await fetch(url, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/octet-stream' },
-              body: chunk,
-            })
-            if (!res.ok) {
-              const body = await res.text().catch(() => '')
-              throw new Error(`Part ${partNumber} failed (HTTP ${res.status}): ${body.slice(0, 150)}`)
-            }
-
-            // ETag may be quoted ("abc123") — keep as-is, R2 requires the quotes
-            const rawEtag = res.headers.get('ETag') || res.headers.get('etag') || `part-${partNumber}`
-            // Ensure quotes are present (some browsers strip them)
-            const etag = rawEtag.startsWith('"') ? rawEtag : `"${rawEtag}"`
-            uploadedParts++
-            const pct = Math.round(30 + (uploadedParts / totalParts) * 28) // 30 → 58
-            setProgressPct(pct)
-            setProgressLabel(`Uploading… ${uploadedParts}/${totalParts} parts done`)
-            return { PartNumber: partNumber, ETag: etag }
-          }
-
-          // Upload with concurrency = 3
-          const CONCURRENCY = 3
+          let ptB64 = null
           try {
-            for (let i = 0; i < totalParts; i += CONCURRENCY) {
-              const batch = part_urls
-                .slice(i, i + CONCURRENCY)
-                .map((url, idx) => uploadPart(i + idx + 1, url))
-              const results = await Promise.all(batch)
-              completedParts.push(...results)
+            const modalBase = (typeof __MODAL_URL__ !== 'undefined' && __MODAL_URL__)
+              ? __MODAL_URL__.replace('--brecai-extract.modal.run', '--brecai-extract-svs.modal.run')
+              : null
+
+            if (!modalBase) throw new Error('Modal GPU endpoint not configured.')
+
+            const svsForm = new FormData()
+            svsForm.append('svs_file', slideFile, slideFile.name)
+
+            const svsRes = await fetch(modalBase, { method: 'POST', body: svsForm })
+            clearInterval(ticker)
+            setProgressPct(62)
+
+            if (!svsRes.ok) {
+              const errData = await svsRes.json().catch(() => ({}))
+              throw new Error(errData.error || `Modal SVS extraction failed (${svsRes.status})`)
             }
-          } catch (uploadErr) {
-            // Abort the multipart upload to avoid orphaned parts in R2
-            await doctorApi.wsiMultipart.abort({ upload_id, r2_key }).catch(() => {})
-            throw uploadErr
+
+            const svsData = await svsRes.json()
+            ptB64 = svsData.pt_b64
+            setProgressLabel(`${svsData.n_patches} patches extracted on GPU`)
+            setProgressPct(65)
+          } catch (svsErr) {
+            clearInterval(ticker)
+            throw new Error(`SVS processing failed: ${svsErr.message}`)
           }
 
-          // Step 4: complete — tell R2 to assemble the parts
-          setProgressLabel('Finalising upload…')
-          setProgressPct(58)
-          await doctorApi.wsiMultipart.complete({
-            upload_id,
-            r2_key,
-            parts: completedParts.sort((a, b) => a.PartNumber - b.PartNumber),
-          })
+          if (ptB64) {
+            setProgressLabel('Registering features…')
+            setProgressPct(70)
+            const wsi = await doctorApi.wsiUploads.uploadPtBase64({
+              patient_id: selectedPatient.id,
+              pt_b64: ptB64,
+              original_name: slideFile.name,
+            })
+            wsiUploadId = wsi.id
+          }
+          setProgressPct(75)
 
-          setProgressLabel('Slide stored — registering…')
-
-          const wsi = await doctorApi.wsiUploads.uploadR2Key({
-            patient_id: selectedPatient.id,
-            r2_key,
-            original_name: slideFile.name,
-          })
-          wsiUploadId = wsi.id
-          setProgressPct(62)
+          setProgressPct(75)
 
         } else {
           // TIFF/PNG/JPG: tile in browser using Canvas (fast, no server timeout)
@@ -578,9 +552,10 @@ export default function PredictionWizard({ onClose }) {
             setProgressPct(50)
             const extractForm = new FormData()
             extractForm.append('patches_zip', zipBlob, 'patches.zip')
-            const extractRes = await fetch(`${fastApiUrl}/extract`, {
+            setProgressLabel(`Sending ${patches.length} patches to AI (GPU)…`)
+            const extractRes = await fetch(extractUrl, {
               method: 'POST',
-              headers: { 'Authorization': `Bearer ${__HF_TOKEN__}` },
+              headers: extractHeaders,
               body: extractForm,
             })
             if (!extractRes.ok) {
@@ -622,7 +597,10 @@ export default function PredictionWizard({ onClose }) {
 
       // Step 5: Poll for result — or use immediate result if clinical-only (synchronous)
       setProgressStep(5)
-      setProgressLabel(t('doctor.analyzing'))
+      const engineLabel = (typeof __MODAL_URL__ !== 'undefined' && __MODAL_URL__)
+        ? 'Running AI analysis (GPU)…'
+        : 'Running AI analysis (CPU)…'
+      setProgressLabel(engineLabel)
 
       // If the prediction already completed synchronously, use it directly
       if (predRes.status === 'completed') {
@@ -640,20 +618,22 @@ export default function PredictionWizard({ onClose }) {
         return
       }
 
-      // Otherwise poll (A6 fusion with WSI — large slides can take 30+ min on CPU)
+      // Otherwise poll (A6 fusion with WSI — Modal GPU: 3-5 min, HF CPU: 20-30 min)
       let attempts = 0
-      const maxAttempts = 600 // 600 × 5s = 50 minutes
-      const fastApiUrl = __FASTAPI_URL__
+      const maxAttempts = 600 // 600 × 5s = 50 minutes max
+      // Progress moves from 78→94 — faster when Modal is available (GPU)
+      const hasModal = typeof __MODAL_URL__ !== 'undefined' && __MODAL_URL__
+      const progressPerAttempt = hasModal ? 0.08 : 0.027 // GPU: ~200 attempts to reach 94; CPU: ~600
       while (attempts < maxAttempts) {
         await new Promise(r => setTimeout(r, 5000))
 
         // Keep-alive pings every 30s — prevents Laravel Cloud + HF Space from sleeping
         if (attempts % 6 === 0) {
-          fetch(`${fastApiUrl}/health`, { method: 'GET' }).catch(() => {})
+          fetch(`${__FASTAPI_URL__}/health`, { method: 'GET' }).catch(() => {})
         }
 
         const status = await doctorApi.predictions.getStatus(predRes.prediction_id)
-        const pct = Math.min(94, 78 + Math.round((attempts / maxAttempts) * 16))
+        const pct = Math.min(94, 78 + Math.round(attempts * progressPerAttempt))
         setProgressPct(pct)
         if (status.status === 'completed') {
           setPrediction(status)
