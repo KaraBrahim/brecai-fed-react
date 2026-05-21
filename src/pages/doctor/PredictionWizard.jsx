@@ -659,7 +659,17 @@ export default function PredictionWizard({ onClose }) {
           fetch(`${__FASTAPI_URL__}/health`, { method: 'GET' }).catch(() => {})
         }
 
-        const status = await doctorApi.predictions.getStatus(predRes.prediction_id)
+        // Resilient polling: 503/502/network errors during deploy restarts are
+        // transient — just skip this poll and retry on the next tick.
+        let status
+        try {
+          status = await doctorApi.predictions.getStatus(predRes.prediction_id)
+        } catch (pollErr) {
+          // Transient error (503, network blip, CORS during restart) — skip
+          attempts++
+          continue
+        }
+
         // Eased curve: fast early, slows as it approaches 94 — never quite gets there
         // until the actual completion event fires. ratio ∈ [0, ~1).
         const ratio = 1 - Math.exp(-(attempts + 1) / expectedPolls)
