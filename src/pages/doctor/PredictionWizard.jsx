@@ -536,92 +536,41 @@ export default function PredictionWizard({ onClose }) {
           setProgressPct(75)
 
         } else {
-          // TIFF/PNG/JPG: tile in browser using Canvas (fast, no server timeout)
-          // For small microscopy images (like BreakHis patches), the whole image
-          // is treated as a single patch if it's smaller than 256×256 or has
-          // very few tiles — no tiling needed.
-          setProgressLabel('Processing image…')
-          setProgressPct(28)
+          // PNG/JPG/TIFF: send directly to Modal GPU for server-side tiling + CONCH.
+          // No browser canvas tiling — Modal handles everything from small BreakHis
+          // patches (700×460) to large stitched TIFFs.
+          setProgressLabel('Uploading image to GPU server…')
+          setProgressPct(30)
 
           let ptB64 = null
           try {
-            let imgBitmap
-            try {
-              imgBitmap = await createImageBitmap(slideFile)
-            } catch (bitmapErr) {
-              throw new Error(`Cannot decode image: ${bitmapErr?.message || String(bitmapErr)}. Make sure the file is a valid PNG, JPG, or TIFF.`)
-            }
-            const { width, height } = imgBitmap
-            const PATCH_SIZE = 256
-            const MAX_PATCHES = 500
+            const modalBase = (typeof __MODAL_URL__ !== 'undefined' && __MODAL_URL__)
+              ? __MODAL_URL__.replace(/\/extract.*$/, '') + '/extract-image'
+              : extractUrl.replace(/\/extract.*$/, '') + '/extract-image'
 
-            const patches = []
+            const imgForm = new FormData()
+            imgForm.append('image_file', slideFile, slideFile.name)
 
-            // If the image itself is smaller than or equal to one patch, use it directly
-            if (width <= PATCH_SIZE * 2 && height <= PATCH_SIZE * 2) {
-              // Small microscopy image (e.g. BreakHis 700×460) — use as single patch
-              const canvas = document.createElement('canvas')
-              canvas.width = Math.min(width, PATCH_SIZE * 2)
-              canvas.height = Math.min(height, PATCH_SIZE * 2)
-              const ctx = canvas.getContext('2d')
-              ctx.drawImage(imgBitmap, 0, 0, canvas.width, canvas.height)
-              const blob = await new Promise((res, rej) => {
-                canvas.toBlob(b => b ? res(b) : rej(new Error('Canvas toBlob returned null')), 'image/jpeg', 0.90)
-              })
-              patches.push({ blob, name: 'patch_0_0.jpg' })
-            } else {
-              // Large image — tile it
-              const cols = Math.floor(width / PATCH_SIZE)
-              const rows = Math.floor(height / PATCH_SIZE)
-              const step = Math.max(1, Math.ceil((cols * rows) / MAX_PATCHES))
-              const canvas = document.createElement('canvas')
-              canvas.width = PATCH_SIZE; canvas.height = PATCH_SIZE
-              const ctx = canvas.getContext('2d')
-              let count = 0
-              for (let r = 0; r < rows && count < MAX_PATCHES; r += step) {
-                for (let c = 0; c < cols && count < MAX_PATCHES; c++) {
-                  ctx.clearRect(0, 0, PATCH_SIZE, PATCH_SIZE)
-                  ctx.drawImage(imgBitmap, c * PATCH_SIZE, r * PATCH_SIZE, PATCH_SIZE, PATCH_SIZE, 0, 0, PATCH_SIZE, PATCH_SIZE)
-                  const pixels = ctx.getImageData(0, 0, PATCH_SIZE, PATCH_SIZE).data
-                  let sum = 0
-                  for (let i = 0; i < pixels.length; i += 4) sum += pixels[i]
-                  if (sum / (pixels.length / 4) > 230) continue // skip white background
-                  const blob = await new Promise((res, rej) => {
-                    canvas.toBlob(b => b ? res(b) : rej(new Error('Canvas toBlob returned null')), 'image/jpeg', 0.85)
-                  })
-                  patches.push({ blob, name: `patch_${r}_${c}.jpg` })
-                  count++
-                }
-              }
-            }
+            let uploadPct = 30
+            const ticker = setInterval(() => {
+              uploadPct = Math.min(55, uploadPct + 1)
+              setProgressPct(uploadPct)
+            }, 1500)
 
-            imgBitmap.close()
-            if (patches.length === 0) throw new Error('No tissue patches found in image. Try a different image.')
-            setProgressLabel(`${patches.length} patch${patches.length > 1 ? 'es' : ''} — running CONCH…`)
-            setProgressPct(45)
-            const JSZipModule = await import('jszip')
-            const zip = new JSZipModule.default()
-            patches.forEach(p => zip.file(p.name, p.blob))
-            const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 1 } })
-            setProgressPct(50)
-            const extractForm = new FormData()
-            extractForm.append('patches_zip', zipBlob, 'patches.zip')
-            setProgressLabel(`Sending ${patches.length} patch${patches.length > 1 ? 'es' : ''} to AI (GPU)…`)
-            const extractRes = await fetch(extractUrl, {
-              method: 'POST',
-              headers: extractHeaders,
-              body: extractForm,
-            })
-            if (!extractRes.ok) {
-              const errData = await extractRes.json().catch(() => ({}))
-              throw new Error(errData.detail || errData.error || `Feature extraction failed (${extractRes.status})`)
+            const res = await fetch(modalBase, { method: 'POST', body: imgForm })
+            clearInterval(ticker)
+            setProgressPct(60)
+
+            if (!res.ok) {
+              const errData = await res.json().catch(() => ({}))
+              throw new Error(errData.detail || errData.error || `Feature extraction failed (${res.status})`)
             }
-            const extractData = await extractRes.json()
-            ptB64 = extractData.pt_b64
+            const data = await res.json()
+            ptB64 = data.pt_b64
             setProgressPct(65)
-            setProgressLabel(`${extractData.n_patches} patches processed`)
-          } catch (tileErr) {
-            const msg = tileErr instanceof Error ? tileErr.message : String(tileErr)
+            setProgressLabel(`${data.n_patches} patch${data.n_patches > 1 ? 'es' : ''} processed on GPU`)
+          } catch (imgErr) {
+            const msg = imgErr instanceof Error ? imgErr.message : String(imgErr)
             throw new Error(`Image processing failed: ${msg}`)
           }
 
