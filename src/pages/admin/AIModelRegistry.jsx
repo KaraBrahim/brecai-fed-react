@@ -129,7 +129,7 @@ export default function AIModelRegistry() {
     const { type, model } = confirmAction
     try {
       await api.getCsrf()
-      if (type === 'activate')   { await admin.aiModels.activate(model.id);   showToast(`${model.name} activated — all others deactivated`, 'teal') }
+      if (type === 'activate')   { await admin.aiModels.activate(model.id);   showToast(`${model.name} activated`, 'teal') }
       if (type === 'deactivate') { await admin.aiModels.deactivate(model.id); showToast(`${model.name} deactivated`, 'amber') }
       if (type === 'delete')     { await admin.aiModels.delete(model.id);     showToast(`${model.name} removed`, 'pink') }
       setConfirmAction(null)
@@ -244,7 +244,7 @@ export default function AIModelRegistry() {
   const confirmMeta = {
     activate:   {
       title: 'Activate model?',
-      msg:   (m) => `${m.name} will become the active model. All other models will be deactivated automatically.`,
+      msg:   (m) => `${m.name} will be made available for inference in the prediction wizard.`,
       label: 'Activate',
       danger: false,
     },
@@ -271,7 +271,7 @@ export default function AIModelRegistry() {
         icon={Brain}
         stats={[
           { label: 'Total models',  value: meta.total },
-          { label: 'Active model',  value: activeModel?.name ?? '—' },
+          { label: 'Active',        value: stats.active, sub: 'available for inference' },
           { label: 'Inactive',      value: stats.inactive },
           { label: 'Predictions',   value: totalPredictions ?? '…' },
         ]}
@@ -282,7 +282,7 @@ export default function AIModelRegistry() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <MetricTile label="Total models"      value={meta.total}     sub="Registered"       icon={Layers}   color="blue"  />
-        <MetricTile label="Active model"      value={activeModel?.name ?? '—'} sub="Currently serving" icon={Rocket} color="teal" />
+        <MetricTile label="Active models"     value={stats.active}   sub="Available for inference" icon={Rocket} color="teal" />
         <MetricTile label="Total predictions" value={totalPredictions ?? '…'} sub="Platform-wide"    icon={Activity} color="pink" />
         <MetricTile label="Inactive"          value={stats.inactive} sub="Archived"          icon={Archive}  color="amber" />
       </div>
