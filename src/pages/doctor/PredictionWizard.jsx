@@ -537,7 +537,10 @@ export default function PredictionWizard({ onClose }) {
 
         } else {
           // TIFF/PNG/JPG: tile in browser using Canvas (fast, no server timeout)
-          setProgressLabel('Tiling slide image in browser…')
+          // For small microscopy images (like BreakHis patches), the whole image
+          // is treated as a single patch if it's smaller than 256×256 or has
+          // very few tiles — no tiling needed.
+          setProgressLabel('Processing image…')
           setProgressPct(28)
 
           let ptB64 = null
@@ -546,30 +549,50 @@ export default function PredictionWizard({ onClose }) {
             const { width, height } = imgBitmap
             const PATCH_SIZE = 256
             const MAX_PATCHES = 500
-            const cols = Math.floor(width / PATCH_SIZE)
-            const rows = Math.floor(height / PATCH_SIZE)
-            const step = Math.max(1, Math.ceil((cols * rows) / MAX_PATCHES))
-            const canvas = document.createElement('canvas')
-            canvas.width = PATCH_SIZE; canvas.height = PATCH_SIZE
-            const ctx = canvas.getContext('2d')
+
             const patches = []
-            let count = 0
-            for (let r = 0; r < rows && count < MAX_PATCHES; r += step) {
-              for (let c = 0; c < cols && count < MAX_PATCHES; c++) {
-                ctx.clearRect(0, 0, PATCH_SIZE, PATCH_SIZE)
-                ctx.drawImage(imgBitmap, c * PATCH_SIZE, r * PATCH_SIZE, PATCH_SIZE, PATCH_SIZE, 0, 0, PATCH_SIZE, PATCH_SIZE)
-                const pixels = ctx.getImageData(0, 0, PATCH_SIZE, PATCH_SIZE).data
-                let sum = 0
-                for (let i = 0; i < pixels.length; i += 4) sum += pixels[i]
-                if (sum / (pixels.length / 4) > 230) continue
-                const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.85))
-                patches.push({ blob, name: `patch_${r}_${c}.jpg` })
-                count++
+
+            // If the image itself is smaller than or equal to one patch, use it directly
+            if (width <= PATCH_SIZE * 2 && height <= PATCH_SIZE * 2) {
+              // Small microscopy image (e.g. BreakHis 700×460) — use as single patch
+              const canvas = document.createElement('canvas')
+              canvas.width = Math.min(width, PATCH_SIZE * 2)
+              canvas.height = Math.min(height, PATCH_SIZE * 2)
+              const ctx = canvas.getContext('2d')
+              ctx.drawImage(imgBitmap, 0, 0, canvas.width, canvas.height)
+              const blob = await new Promise((res, rej) => {
+                canvas.toBlob(b => b ? res(b) : rej(new Error('Canvas toBlob returned null')), 'image/jpeg', 0.90)
+              })
+              patches.push({ blob, name: 'patch_0_0.jpg' })
+            } else {
+              // Large image — tile it
+              const cols = Math.floor(width / PATCH_SIZE)
+              const rows = Math.floor(height / PATCH_SIZE)
+              const step = Math.max(1, Math.ceil((cols * rows) / MAX_PATCHES))
+              const canvas = document.createElement('canvas')
+              canvas.width = PATCH_SIZE; canvas.height = PATCH_SIZE
+              const ctx = canvas.getContext('2d')
+              let count = 0
+              for (let r = 0; r < rows && count < MAX_PATCHES; r += step) {
+                for (let c = 0; c < cols && count < MAX_PATCHES; c++) {
+                  ctx.clearRect(0, 0, PATCH_SIZE, PATCH_SIZE)
+                  ctx.drawImage(imgBitmap, c * PATCH_SIZE, r * PATCH_SIZE, PATCH_SIZE, PATCH_SIZE, 0, 0, PATCH_SIZE, PATCH_SIZE)
+                  const pixels = ctx.getImageData(0, 0, PATCH_SIZE, PATCH_SIZE).data
+                  let sum = 0
+                  for (let i = 0; i < pixels.length; i += 4) sum += pixels[i]
+                  if (sum / (pixels.length / 4) > 230) continue // skip white background
+                  const blob = await new Promise((res, rej) => {
+                    canvas.toBlob(b => b ? res(b) : rej(new Error('Canvas toBlob returned null')), 'image/jpeg', 0.85)
+                  })
+                  patches.push({ blob, name: `patch_${r}_${c}.jpg` })
+                  count++
+                }
               }
             }
+
             imgBitmap.close()
-            if (patches.length === 0) throw new Error('No tissue patches found.')
-            setProgressLabel(`${patches.length} patches — running CONCH…`)
+            if (patches.length === 0) throw new Error('No tissue patches found in image. Try a different image.')
+            setProgressLabel(`${patches.length} patch${patches.length > 1 ? 'es' : ''} — running CONCH…`)
             setProgressPct(45)
             const JSZipModule = await import('jszip')
             const zip = new JSZipModule.default()
@@ -578,7 +601,7 @@ export default function PredictionWizard({ onClose }) {
             setProgressPct(50)
             const extractForm = new FormData()
             extractForm.append('patches_zip', zipBlob, 'patches.zip')
-            setProgressLabel(`Sending ${patches.length} patches to AI (GPU)…`)
+            setProgressLabel(`Sending ${patches.length} patch${patches.length > 1 ? 'es' : ''} to AI (GPU)…`)
             const extractRes = await fetch(extractUrl, {
               method: 'POST',
               headers: extractHeaders,
@@ -586,14 +609,15 @@ export default function PredictionWizard({ onClose }) {
             })
             if (!extractRes.ok) {
               const errData = await extractRes.json().catch(() => ({}))
-              throw new Error(errData.detail || `Feature extraction failed (${extractRes.status})`)
+              throw new Error(errData.detail || errData.error || `Feature extraction failed (${extractRes.status})`)
             }
             const extractData = await extractRes.json()
             ptB64 = extractData.pt_b64
             setProgressPct(65)
             setProgressLabel(`${extractData.n_patches} patches processed`)
           } catch (tileErr) {
-            throw new Error(`Image processing failed: ${tileErr.message}`)
+            const msg = tileErr instanceof Error ? tileErr.message : String(tileErr)
+            throw new Error(`Image processing failed: ${msg}`)
           }
 
           if (ptB64) {
