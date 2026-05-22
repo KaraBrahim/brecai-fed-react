@@ -545,7 +545,12 @@ export default function PredictionWizard({ onClose }) {
 
           let ptB64 = null
           try {
-            const imgBitmap = await createImageBitmap(slideFile)
+            let imgBitmap
+            try {
+              imgBitmap = await createImageBitmap(slideFile)
+            } catch (bitmapErr) {
+              throw new Error(`Cannot decode image: ${bitmapErr?.message || String(bitmapErr)}. Make sure the file is a valid PNG, JPG, or TIFF.`)
+            }
             const { width, height } = imgBitmap
             const PATCH_SIZE = 256
             const MAX_PATCHES = 500
@@ -898,7 +903,7 @@ export default function PredictionWizard({ onClose }) {
                     <div
                       onDragOver={e => { e.preventDefault(); setDragging(true) }}
                       onDragLeave={() => setDragging(false)}
-                      onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) setSlideFile(f) }}
+                      onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) { setSlideFile(f); setError('') } }}
                       onClick={() => fileRef.current?.click()}
                       className={cn(
                         'w-full rounded-2xl border-2 border-dashed p-10 flex flex-col items-center justify-center cursor-pointer transition-all',
@@ -907,7 +912,7 @@ export default function PredictionWizard({ onClose }) {
                         'border-slate-200 bg-slate-50 hover:border-[#0572B2] hover:bg-blue-50/20'
                       )}
                     >
-                      <input ref={fileRef} type="file" className="hidden" accept=".tiff,.tif,.svs,.ndpi,.scn,.mrxs,.png,.jpg,.jpeg" onChange={e => { const f = e.target.files?.[0]; if (f) setSlideFile(f) }} />
+                      <input ref={fileRef} type="file" className="hidden" accept=".tiff,.tif,.svs,.ndpi,.scn,.mrxs,.png,.jpg,.jpeg" onChange={e => { const f = e.target.files?.[0]; if (f) { setSlideFile(f); setError('') } }} />
                       <div className={cn('w-14 h-14 rounded-2xl flex items-center justify-center mb-4', slideFile ? 'bg-teal-100' : 'bg-white border border-slate-200')}>
                         {slideFile ? <CheckCircle2 className="w-7 h-7 text-[#0BB592]" /> : <Upload className="w-7 h-7 text-slate-400" />}
                       </div>
