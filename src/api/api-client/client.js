@@ -40,14 +40,25 @@ client.interceptors.request.use((config) => {
   return config;
 });
 
-/* ── Response interceptor — handle 401 globally ─────────────── */
+/* ── Response interceptor — handle 401 / 403 globally ───────── */
 client.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const status = error.response?.status;
+
+    if (status === 401) {
+      // Clear stored token and redirect to the auth page.
       setAuthToken(null);
-      window.dispatchEvent(new Event('auth:logout'));
+      window.location.href = '/auth';
     }
+
+    if (status === 403) {
+      // Tag the error so catch blocks can detect permission boundary violations
+      // without having to re-inspect the status code themselves.
+      error.isPermissionError = true;
+    }
+
+    // 422 (validation), 404, 500 — let each page handle these in its own catch block.
     return Promise.reject(error);
   }
 );

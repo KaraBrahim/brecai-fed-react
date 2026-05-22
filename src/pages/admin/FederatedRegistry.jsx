@@ -1,19 +1,52 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { Network, Server, RefreshCcw, Globe2, Brain, Plus, CheckCircle2, Clock, XCircle } from 'lucide-react'
+import { Network, Server, RefreshCcw, Globe2, Brain, Plus, CheckCircle2, Clock, XCircle, AlertCircle } from 'lucide-react'
 import { AdminHero, MetricTile, DataTable, StatusPill } from '@/components/admin'
-import { Btn, SectionCard, Modal, Field, inputClass, ConfirmDialog, Toast, stagger } from '@/components/shared'
-import instructor from '@/api/api-client/instructor'
+import { Btn, SectionCard, Modal, Field, inputClass, Toast, stagger } from '@/components/shared'
+import admin from '@/api/api-client/admin'
+import { handleApiError } from '@/lib/handleApiError'
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
+} from 'recharts'
+
+// ── Status helpers ─────────────────────────────────────────────────────────
+const STATUS_TONE = {
+  pending:     'amber',
+  in_progress: 'blue',
+  completed:   'teal',
+  failed:      'pink',
+}
+const STATUS_ICON = {
+  pending:     AlertCircle,
+  in_progress: Clock,
+  completed:   CheckCircle2,
+  failed:      XCircle,
+}
+
+// ── Custom Recharts tooltip ────────────────────────────────────────────────
+function AccTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl shadow-lg px-3 py-2 text-xs">
+      <p className="font-black text-slate-500 mb-1">Round {label}</p>
+      <p className="font-extrabold text-[#0572B2]">
+        {(Number(payload[0].value) * 100).toFixed(2)}%
+      </p>
+    </div>
+  )
+}
 
 export default function FederatedRegistry() {
   const [rounds,        setRounds]        = useState([])
   const [models,        setModels]        = useState([])
   const [contributions, setContributions] = useState([])
+  const [selectedRound, setSelectedRound] = useState(null)
   const [flKpis,        setFlKpis]        = useState(null)
   const [accuracyData,  setAccuracyData]  = useState([])
   const [meta,          setMeta]          = useState({ current_page: 1, last_page: 1, total: 0 })
   const [page,          setPage]          = useState(1)
   const [loading,       setLoading]       = useState(true)
+  const [loadingContribs, setLoadingContribs] = useState(false)
   const [completing,    setCompleting]    = useState(null)   // round being completed
   const [newRound,      setNewRound]      = useState(false)  // create-round modal
   const [newRoundModel, setNewRoundModel] = useState('')
@@ -27,11 +60,11 @@ export default function FederatedRegistry() {
   const load = useCallback(async (p = 1) => {
     setLoading(true)
     try {
-      const [roundsRes, modelsRes, kpisRes, accRes] = await Promise.allSettled([
-        instructor.rounds.list({ page: p }),
-        instructor.models.list({ page: 1 }),
-        instructor.insights.kpis(),
-        instructor.insights.accuracyOverRounds(),
+      const [roundsRes, modelsRes, kpisRes, perfRes] = await Promise.allSettled([
+        admin.federatedRounds.list({ page: p }),
+        admin.aiModels.list({ page: 1 }),
+        admin.insights.kpis(),
+        admin.insights.modelPerformance(),
       ])
       if (roundsRes.status === 'fulfilled') {
         setRounds(roundsRes.value?.data ?? [])
@@ -43,7 +76,11 @@ export default function FederatedRegistry() {
       }
       if (modelsRes.status === 'fulfilled') setModels(modelsRes.value?.data ?? [])
       if (kpisRes.status   === 'fulfilled') setFlKpis(kpisRes.value)
-      if (accRes.status    === 'fulfilled') setAccuracyData(accRes.value ?? [])
+      if (perfRes.status   === 'fulfilled') {
+        // modelPerformance returns [{round_number, global_accuracy, status, ai_model_id, ai_model, ...}]
+        const sorted = [...(perfRes.value ?? [])].sort((a, b) => a.round_number - b.round_number)
+        setAccuracyData(sorted.filter(d => d.global_accuracy != null))
+      }
     } catch {
       showToast('Failed to load federated data', 'pink')
     } finally {
@@ -54,12 +91,18 @@ export default function FederatedRegistry() {
   useEffect(() => { load(page) }, [load, page])
 
   /* ── Load contributions for a round ── */
-  const loadContributions = async (roundId) => {
+  const loadContributions = async (round) => {
+    setSelectedRound(round)
+    setLoadingContribs(true)
     try {
-      const res = await instructor.contributions.listByRound(roundId)
-      setContributions(res ?? [])
+      const res = await admin.federatedRounds.get(round.id)
+      // show() eager-loads contributions with organization
+      setContributions(res?.contributions ?? [])
     } catch {
       setContributions([])
+      showToast('Failed to load contributions', 'pink')
+    } finally {
+      setLoadingContribs(false)
     }
   }
 
@@ -68,13 +111,13 @@ export default function FederatedRegistry() {
     if (!newRoundModel) { showToast('Select a model', 'pink'); return }
     setSaving(true)
     try {
-      await instructor.rounds.create({ ai_model_id: Number(newRoundModel) })
+      await admin.federatedRounds.create({ ai_model_id: Number(newRoundModel) })
       showToast('New FL round opened', 'teal')
       setNewRound(false)
       setNewRoundModel('')
       load(page)
     } catch (err) {
-      showToast(err?.response?.data?.message || 'Failed to create round', 'pink')
+      handleApiError(err, showToast)
     } finally {
       setSaving(false)
     }
@@ -83,33 +126,34 @@ export default function FederatedRegistry() {
   /* ── Complete round ── */
   const completeRound = async () => {
     if (!completing) return
-    if (!globalAcc || isNaN(Number(globalAcc))) { showToast('Enter a valid accuracy (0–1)', 'pink'); return }
+    const acc = Number(globalAcc)
+    if (!globalAcc || isNaN(acc) || acc < 0 || acc > 1) {
+      showToast('Enter a valid accuracy between 0 and 1', 'pink')
+      return
+    }
     setSaving(true)
     try {
-      await instructor.rounds.complete(completing.id, { global_accuracy: Number(globalAcc) })
+      await admin.federatedRounds.complete(completing.id, { global_accuracy: acc })
       showToast(`Round #${completing.round_number} completed`, 'teal')
       setCompleting(null)
       setGlobalAcc('')
       load(page)
     } catch (err) {
-      showToast(err?.response?.data?.message || 'Failed to complete round', 'pink')
+      handleApiError(err, showToast)
     } finally {
       setSaving(false)
     }
   }
 
   /* ── Derived stats ── */
-  const stats = useMemo(() => ({
-    total:     meta.total,
-    completed: rounds.filter(r => r.status === 'completed').length,
-    open:      rounds.filter(r => r.status === 'open').length,
-    latestAcc: flKpis?.latest_global_accuracy != null
-      ? `${(Number(flKpis.latest_global_accuracy) * 100).toFixed(1)}%`
-      : '—',
-  }), [rounds, meta.total, flKpis])
-
-  const statusTone = { completed: 'teal', open: 'amber', failed: 'red' }
-  const statusIcon = { completed: CheckCircle2, open: Clock, failed: XCircle }
+  const stats = useMemo(() => {
+    const completed = rounds.filter(r => r.status === 'completed').length
+    const active    = rounds.filter(r => r.status === 'in_progress' || r.status === 'pending').length
+    const latestAcc = accuracyData.length > 0
+      ? `${(Number(accuracyData[accuracyData.length - 1].global_accuracy) * 100).toFixed(1)}%`
+      : '—'
+    return { completed, active, latestAcc }
+  }, [rounds, accuracyData])
 
   /* ── Rounds table columns ── */
   const roundColumns = [
@@ -117,13 +161,26 @@ export default function FederatedRegistry() {
       key: 'round_number', label: 'Round', sortable: true,
       render: (r) => (
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#093A7A] to-[#0BB592] text-white flex items-center justify-center shadow-md">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#093A7A] to-[#0BB592] text-white flex items-center justify-center shadow-md shrink-0">
             <Server className="w-5 h-5" />
           </div>
           <div>
             <p className="font-extrabold text-slate-900 font-mono">R-{String(r.round_number).padStart(2, '0')}</p>
-            <p className="text-[11px] font-semibold text-slate-500">{r.ai_model?.name ?? `Model #${r.ai_model_id}`}</p>
+            <p className="text-[11px] font-semibold text-slate-500">
+              {r.ai_model ? `${r.ai_model.name} v${r.ai_model.version}` : `Model #${r.ai_model_id}`}
+            </p>
           </div>
+        </div>
+      ),
+    },
+    {
+      key: 'ai_model', label: 'AI Model', sortable: false,
+      render: (r) => (
+        <div>
+          <p className="font-bold text-slate-900 text-xs">{r.ai_model?.name ?? '—'}</p>
+          {r.ai_model?.version && (
+            <p className="text-[10px] font-semibold text-slate-400 font-mono">v{r.ai_model.version}</p>
+          )}
         </div>
       ),
     },
@@ -131,13 +188,15 @@ export default function FederatedRegistry() {
       key: 'global_accuracy', label: 'Global Accuracy', align: 'right', sortable: true,
       render: (r) => {
         if (r.global_accuracy == null) return <span className="text-[11px] font-bold text-slate-400">—</span>
-        const pct = Number(r.global_accuracy) <= 1
-          ? (Number(r.global_accuracy) * 100).toFixed(1)
-          : Number(r.global_accuracy).toFixed(1)
+        const raw = Number(r.global_accuracy)
+        const pct = raw <= 1 ? (raw * 100).toFixed(1) : raw.toFixed(1)
         return (
           <div className="flex items-center gap-2 justify-end">
             <div className="w-20 h-1.5 rounded-full bg-slate-100 overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-[#0BB592] to-[#0572B2]" style={{ width: `${Math.min(parseFloat(pct), 100)}%` }} />
+              <div
+                className="h-full bg-gradient-to-r from-[#0BB592] to-[#0572B2]"
+                style={{ width: `${Math.min(parseFloat(pct), 100)}%` }}
+              />
             </div>
             <span className="font-mono font-extrabold text-slate-900 text-xs">{pct}%</span>
           </div>
@@ -147,23 +206,43 @@ export default function FederatedRegistry() {
     {
       key: 'status', label: 'Status', sortable: true,
       render: (r) => {
-        const Icon = statusIcon[r.status] || Clock
-        return <StatusPill tone={statusTone[r.status] || 'slate'}><Icon className="w-3 h-3" /> {r.status}</StatusPill>
+        const Icon = STATUS_ICON[r.status] || Clock
+        return (
+          <StatusPill tone={STATUS_TONE[r.status] || 'slate'}>
+            <Icon className="w-3 h-3" /> {r.status?.replace('_', ' ')}
+          </StatusPill>
+        )
       },
     },
     {
       key: 'started_at', label: 'Started', sortable: true,
-      render: (r) => <span className="font-mono text-[11px] font-semibold text-slate-500">{r.started_at ? new Date(r.started_at).toLocaleDateString() : '—'}</span>,
+      render: (r) => (
+        <span className="font-mono text-[11px] font-semibold text-slate-500">
+          {r.started_at ? new Date(r.started_at).toLocaleDateString() : '—'}
+        </span>
+      ),
     },
     {
       key: 'ended_at', label: 'Ended', sortable: true,
-      render: (r) => <span className="font-mono text-[11px] font-semibold text-slate-500">{r.ended_at ? new Date(r.ended_at).toLocaleDateString() : '—'}</span>,
+      render: (r) => (
+        <span className="font-mono text-[11px] font-semibold text-slate-500">
+          {r.ended_at ? new Date(r.ended_at).toLocaleDateString() : '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'contributions_count', label: 'Contributions', align: 'right', sortable: true,
+      render: (r) => (
+        <span className="font-mono font-extrabold text-slate-900 text-sm">
+          {r.contributions_count ?? 0}
+        </span>
+      ),
     },
     {
       key: '_actions', label: '', align: 'right',
       render: (r) => (
         <div className="flex items-center justify-end gap-1.5">
-          {r.status === 'open' && (
+          {(r.status === 'pending' || r.status === 'in_progress') && (
             <button
               onClick={() => { setCompleting(r); setGlobalAcc('') }}
               title="Complete round"
@@ -173,7 +252,7 @@ export default function FederatedRegistry() {
             </button>
           )}
           <button
-            onClick={() => loadContributions(r.id)}
+            onClick={() => loadContributions(r)}
             title="View contributions"
             className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-500 text-[11px] font-black uppercase tracking-widest hover:bg-slate-50 transition"
           >
@@ -186,27 +265,63 @@ export default function FederatedRegistry() {
 
   /* ── Contributions table columns ── */
   const contribColumns = [
-    { key: 'organization_id', label: 'Org ID', render: (c) => <span className="font-mono text-xs font-bold text-slate-500">#{c.organization_id}</span> },
-    { key: 'local_sample_size', label: 'Samples', align: 'right', render: (c) => <span className="font-mono font-extrabold text-slate-900">{c.local_sample_size?.toLocaleString() ?? '—'}</span> },
     {
-      key: 'local_accuracy_before', label: 'Acc Before', align: 'right',
+      key: 'organization', label: 'Organization',
+      render: (c) => (
+        <div>
+          <p className="font-bold text-slate-900 text-xs">{c.organization?.name ?? `Org #${c.organization_id}`}</p>
+          <p className="text-[10px] font-semibold text-slate-400 font-mono">#{c.organization_id}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'local_sample_size', label: 'Samples', align: 'right',
+      render: (c) => (
+        <span className="font-mono font-extrabold text-slate-900">
+          {c.local_sample_size?.toLocaleString() ?? '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'accuracy_before', label: 'Acc Before', align: 'right',
       render: (c) => {
-        const v = c.local_accuracy_before
-        return <span className="font-mono font-bold text-xs text-slate-700">{v != null ? `${(Number(v) * 100).toFixed(1)}%` : '—'}</span>
+        const v = c.accuracy_before ?? c.local_accuracy_before
+        return (
+          <span className="font-mono font-bold text-xs text-slate-700">
+            {v != null ? `${(Number(v) * 100).toFixed(1)}%` : '—'}
+          </span>
+        )
       },
     },
     {
-      key: 'local_accuracy_after', label: 'Acc After', align: 'right',
+      key: 'accuracy_after', label: 'Acc After', align: 'right',
       render: (c) => {
-        const v = c.local_accuracy_after
-        return <span className="font-mono font-bold text-xs text-[#0BB592]">{v != null ? `${(Number(v) * 100).toFixed(1)}%` : '—'}</span>
+        const v = c.accuracy_after ?? c.local_accuracy_after
+        return (
+          <span className="font-mono font-bold text-xs text-[#0BB592]">
+            {v != null ? `${(Number(v) * 100).toFixed(1)}%` : '—'}
+          </span>
+        )
       },
     },
     {
       key: 'created_at', label: 'Submitted',
-      render: (c) => <span className="font-mono text-[11px] text-slate-400">{c.created_at ? new Date(c.created_at).toLocaleDateString() : '—'}</span>,
+      render: (c) => (
+        <span className="font-mono text-[11px] text-slate-400">
+          {c.created_at ? new Date(c.created_at).toLocaleDateString() : '—'}
+        </span>
+      ),
     },
   ]
+
+  /* ── Chart data (normalize accuracy to 0-100 for display) ── */
+  const chartData = useMemo(() =>
+    accuracyData.map(d => ({
+      round:    d.round_number,
+      accuracy: Number(d.global_accuracy),
+      label:    `R-${String(d.round_number).padStart(2, '0')}`,
+    })),
+  [accuracyData])
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show">
@@ -217,45 +332,69 @@ export default function FederatedRegistry() {
         icon={Network}
         accent="dark"
         stats={[
-          { label: 'Total rounds', value: meta.total },
-          { label: 'Completed',    value: flKpis?.completed_fl_rounds ?? stats.completed },
-          { label: 'Active models',value: flKpis?.active_ai_models ?? '—' },
-          { label: 'Latest acc.',  value: stats.latestAcc, sub: 'global' },
+          { label: 'Total rounds',  value: meta.total },
+          { label: 'Completed',     value: flKpis?.completed_fl_rounds ?? stats.completed },
+          { label: 'Active models', value: flKpis?.active_models ?? '—' },
+          { label: 'Latest acc.',   value: stats.latestAcc, sub: 'global' },
         ]}
       >
-        <Btn variant="primary" onClick={() => setNewRound(true)}><Plus className="w-4 h-4" /> New round</Btn>
-        <Btn variant="secondary" onClick={() => load(page)}><RefreshCcw className="w-4 h-4" /> Refresh</Btn>
+        <Btn variant="primary" onClick={() => setNewRound(true)}>
+          <Plus className="w-4 h-4" /> Create Round
+        </Btn>
+        <Btn variant="secondary" onClick={() => load(page)}>
+          <RefreshCcw className="w-4 h-4" /> Refresh
+        </Btn>
       </AdminHero>
 
       {/* KPI tiles */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <MetricTile label="Total rounds"   value={meta.total}                              sub="All time"       icon={Network}       color="blue"  />
-        <MetricTile label="Completed"      value={flKpis?.completed_fl_rounds ?? stats.completed} sub="Aggregated"  icon={CheckCircle2}  color="teal"  />
-        <MetricTile label="Open rounds"    value={stats.open}                              sub="In progress"    icon={Clock}         color="amber" />
-        <MetricTile label="Active models"  value={flKpis?.active_ai_models ?? '—'}         sub="Serving"        icon={Brain}         color="pink"  />
+        <MetricTile label="Total rounds"  value={meta.total}                                    sub="All time"    icon={Network}      color="blue"  />
+        <MetricTile label="Completed"     value={flKpis?.completed_fl_rounds ?? stats.completed} sub="Aggregated"  icon={CheckCircle2} color="teal"  />
+        <MetricTile label="Active rounds" value={stats.active}                                   sub="In progress" icon={Clock}        color="amber" />
+        <MetricTile label="Active models" value={flKpis?.active_models ?? '—'}                   sub="Serving"     icon={Brain}        color="pink"  />
       </div>
 
-      {/* Accuracy over rounds mini-chart */}
-      {accuracyData.length > 0 && (
-        <SectionCard title="Accuracy over rounds" subtitle="Global model performance" icon={Brain} iconColor="teal" className="mb-6">
-          <div className="px-5 py-4 overflow-x-auto">
-            <div className="flex items-end gap-2 h-24 min-w-[300px]">
-              {accuracyData.slice(-12).map((d, i) => {
-                const acc = Number(d.global_accuracy) <= 1
-                  ? Number(d.global_accuracy) * 100
-                  : Number(d.global_accuracy)
-                return (
-                  <div key={i} className="flex flex-col items-center gap-1 flex-1 min-w-[32px]">
-                    <span className="text-[9px] font-black text-slate-500">{acc.toFixed(0)}%</span>
-                    <div
-                      className="w-full rounded-t-lg bg-gradient-to-t from-[#0572B2] to-[#0BB592]"
-                      style={{ height: `${Math.max(4, acc)}%` }}
-                    />
-                    <span className="text-[9px] font-bold text-slate-400 font-mono">R{d.round_number}</span>
-                  </div>
-                )
-              })}
-            </div>
+      {/* Accuracy over rounds — Recharts line chart */}
+      {chartData.length > 0 && (
+        <SectionCard title="Accuracy over rounds" subtitle="Global model performance per completed round" icon={Brain} iconColor="teal" className="mb-6">
+          <div className="px-4 py-5" style={{ height: 220 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis
+                  dataKey="round"
+                  tickFormatter={(v) => `R${v}`}
+                  tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8', fontFamily: 'monospace' }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
+                  tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }}
+                  axisLine={false}
+                  tickLine={false}
+                  domain={[0, 1]}
+                  width={44}
+                />
+                <Tooltip content={<AccTooltip />} />
+                {chartData.length > 1 && (
+                  <ReferenceLine
+                    y={chartData.reduce((s, d) => s + d.accuracy, 0) / chartData.length}
+                    stroke="#f59e0b"
+                    strokeDasharray="4 4"
+                    strokeWidth={1.5}
+                  />
+                )}
+                <Line
+                  type="monotone"
+                  dataKey="accuracy"
+                  stroke="#0572B2"
+                  strokeWidth={2.5}
+                  dot={{ r: 4, fill: '#0BB592', stroke: '#fff', strokeWidth: 2 }}
+                  activeDot={{ r: 6, fill: '#0572B2', stroke: '#fff', strokeWidth: 2 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
         </SectionCard>
       )}
@@ -275,31 +414,57 @@ export default function FederatedRegistry() {
           rows={rounds}
           searchKeys={['round_number']}
           filters={[
-            { key: 'status', label: 'status', options: [
-              { value: 'open',      label: 'Open'      },
-              { value: 'completed', label: 'Completed' },
-              { value: 'failed',    label: 'Failed'    },
-            ]},
+            {
+              key: 'status', label: 'status', options: [
+                { value: 'pending',     label: 'Pending'     },
+                { value: 'in_progress', label: 'In Progress' },
+                { value: 'completed',   label: 'Completed'   },
+                { value: 'failed',      label: 'Failed'      },
+              ],
+            },
           ]}
         />
       )}
 
+      {/* Pagination */}
       {meta.last_page > 1 && (
         <div className="flex items-center justify-center gap-2 mt-4">
-          <Btn variant="secondary" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>Previous</Btn>
-          <span className="text-xs font-bold text-slate-500">Page {meta.current_page} of {meta.last_page}</span>
-          <Btn variant="secondary" onClick={() => setPage(p => Math.min(meta.last_page, p + 1))} disabled={page === meta.last_page}>Next</Btn>
+          <Btn variant="secondary" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
+            Previous
+          </Btn>
+          <span className="text-xs font-bold text-slate-500">
+            Page {meta.current_page} of {meta.last_page}
+          </span>
+          <Btn variant="secondary" onClick={() => setPage(p => Math.min(meta.last_page, p + 1))} disabled={page === meta.last_page}>
+            Next
+          </Btn>
         </div>
       )}
 
       {/* Contributions panel */}
-      {contributions.length > 0 && (
-        <SectionCard title="Site contributions" subtitle="For selected round" icon={Globe2} iconColor="blue" className="mt-6">
-          <DataTable
-            columns={contribColumns}
-            rows={contributions}
-            searchKeys={[]}
-          />
+      {(selectedRound || contributions.length > 0) && (
+        <SectionCard
+          title={selectedRound ? `Contributions — Round R-${String(selectedRound.round_number).padStart(2, '0')}` : 'Site contributions'}
+          subtitle="Per-organization local training results"
+          icon={Globe2}
+          iconColor="blue"
+          className="mt-6"
+        >
+          {loadingContribs ? (
+            <div className="p-10 flex justify-center">
+              <div className="w-7 h-7 rounded-full border-4 border-slate-200 border-t-[#0572B2] animate-spin" />
+            </div>
+          ) : contributions.length === 0 ? (
+            <div className="p-10 text-center text-slate-400 text-sm font-semibold">
+              No contributions recorded for this round yet.
+            </div>
+          ) : (
+            <DataTable
+              columns={contribColumns}
+              rows={contributions}
+              searchKeys={[]}
+            />
+          )}
         </SectionCard>
       )}
 
@@ -307,19 +472,31 @@ export default function FederatedRegistry() {
       <Modal
         open={newRound}
         onClose={() => { setNewRound(false); setNewRoundModel('') }}
-        title="Open new FL round"
-        subtitle="Select the model to train in this round"
+        title="Create FL Round"
+        subtitle="Select the AI model to train in this federated round"
         size="sm"
-        footer={<>
-          <Btn variant="secondary" onClick={() => { setNewRound(false); setNewRoundModel('') }}>Cancel</Btn>
-          <Btn variant="primary" onClick={createRound} disabled={saving}>{saving ? 'Creating…' : 'Open round'}</Btn>
-        </>}
+        footer={
+          <>
+            <Btn variant="secondary" onClick={() => { setNewRound(false); setNewRoundModel('') }}>
+              Cancel
+            </Btn>
+            <Btn variant="primary" onClick={createRound} disabled={saving}>
+              {saving ? 'Creating…' : 'Create Round'}
+            </Btn>
+          </>
+        }
       >
         <Field label="AI Model">
-          <select className={inputClass} value={newRoundModel} onChange={e => setNewRoundModel(e.target.value)}>
+          <select
+            className={inputClass}
+            value={newRoundModel}
+            onChange={e => setNewRoundModel(e.target.value)}
+          >
             <option value="">— Select model —</option>
             {models.map(m => (
-              <option key={m.id} value={m.id}>{m.name} v{m.version}</option>
+              <option key={m.id} value={m.id}>
+                {m.name} v{m.version}
+              </option>
             ))}
           </select>
         </Field>
@@ -330,16 +507,25 @@ export default function FederatedRegistry() {
         open={!!completing}
         onClose={() => { setCompleting(null); setGlobalAcc('') }}
         title={`Complete Round R-${String(completing?.round_number ?? '').padStart(2, '0')}`}
-        subtitle="Enter the aggregated global accuracy for this round"
+        subtitle="Enter the aggregated global accuracy for this round (value between 0 and 1)"
         size="sm"
-        footer={<>
-          <Btn variant="secondary" onClick={() => { setCompleting(null); setGlobalAcc('') }}>Cancel</Btn>
-          <Btn variant="primary" onClick={completeRound} disabled={saving}>{saving ? 'Completing…' : 'Mark complete'}</Btn>
-        </>}
+        footer={
+          <>
+            <Btn variant="secondary" onClick={() => { setCompleting(null); setGlobalAcc('') }}>
+              Cancel
+            </Btn>
+            <Btn variant="primary" onClick={completeRound} disabled={saving}>
+              {saving ? 'Completing…' : 'Mark Complete'}
+            </Btn>
+          </>
+        }
       >
-        <Field label="Global accuracy (0–1)">
+        <Field label="Global accuracy (0–1)" hint="e.g. 0.942 means 94.2%">
           <input
-            type="number" step="0.001" min="0" max="1"
+            type="number"
+            step="0.001"
+            min="0"
+            max="1"
             className={inputClass}
             value={globalAcc}
             onChange={e => setGlobalAcc(e.target.value)}
@@ -348,7 +534,12 @@ export default function FederatedRegistry() {
         </Field>
       </Modal>
 
-      <Toast open={toast.open} onClose={() => setToast(t => ({ ...t, open: false }))} message={toast.message} tone={toast.tone} />
+      <Toast
+        open={toast.open}
+        onClose={() => setToast(t => ({ ...t, open: false }))}
+        message={toast.message}
+        tone={toast.tone}
+      />
     </motion.div>
   )
 }

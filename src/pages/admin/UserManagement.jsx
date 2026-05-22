@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { Users, Plus, Trash2, Edit3, ShieldCheck, UserCheck, UserX, MailCheck, Filter } from 'lucide-react'
+import { Users, Plus, Edit3, ShieldCheck, UserCheck, UserX, MailCheck, Filter } from 'lucide-react'
 import { GlassHero, SparkTile, DataTable, StatusPill, Avatar } from '@/components/admin'
 import { Btn, Modal, Field, inputClass, ConfirmDialog, Toast, stagger } from '@/components/shared'
 import admin from '@/api/api-client/admin'
+import { handleApiError } from '@/lib/handleApiError'
 
 const ROLES = ['doctor', 'instructor', 'org_manager', 'admin']
 const ROLE_LABELS = { doctor: 'Doctor', instructor: 'Instructor', org_manager: 'Org Admin', admin: 'Platform Admin' }
@@ -83,7 +84,7 @@ export default function UserManagement() {
       setEditing(null)
       load(page)
     } catch (err) {
-      showToast(err?.response?.data?.message || 'Save failed', 'pink')
+      handleApiError(err, showToast)
     } finally {
       setSaving(false)
     }
@@ -96,11 +97,10 @@ export default function UserManagement() {
     try {
       if (type === 'activate')   { await admin.users.activate(user.id);   showToast(`${user.name} activated`, 'teal') }
       if (type === 'deactivate') { await admin.users.deactivate(user.id); showToast(`${user.name} deactivated`, 'amber') }
-      if (type === 'delete')     { await admin.users.delete(user.id);     showToast(`${user.name} removed`, 'pink') }
       setConfirmAction(null)
       load(page)
     } catch (err) {
-      showToast(err?.response?.data?.message || 'Action failed', 'pink')
+      handleApiError(err, showToast)
       setConfirmAction(null)
     }
   }
@@ -157,10 +157,6 @@ export default function UserManagement() {
             className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-900 hover:border-slate-400 transition">
             <Edit3 className="w-3.5 h-3.5" />
           </button>
-          <button onClick={(e) => { e.stopPropagation(); setConfirmAction({ type: 'delete', user: u }) }} title="Delete"
-            className="w-8 h-8 rounded-lg border border-pink-100 bg-pink-50/40 flex items-center justify-center text-[#F55486] hover:bg-pink-50 transition">
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
         </div>
       ),
     },
@@ -169,7 +165,6 @@ export default function UserManagement() {
   const confirmMeta = {
     activate:   { title: 'Activate user?',   msg: (u) => `${u.name} will be granted platform access immediately.`,  label: 'Activate',   danger: false },
     deactivate: { title: 'Deactivate user?', msg: (u) => `${u.name} will lose access immediately.`,                 label: 'Deactivate', danger: true  },
-    delete:     { title: 'Remove user?',     msg: (u) => `${u.name} (${u.email}) will be permanently removed.`,      label: 'Remove',     danger: true  },
   }
 
   const needsOrg = editing ? NEEDS_ORG.includes(editing.role) : false

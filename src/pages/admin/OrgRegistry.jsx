@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { Building2, Plus, Edit3, Trash2, Globe2, MapPin, CheckCircle2, XCircle, PauseCircle, PlayCircle } from 'lucide-react'
+import { Building2, Plus, Edit3, Globe2, MapPin, CheckCircle2, XCircle, PauseCircle, PlayCircle } from 'lucide-react'
 import { MapHero, MetricTile, DataTable, StatusPill } from '@/components/admin'
 import { Btn, Modal, Field, inputClass, ConfirmDialog, Toast, stagger } from '@/components/shared'
 import admin from '@/api/api-client/admin'
+import { handleApiError } from '@/lib/handleApiError'
 
 const ORG_TYPES  = ['hospital', 'clinic', 'laboratory', 'radiology_center']
 const TYPE_LABELS = { hospital: 'Hospital', clinic: 'Clinic', laboratory: 'Laboratory', radiology_center: 'Radiology Center' }
@@ -66,7 +67,7 @@ export default function OrgRegistry() {
       setEditing(null)
       load(page)
     } catch (err) {
-      showToast(err?.response?.data?.message || 'Save failed', 'pink')
+      handleApiError(err, showToast)
     } finally {
       setSaving(false)
     }
@@ -80,11 +81,10 @@ export default function OrgRegistry() {
       if (type === 'reject')    { await admin.organizations.reject(org.id);   showToast(`${org.name} rejected`, 'amber')              }
       if (type === 'suspend')   { await admin.organizations.suspend(org.id);  showToast(`${org.name} suspended`, 'amber')             }
       if (type === 'activate')  { await admin.organizations.approve(org.id);  showToast(`${org.name} reactivated`, 'teal')            }
-      if (type === 'delete')    { await admin.organizations.delete(org.id);   showToast(`${org.name} removed`, 'pink')                }
       setConfirmAction(null)
       load(page)
     } catch (err) {
-      showToast(err?.response?.data?.message || 'Action failed', 'pink')
+      handleApiError(err, showToast)
       setConfirmAction(null)
     }
   }
@@ -159,10 +159,6 @@ export default function OrgRegistry() {
             className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-900 hover:border-slate-400 transition">
             <Edit3 className="w-3.5 h-3.5" />
           </button>
-          <button onClick={() => setConfirmAction({ type: 'delete', org: o })} title="Delete"
-            className="w-8 h-8 rounded-lg border border-pink-100 bg-pink-50/40 flex items-center justify-center text-[#F55486] hover:bg-pink-50 transition">
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
         </div>
       ),
     },
@@ -173,7 +169,6 @@ export default function OrgRegistry() {
     reject:   { title: 'Reject organization?',     msg: (o) => `${o.name}'s application will be rejected.`,                       label: 'Reject',     danger: true  },
     suspend:  { title: 'Suspend organization?',    msg: (o) => `${o.name} and all its users will lose access immediately.`,        label: 'Suspend',    danger: true  },
     activate: { title: 'Reactivate organization?', msg: (o) => `${o.name} will be reactivated and regain full platform access.`,   label: 'Reactivate', danger: false },
-    delete:   { title: 'Remove organization?',     msg: (o) => `${o.name} will be permanently removed from the federation.`,       label: 'Remove',     danger: true  },
   }
 
   return (

@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import {
   LayoutDashboard, Users, Building2, Brain, Network, FileText, CreditCard,
   Activity, ArrowRight, ShieldCheck, AlertTriangle, Sparkles, TrendingUp, ChevronRight,
+  UserSquare2, Microscope, FlaskConical, DollarSign, ListChecks,
 } from 'lucide-react'
 import {
   AreaChart, Area, BarChart, Bar, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -64,12 +65,17 @@ export default function AdminOverview() {
   const predSeries = predOverTime.slice(-7).map(d => ({ d: d.month?.slice(0, 3) || d.month, preds: d.total }))
 
   const quickActions = [
-    { label: 'Manage Users',        icon: Users,      to: '/app/admin/users',         color: 'blue' },
-    { label: 'Organizations',       icon: Building2,  to: '/app/admin/orgs',          color: 'teal' },
-    { label: 'AI Models',           icon: Brain,      to: '/app/admin/models',        color: 'pink' },
-    { label: 'Federated Registry',  icon: Network,    to: '/app/admin/federated',     color: 'amber' },
-    { label: 'Subscriptions',       icon: CreditCard, to: '/app/admin/subscriptions', color: 'blue' },
-    { label: 'Audit Logs',          icon: FileText,   to: '/app/admin/logs',          color: 'slate' },
+    { label: 'Manage Users',        icon: Users,         to: '/app/admin/users',         color: 'blue'  },
+    { label: 'Organizations',       icon: Building2,     to: '/app/admin/orgs',          color: 'teal'  },
+    { label: 'Patients',            icon: UserSquare2,   to: '/app/admin/patients',      color: 'teal'  },
+    { label: 'Predictions',         icon: Brain,         to: '/app/admin/predictions',   color: 'pink'  },
+    { label: 'Examinations',        icon: Microscope,    to: '/app/admin/examinations',  color: 'blue'  },
+    { label: 'AI Models',           icon: FlaskConical,  to: '/app/admin/models',        color: 'pink'  },
+    { label: 'Federated Registry',  icon: Network,       to: '/app/admin/federated',     color: 'amber' },
+    { label: 'Payments',            icon: DollarSign,    to: '/app/admin/payments',      color: 'teal'  },
+    { label: 'Subscriptions',       icon: CreditCard,    to: '/app/admin/subscriptions', color: 'blue'  },
+    { label: 'Plans',               icon: ListChecks,    to: '/app/admin/plans',         color: 'amber' },
+    { label: 'Audit Logs',          icon: FileText,      to: '/app/admin/logs',          color: 'slate' },
   ]
 
   const activeModels = modelPerf.filter(m => m.status === 'completed').length
@@ -99,11 +105,13 @@ export default function AdminOverview() {
       </AdminHero>
 
       {/* KPI tiles */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-7">
-        <MetricTile label="Total users"    value={kpis?.total_users ?? '—'}                        sub="Across all orgs"     icon={Users}     color="blue"  accent={{ label: 'Active models', value: kpis?.active_models ?? '—' }} />
-        <MetricTile label="Predictions"    value={kpis ? Number(kpis.total_predictions).toLocaleString() : '—'} sub="All-time inferences" icon={Brain}     color="pink"  accent={{ label: 'Patients',  value: kpis?.total_patients ?? '—' }} />
-        <MetricTile label="FL Rounds"      value={kpis?.completed_fl_rounds ?? '—'}                sub="Completed rounds"    icon={Network}   color="teal"  accent={{ label: 'Latest',    value: latestRound }} />
-        <MetricTile label="Organizations"  value={kpis?.total_organizations ?? '—'}                sub="Participating orgs"  icon={Building2} color="amber" accent={{ label: 'Active models', value: kpis?.active_models ?? '—' }} />
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-7">
+        <MetricTile label="Total users"    value={kpis?.total_users ?? '—'}                        sub="Across all orgs"     icon={Users}         color="blue"  />
+        <MetricTile label="Organizations"  value={kpis?.total_organizations ?? '—'}                sub="Participating orgs"  icon={Building2}     color="amber" />
+        <MetricTile label="Predictions"    value={kpis ? Number(kpis.total_predictions).toLocaleString() : '—'} sub="All-time inferences" icon={Brain}     color="pink"  />
+        <MetricTile label="FL Rounds"      value={kpis?.completed_fl_rounds ?? '—'}                sub="Completed rounds"    icon={Network}       color="teal"  accent={{ label: 'Latest', value: latestRound }} />
+        <MetricTile label="Active models"  value={kpis?.active_models ?? '—'}                      sub="AI models online"    icon={FlaskConical}  color="pink"  />
+        <MetricTile label="Total patients" value={kpis?.total_patients ?? '—'}                     sub="Registered patients" icon={UserSquare2}   color="teal"  />
       </div>
 
       {/* Charts row */}
@@ -231,7 +239,7 @@ export default function AdminOverview() {
       )}
 
       {/* Quick actions */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-7">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 mb-7">
         {quickActions.map(a => (
           <button
             key={a.to}

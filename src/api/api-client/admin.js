@@ -325,6 +325,97 @@ const admin = {
       return client.get(`/admin/audit-logs/${id}`).then((r) => r.data);
     },
   },
+
+  // ─── Patients (read-only) ─────────────────────────────────────────────────
+  patients: {
+    list(params = {}) {
+      return client.get('/admin/patients', { params }).then((r) => r.data);
+    },
+    get(id) {
+      return client.get(`/admin/patients/${id}`).then((r) => r.data);
+    },
+  },
+
+  // ─── Predictions (read-only) ──────────────────────────────────────────────
+  predictions: {
+    list(params = {}) {
+      return client.get('/admin/predictions', { params }).then((r) => r.data);
+    },
+    get(id) {
+      return client.get(`/admin/predictions/${id}`).then((r) => r.data);
+    },
+  },
+
+  // ─── Examinations (read-only) ─────────────────────────────────────────────
+  examinations: {
+    list(params = {}) {
+      return client.get('/admin/examinations', { params }).then((r) => r.data);
+    },
+    get(id) {
+      return client.get(`/admin/examinations/${id}`).then((r) => r.data);
+    },
+  },
+
+  // ─── Payments (read-only) ─────────────────────────────────────────────────
+  payments: {
+    list(params = {}) {
+      return client.get('/admin/payments', { params }).then((r) => r.data);
+    },
+    get(id) {
+      return client.get(`/admin/payments/${id}`).then((r) => r.data);
+    },
+  },
+
+  // ─── Subscriptions (read-only) ────────────────────────────────────────────
+  subscriptions: {
+    list(params = {}) {
+      return client.get('/admin/subscriptions', { params }).then((r) => r.data);
+    },
+    get(id) {
+      return client.get(`/admin/subscriptions/${id}`).then((r) => r.data);
+    },
+  },
+
+  // ─── Plans (full CRUD) ────────────────────────────────────────────────────
+  plans: {
+    list(params = {}) {
+      return client.get('/admin/plans', { params }).then((r) => r.data);
+    },
+    get(id) {
+      return client.get(`/admin/plans/${id}`).then((r) => r.data);
+    },
+    create(data) {
+      return client.post('/admin/plans', data).then((r) => r.data);
+    },
+    update(id, data) {
+      return client.put(`/admin/plans/${id}`, data).then((r) => r.data);
+    },
+    delete(id) {
+      return client.delete(`/admin/plans/${id}`).then((r) => r.data);
+    },
+    activate(id) {
+      return client.post(`/admin/plans/${id}/activate`).then((r) => r.data);
+    },
+    deactivate(id) {
+      return client.post(`/admin/plans/${id}/deactivate`).then((r) => r.data);
+    },
+  },
+
+  // ─── Federated Rounds ─────────────────────────────────────────────────────
+  federatedRounds: {
+    list(params = {}) {
+      return client.get('/admin/federated-rounds', { params }).then((r) => r.data);
+    },
+    get(id) {
+      return client.get(`/admin/federated-rounds/${id}`).then((r) => r.data);
+    },
+    create(data) {
+      return client.post('/admin/federated-rounds', data).then((r) => r.data);
+    },
+    complete(id, data) {
+      return client.post(`/admin/federated-rounds/${id}/complete`, data).then((r) => r.data);
+    },
+  },
 };
 
 export default admin;
