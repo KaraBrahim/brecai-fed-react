@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const BACKEND  = env.VITE_API_URL   || 'https://breast-cancer-detection-backend-main-5kbnz8.laravel.cloud'
   const FASTAPI  = env.VITE_FASTAPI_URL || 'https://ahmedchikhsalah-brecai-fed-api.hf.space'
-  const MODAL    = env.VITE_MODAL_URL   || 'https://brest-cancer-detection-project-m2--brecai-extract.modal.run'
+  const MODAL    = 'https://brest-cancer-detection-project-m2--brecai-extract.modal.run'
   const HF_TOKEN = env.VITE_HF_TOKEN   || ''
 
   return {
