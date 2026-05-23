@@ -536,30 +536,53 @@ export default function PredictionWizard({ onClose }) {
           setProgressPct(75)
 
         } else {
-          // PNG/JPG/TIFF: send directly to Modal GPU for server-side tiling + CONCH.
-          // No browser canvas tiling — Modal handles everything from small BreakHis
-          // patches (700×460) to large stitched TIFFs.
-          setProgressLabel('Uploading image to GPU server…')
+          // PNG/JPG/TIFF: upload to R2 via presigned PUT, then have Modal pull it.
+          // Modal's ASGI wrapper doesn't support direct file uploads, so we use
+          // the same R2 intermediary pattern as SVS files.
+          setProgressLabel('Uploading image…')
           setProgressPct(30)
 
           let ptB64 = null
           try {
+            // 1. Get a presigned PUT URL from Laravel
+            const presign = await doctorApi.wsiPresign({
+              filename: slideFile.name,
+              patient_id: selectedPatient.id,
+            })
+            const { presigned_url: putUrl, r2_key: r2Key } = presign
+
+            // 2. Upload the file directly to R2
+            const putRes = await fetch(putUrl, {
+              method: 'PUT',
+              body: slideFile,
+              headers: { 'Content-Type': 'application/octet-stream' },
+            })
+            if (!putRes.ok) throw new Error(`R2 upload failed (${putRes.status})`)
+            setProgressPct(45)
+
+            // 3. Get a presigned GET URL for Modal to pull
+            const { presigned_url: getUrl } = await doctorApi.wsiMultipart.presignGet({ r2_key: r2Key })
+            setProgressLabel('Processing image on GPU…')
+            setProgressPct(50)
+
+            // 4. Call Modal /extract-image-from-url with the presigned GET URL
             const modalBase = (typeof __MODAL_URL__ !== 'undefined' && __MODAL_URL__)
-              ? __MODAL_URL__.replace(/\/extract.*$/, '') + '/extract-image'
-              : extractUrl.replace(/\/extract.*$/, '') + '/extract-image'
+              ? __MODAL_URL__.replace(/\/extract.*$/, '')
+              : __FASTAPI_URL__
 
-            const imgForm = new FormData()
-            imgForm.append('image_file', slideFile, slideFile.name)
-
-            let uploadPct = 30
+            let workingPct = 50
             const ticker = setInterval(() => {
-              uploadPct = Math.min(55, uploadPct + 1)
-              setProgressPct(uploadPct)
-            }, 1500)
+              workingPct = Math.min(63, workingPct + 1)
+              setProgressPct(workingPct)
+            }, 2000)
 
-            const res = await fetch(modalBase, { method: 'POST', body: imgForm })
+            const res = await fetch(`${modalBase}/extract-image-from-url`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ image_url: getUrl, original_name: slideFile.name }),
+            })
             clearInterval(ticker)
-            setProgressPct(60)
+            setProgressPct(65)
 
             if (!res.ok) {
               const errData = await res.json().catch(() => ({}))
@@ -567,7 +590,6 @@ export default function PredictionWizard({ onClose }) {
             }
             const data = await res.json()
             ptB64 = data.pt_b64
-            setProgressPct(65)
             setProgressLabel(`${data.n_patches} patch${data.n_patches > 1 ? 'es' : ''} processed on GPU`)
           } catch (imgErr) {
             const msg = imgErr instanceof Error ? imgErr.message : String(imgErr)
