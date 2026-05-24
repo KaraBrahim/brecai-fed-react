@@ -536,13 +536,13 @@ export default function PredictionWizard({ onClose }) {
           setProgressPct(75)
 
         } else {
-          // PNG/JPG/TIFF: upload to R2 via presigned PUT, then have Modal pull it.
-          // Modal's ASGI wrapper doesn't support direct file uploads, so we use
-          // the same R2 intermediary pattern as SVS files.
+          // PNG/JPG/TIFF: upload to R2 via presigned PUT, register r2_key.
+          // The prediction job will call Modal /predict-a6-from-r2 which handles
+          // everything (download + tile + CONCH + A6 fusion) in one round-trip.
+          // Same flow as SVS — no separate feature extraction step needed.
           setProgressLabel('Uploading image…')
           setProgressPct(30)
 
-          let ptB64 = null
           try {
             // 1. Get a presigned PUT URL from Laravel
             const presign = await doctorApi.wsiPresign({
@@ -558,53 +558,20 @@ export default function PredictionWizard({ onClose }) {
               headers: { 'Content-Type': 'application/octet-stream' },
             })
             if (!putRes.ok) throw new Error(`R2 upload failed (${putRes.status})`)
-            setProgressPct(45)
+            setProgressPct(55)
 
-            // 3. Get a presigned GET URL for Modal to pull
-            const { presigned_url: getUrl } = await doctorApi.wsiMultipart.presignGet({ r2_key: r2Key })
-            setProgressLabel('Processing image on GPU…')
-            setProgressPct(50)
-
-            // 4. Call Modal /extract-image-from-url with the presigned GET URL
-            const modalBase = (typeof __MODAL_URL__ !== 'undefined' && __MODAL_URL__)
-              ? __MODAL_URL__.replace(/\/extract.*$/, '')
-              : __FASTAPI_URL__
-
-            let workingPct = 50
-            const ticker = setInterval(() => {
-              workingPct = Math.min(63, workingPct + 1)
-              setProgressPct(workingPct)
-            }, 2000)
-
-            const res = await fetch(`${modalBase}/extract-image-from-url`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ image_url: getUrl, original_name: slideFile.name }),
-            })
-            clearInterval(ticker)
-            setProgressPct(65)
-
-            if (!res.ok) {
-              const errData = await res.json().catch(() => ({}))
-              throw new Error(errData.detail || errData.error || `Feature extraction failed (${res.status})`)
-            }
-            const data = await res.json()
-            ptB64 = data.pt_b64
-            setProgressLabel(`${data.n_patches} patch${data.n_patches > 1 ? 'es' : ''} processed on GPU`)
-          } catch (imgErr) {
-            const msg = imgErr instanceof Error ? imgErr.message : String(imgErr)
-            throw new Error(`Image processing failed: ${msg}`)
-          }
-
-          if (ptB64) {
-            setProgressLabel(t('doctor.uploading'))
-            setProgressPct(70)
-            const wsi = await doctorApi.wsiUploads.uploadPtBase64({
+            // 3. Register the R2 upload as a WsiUpload in Laravel
+            setProgressLabel('Registering image…')
+            const wsi = await doctorApi.wsiUploads.uploadR2Key({
               patient_id: selectedPatient.id,
-              pt_b64: ptB64,
+              r2_key: r2Key,
               original_name: slideFile.name,
             })
             wsiUploadId = wsi.id
+            setProgressPct(75)
+          } catch (imgErr) {
+            const msg = imgErr instanceof Error ? imgErr.message : String(imgErr)
+            throw new Error(`Image upload failed: ${msg}`)
           }
         }
         setProgressPct(75)
