@@ -413,13 +413,9 @@ export default function PredictionWizard({ onClose }) {
     setProgressPct(0)
     setProgressStep(0)
 
-    // Use Modal GPU for extraction if configured, otherwise HF CPU
-    const extractUrl = (typeof __MODAL_URL__ !== 'undefined' && __MODAL_URL__)
-      ? `${__MODAL_URL__}/extract`
-      : `${__FASTAPI_URL__}/extract`
-    const extractHeaders = (typeof __MODAL_URL__ !== 'undefined' && __MODAL_URL__)
-      ? {}
-      : { 'Authorization': `Bearer ${__HF_TOKEN__}` }
+    // HF Space handles all inference
+    const extractUrl = `${__FASTAPI_URL__}/extract`
+    const extractHeaders = __HF_TOKEN__ ? { 'Authorization': `Bearer ${__HF_TOKEN__}` } : {}
 
     let examId = null
 
@@ -536,42 +532,51 @@ export default function PredictionWizard({ onClose }) {
           setProgressPct(75)
 
         } else {
-          // PNG/JPG/TIFF: upload to R2 via presigned PUT, register r2_key.
-          // The prediction job will call Modal /predict-a6-from-r2 which handles
-          // everything (download + tile + CONCH + A6 fusion) in one round-trip.
-          // Same flow as SVS — no separate feature extraction step needed.
-          setProgressLabel('Uploading image…')
+          // PNG/JPG/TIFF: send directly to HF Space for CONCH extraction
+          setProgressLabel('Uploading image to AI server…')
           setProgressPct(30)
 
+          let ptB64 = null
           try {
-            // 1. Get a presigned PUT URL from Laravel
-            const presign = await doctorApi.wsiPresign({
-              filename: slideFile.name,
-              patient_id: selectedPatient.id,
-            })
-            const { presigned_url: putUrl, r2_key: r2Key } = presign
+            const imgForm = new FormData()
+            imgForm.append('slide_file', slideFile, slideFile.name)
 
-            // 2. Upload the file directly to R2
-            const putRes = await fetch(putUrl, {
-              method: 'PUT',
-              body: slideFile,
-              headers: { 'Content-Type': 'application/octet-stream' },
-            })
-            if (!putRes.ok) throw new Error(`R2 upload failed (${putRes.status})`)
-            setProgressPct(55)
+            let uploadPct = 30
+            const ticker = setInterval(() => {
+              uploadPct = Math.min(55, uploadPct + 1)
+              setProgressPct(uploadPct)
+            }, 1500)
 
-            // 3. Register the R2 upload as a WsiUpload in Laravel
-            setProgressLabel('Registering image…')
-            const wsi = await doctorApi.wsiUploads.uploadR2Key({
+            const res = await fetch(`${__FASTAPI_URL__}/extract/image`, {
+              method: 'POST',
+              headers: extractHeaders,
+              body: imgForm,
+            })
+            clearInterval(ticker)
+            setProgressPct(60)
+
+            if (!res.ok) {
+              const errData = await res.json().catch(() => ({}))
+              throw new Error(errData.detail || errData.error || `Feature extraction failed (${res.status})`)
+            }
+            const data = await res.json()
+            ptB64 = data.pt_b64
+            setProgressPct(65)
+            setProgressLabel(`${data.n_patches} patch${data.n_patches > 1 ? 'es' : ''} processed`)
+          } catch (imgErr) {
+            const msg = imgErr instanceof Error ? imgErr.message : String(imgErr)
+            throw new Error(`Image processing failed: ${msg}`)
+          }
+
+          if (ptB64) {
+            setProgressLabel(t('doctor.uploading'))
+            setProgressPct(70)
+            const wsi = await doctorApi.wsiUploads.uploadPtBase64({
               patient_id: selectedPatient.id,
-              r2_key: r2Key,
+              pt_b64: ptB64,
               original_name: slideFile.name,
             })
             wsiUploadId = wsi.id
-            setProgressPct(75)
-          } catch (imgErr) {
-            const msg = imgErr instanceof Error ? imgErr.message : String(imgErr)
-            throw new Error(`Image upload failed: ${msg}`)
           }
         }
         setProgressPct(75)
@@ -590,9 +595,7 @@ export default function PredictionWizard({ onClose }) {
 
       // Step 5: Poll for result — or use immediate result if clinical-only (synchronous)
       setProgressStep(5)
-      const engineLabel = (typeof __MODAL_URL__ !== 'undefined' && __MODAL_URL__)
-        ? 'Running AI analysis (GPU)…'
-        : 'Running AI analysis (CPU)…'
+      const engineLabel = 'Running AI analysis…'
       setProgressLabel(engineLabel)
 
       // If the prediction already completed synchronously, use it directly
@@ -616,8 +619,7 @@ export default function PredictionWizard({ onClose }) {
       // which is much slower (~25 min). Calibrate accordingly.
       let attempts = 0
       const maxAttempts = 600 // 600 × 5 s = 50 min ceiling
-      const hasModal = typeof __MODAL_URL__ !== 'undefined' && __MODAL_URL__
-      const expectedPolls = hasModal ? 18 : 300  // 18 × 5 s ≈ 90 s; 300 × 5 s = 25 min
+      const expectedPolls = 60  // ~5 min for HF with fused checkpoint
       while (attempts < maxAttempts) {
         await new Promise(r => setTimeout(r, 5000))
 
