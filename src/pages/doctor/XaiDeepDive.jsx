@@ -300,24 +300,12 @@ export default function XaiDeepDive() {
                 )}
 
                 <button
-                  onClick={async () => {
-                    if (!selectedPred) return
-                    try {
-                      await doctorApi.reports.create({
-                        examination_id: selectedPred.examination_id,
-                        prediction_id: selectedPred.id,
-                        notes: `AI Classification: ${selectedPred.is_lum_a ? 'Luminal A' : 'Non-Luminal A'} (${(selectedPred.confidence_lum_a * 100).toFixed(1)}% confidence). ${fusionGate ? `Modality gate: Image ${(fusionGate.image_weight * 100).toFixed(0)}% / Clinical ${(fusionGate.clinical_weight * 100).toFixed(0)}%.` : ''}`,
-                      })
-                      navigate('/app/doctor/reports')
-                    } catch (err) {
-                      alert(err?.response?.data?.message || 'Failed to generate report')
-                    }
-                  }}
+                  onClick={() => navigate('/app/doctor/reports')}
                   className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-white text-sm font-black"
                   style={{ background: 'linear-gradient(135deg, #093A7A, #0572B2)' }}
                 >
                   <Zap className="w-4 h-4" />
-                  Generate Clinical Report
+                  View Report
                 </button>
               </div>
             </SectionCard>

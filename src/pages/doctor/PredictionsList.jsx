@@ -224,17 +224,7 @@ export default function PredictionsList() {
                 )}
                 {pred.status === 'completed' && (
                   <button
-                    onClick={async () => {
-                      try {
-                        await doctorApi.reports.create({
-                          examination_id: pred.examination_id || pred.examination?.id,
-                          prediction_id: pred.id,
-                        })
-                        navigate('/app/doctor/reports')
-                      } catch (err) {
-                        alert(err?.response?.data?.message || 'Failed to generate report')
-                      }
-                    }}
+                    onClick={() => navigate('/app/doctor/reports')}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-[#0572B2] text-xs font-black hover:bg-blue-100 transition"
                   >
                     <Eye className="w-3.5 h-3.5" /> Report
