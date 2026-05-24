@@ -24,6 +24,35 @@ const STATUS_ICON = {
   concluded: <CheckCircle2 className="w-3 h-3" />,
 }
 
+const LIFECYCLE_STEPS = ['draft', 'submitted', 'predicted', 'concluded']
+
+function LifecycleProgress({ current }) {
+  const idx = LIFECYCLE_STEPS.indexOf(current)
+  return (
+    <div className="flex items-center gap-0.5 mt-2">
+      {LIFECYCLE_STEPS.map((step, i) => (
+        <div key={step} className="flex items-center gap-0.5">
+          <div className={`w-2 h-2 rounded-full ${i <= idx ? 'bg-[#0572B2]' : 'bg-slate-200'}`} />
+          {i < LIFECYCLE_STEPS.length - 1 && (
+            <div className={`w-4 h-0.5 ${i < idx ? 'bg-[#0572B2]' : 'bg-slate-200'}`} />
+          )}
+        </div>
+      ))}
+      <span className="ml-2 text-[9px] font-bold uppercase tracking-wider text-slate-400">{current}</span>
+    </div>
+  )
+}
+
+function ReceptorBadge({ label, positive }) {
+  return (
+    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wide ${
+      positive ? 'bg-teal-50 text-[#0BB592] border border-teal-200' : 'bg-slate-50 text-slate-400 border border-slate-200'
+    }`}>
+      {label}{positive ? '+' : '-'}
+    </span>
+  )
+}
+
 export default function ExaminationsList() {
   const t = useT()
   const navigate = useNavigate()
@@ -102,7 +131,7 @@ export default function ExaminationsList() {
               <RefreshCw className="w-4 h-4" />
             </button>
             <button
-              onClick={() => navigate('/app/doctor')}
+              onClick={() => navigate('/app/doctor/predict')}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#0572B2] text-white text-sm font-black hover:bg-[#0462a0] transition"
             >
               <Zap className="w-4 h-4" /> New Prediction
@@ -148,98 +177,126 @@ export default function ExaminationsList() {
         <motion.div variants={stagger} className="space-y-3">
           {exams.map((exam, i) => {
             const pred = exam.prediction
+            const pat = exam.patient
             const canDelete = exam.status === 'draft'
             return (
               <motion.div
                 key={exam.id}
                 variants={fadeUp}
-                className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col sm:flex-row sm:items-center gap-4"
+                className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col gap-3"
               >
-                {/* Status icon */}
-                <div className={`w-12 h-12 rounded-xl border flex items-center justify-center shrink-0 ${
-                  exam.status === 'concluded' ? 'bg-teal-50 border-teal-200 text-[#0BB592]' :
-                  exam.status === 'predicted' ? 'bg-blue-50 border-blue-200 text-[#0572B2]' :
-                  exam.status === 'submitted' ? 'bg-amber-50 border-amber-200 text-amber-600' :
-                  'bg-slate-50 border-slate-200 text-slate-400'
-                }`}>
-                  <FileText className="w-5 h-5" />
-                </div>
+                <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+                  {/* Status icon */}
+                  <div className={`w-12 h-12 rounded-xl border flex items-center justify-center shrink-0 ${
+                    exam.status === 'concluded' ? 'bg-teal-50 border-teal-200 text-[#0BB592]' :
+                    exam.status === 'predicted' ? 'bg-blue-50 border-blue-200 text-[#0572B2]' :
+                    exam.status === 'submitted' ? 'bg-amber-50 border-amber-200 text-amber-600' :
+                    'bg-slate-50 border-slate-200 text-slate-400'
+                  }`}>
+                    <FileText className="w-5 h-5" />
+                  </div>
 
-                {/* Info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <span className="font-mono text-xs font-bold text-slate-400">#{exam.id}</span>
-                    <StatusPill tone={STATUS_TONE[exam.status] || 'slate'}>
-                      {STATUS_ICON[exam.status]} {exam.status}
-                    </StatusPill>
-                    {pred?.is_lum_a != null && (
-                      <StatusPill tone={pred.is_lum_a ? 'teal' : 'pink'}>
-                        {pred.is_lum_a ? 'Luminal A' : 'Non-Luminal A'}
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className="font-mono text-xs font-bold text-slate-400">#{exam.id}</span>
+                      <StatusPill tone={STATUS_TONE[exam.status] || 'slate'}>
+                        {STATUS_ICON[exam.status]} {exam.status}
                       </StatusPill>
-                    )}
-                    {pred?.status === 'processing' && (
-                      <StatusPill tone="amber"><Loader2 className="w-3 h-3 animate-spin" /> Processing</StatusPill>
-                    )}
-                  </div>
-                  <p className="font-bold text-slate-900">
-                    {exam.patient?.patient_identifier || `Patient #${exam.patient_id}`}
-                  </p>
-                  <div className="flex items-center gap-3 mt-0.5">
-                    {exam.chief_complaint && (
-                      <p className="text-xs text-slate-400 font-medium truncate max-w-xs">{exam.chief_complaint}</p>
-                    )}
-                    <p className="text-xs text-slate-400 font-medium">
-                      {exam.examined_at ? new Date(exam.examined_at).toLocaleDateString() : '—'}
+                      {pred?.is_lum_a != null && (
+                        <StatusPill tone={pred.is_lum_a ? 'teal' : 'pink'}>
+                          {pred.is_lum_a ? 'Luminal A' : 'Non-Luminal A'}
+                        </StatusPill>
+                      )}
+                      {pred?.status === 'processing' && (
+                        <StatusPill tone="amber"><Loader2 className="w-3 h-3 animate-spin" /> Processing</StatusPill>
+                      )}
+                    </div>
+                    <p className="font-bold text-slate-900 text-base">
+                      {pat?.patient_identifier || `Patient #${exam.patient_id}`}
                     </p>
-                  </div>
-                </div>
+                    {pat?.age && (
+                      <p className="text-xs text-slate-500 font-medium mt-0.5">
+                        Age: {pat.age} {pat.stage_num ? `| Stage ${['I','II','III','IV'][pat.stage_num - 1] || pat.stage_num}` : ''}
+                      </p>
+                    )}
 
-                {/* Confidence */}
-                {pred?.confidence_lum_a != null && (
-                  <div className="text-right shrink-0">
-                    <p className="font-mono text-lg font-extrabold text-slate-800">
-                      {(pred.confidence_lum_a * 100).toFixed(1)}%
-                    </p>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Confidence</p>
-                  </div>
-                )}
+                    {/* Receptor badges */}
+                    {pat && (
+                      <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                        <ReceptorBadge label="ER" positive={pat.er_status} />
+                        <ReceptorBadge label="PR" positive={pat.pr_status} />
+                        <ReceptorBadge label="HER2" positive={pat.her2_binary} />
+                      </div>
+                    )}
 
-                {/* Actions */}
-                <div className="flex items-center gap-2 shrink-0">
-                  {exam.status === 'predicted' && (
-                    <button
-                      onClick={() => navigate('/app/doctor/exam')}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-teal-200 bg-teal-50 text-[#0BB592] text-xs font-black hover:bg-teal-100 transition"
-                    >
-                      <Eye className="w-3.5 h-3.5" /> Review
-                    </button>
-                  )}
-                  {pred?.status === 'completed' && (
-                    <button
-                      onClick={() => navigate('/app/doctor/xai')}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-teal-200 bg-teal-50 text-[#0BB592] text-xs font-black hover:bg-teal-100 transition"
-                    >
-                      <Brain className="w-3.5 h-3.5" /> XAI
-                    </button>
-                  )}
-                  {exam.status === 'concluded' && (
-                    <button
-                      onClick={() => navigate('/app/doctor/reports')}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-teal-200 bg-teal-50 text-[#0BB592] text-xs font-black hover:bg-teal-100 transition"
-                    >
-                      <FileCheck2 className="w-3.5 h-3.5" /> Report
-                    </button>
-                  )}
-                  {/* Show delete for all non-concluded exams */}
-                  {exam.status !== 'concluded' && (
-                    <button
-                      onClick={() => setDeleteId(exam.id)}
-                      className="w-9 h-9 rounded-xl border border-pink-200 bg-pink-50 flex items-center justify-center text-[#F55486] hover:bg-pink-100 transition"
-                      title="Delete examination"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
+                    {/* Prediction result */}
+                    {pred?.confidence_lum_a != null && (
+                      <div className="flex items-center gap-2 mt-2">
+                        <div className="h-1.5 w-24 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${pred.confidence_lum_a * 100}%`,
+                              background: pred.is_lum_a ? '#0BB592' : '#F55486',
+                            }}
+                          />
+                        </div>
+                        <span className={`text-xs font-black ${pred.is_lum_a ? 'text-[#0BB592]' : 'text-[#F55486]'}`}>
+                          {(pred.confidence_lum_a * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Lifecycle progress */}
+                    <LifecycleProgress current={exam.status} />
+
+                    <div className="flex items-center gap-3 mt-2">
+                      {exam.chief_complaint && (
+                        <p className="text-xs text-slate-400 font-medium truncate max-w-xs">{exam.chief_complaint}</p>
+                      )}
+                      <p className="text-xs text-slate-400 font-medium">
+                        {exam.examined_at ? new Date(exam.examined_at).toLocaleDateString() : ''}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {exam.status === 'predicted' && (
+                      <button
+                        onClick={() => navigate('/app/doctor/exam')}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-teal-200 bg-teal-50 text-[#0BB592] text-xs font-black hover:bg-teal-100 transition"
+                      >
+                        <Eye className="w-3.5 h-3.5" /> Review
+                      </button>
+                    )}
+                    {pred?.status === 'completed' && (
+                      <button
+                        onClick={() => navigate('/app/doctor/xai')}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-teal-200 bg-teal-50 text-[#0BB592] text-xs font-black hover:bg-teal-100 transition"
+                      >
+                        <Brain className="w-3.5 h-3.5" /> XAI
+                      </button>
+                    )}
+                    {exam.status === 'concluded' && (
+                      <button
+                        onClick={() => navigate('/app/doctor/reports')}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-teal-200 bg-teal-50 text-[#0BB592] text-xs font-black hover:bg-teal-100 transition"
+                      >
+                        <FileCheck2 className="w-3.5 h-3.5" /> Report
+                      </button>
+                    )}
+                    {exam.status !== 'concluded' && (
+                      <button
+                        onClick={() => setDeleteId(exam.id)}
+                        className="w-9 h-9 rounded-xl border border-pink-200 bg-pink-50 flex items-center justify-center text-[#F55486] hover:bg-pink-100 transition"
+                        title="Delete examination"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </motion.div>
             )

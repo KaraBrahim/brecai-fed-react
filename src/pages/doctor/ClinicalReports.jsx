@@ -14,8 +14,8 @@ import { useT } from '@/stores/i18nStore'
 import { useAuthStore } from '@/stores/authStore'
 import doctorApi from '@/api/api-client/doctor'
 
-/* ── Client-side PDF generation ─────────────────────────────────────────── */
-function generateReportPDF(report, patient, doctor) {
+/* ── Client-side PDF generation (print-ready window) ────────────────────── */
+function openReportForPrint(report, patient, doctor) {
   const isLumA = report.prediction?.is_lum_a
   const conf = report.prediction?.confidence_lum_a ?? 0
   const confPct = (conf * 100).toFixed(1)
@@ -116,6 +116,14 @@ function generateReportPDF(report, patient, doctor) {
   /* Disclaimer */
   .disclaimer { margin-top: 20px; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 16px; font-size: 10px; color: #64748b; line-height: 1.6; }
   .disclaimer strong { color: #475569; }
+
+  /* Print styles */
+  @media print {
+    body { padding: 0; margin: 0; }
+    .report-header { border-radius: 0; margin-bottom: 16px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .result-box, .therapy-box, .xai-box, .notes-box, .disclaimer { break-inside: avoid; }
+    .subtype-badge, .gate-bar, .conf-ring { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
 </style>
 </head>
 <body>
@@ -125,10 +133,10 @@ function generateReportPDF(report, patient, doctor) {
   <div class="subtitle">BReCAI-FED · Molecular Subtype Classification Report</div>
   <h1>${patient?.patient_identifier || 'Clinical Diagnostic Report'}</h1>
   <div class="meta">
-    <span>📋 Report #${report.id}</span>
-    <span>📅 ${date}</span>
-    <span>👨‍⚕️ Dr. ${doctor?.name || 'Attending Physician'}</span>
-    <span>🏥 ${doctor?.organization?.name || 'BReCAI Platform'}</span>
+    <span>Report #${report.id}</span>
+    <span>${date}</span>
+    <span>Dr. ${doctor?.name || 'Attending Physician'}</span>
+    <span>${doctor?.organization?.name || 'BReCAI Platform'}</span>
   </div>
   <span class="subtype-badge ${isLumA ? 'badge-luma' : 'badge-nonluma'}">${isLumA ? '● Luminal A' : '● Non-Luminal A'}</span>
 </div>
@@ -158,7 +166,7 @@ function generateReportPDF(report, patient, doctor) {
 
 <!-- Therapy Recommendation -->
 <div class="therapy-box">
-  <div class="therapy-header">🎯 Recommended Therapeutic Strategy</div>
+  <div class="therapy-header">Recommended Therapeutic Strategy</div>
   <div class="therapy-body">
     <div class="therapy-row"><div class="label">Primary</div><div class="content"><strong>${therapy.primary}</strong></div></div>
     <div class="therapy-row"><div class="label">Agents</div><div class="content">${therapy.drugs}</div></div>
@@ -193,7 +201,7 @@ ${report.notes ? `
 
 <!-- Disclaimer -->
 <div class="disclaimer">
-  <strong>⚠️ Legal Disclaimer:</strong> This AI-generated report is intended as a <strong>diagnostic aid</strong> and must be reviewed by a licensed medical professional before making clinical decisions. The BReCAI system provides molecular subtype classification to assist in treatment planning — it does not replace professional medical judgement. All therapeutic recommendations should be validated by a multi-disciplinary oncology team.
+  <strong>Legal Disclaimer:</strong> This AI-generated report is intended as a <strong>diagnostic aid</strong> and must be reviewed by a licensed medical professional before making clinical decisions. The BReCAI system provides molecular subtype classification to assist in treatment planning — it does not replace professional medical judgement. All therapeutic recommendations should be validated by a multi-disciplinary oncology team.
 </div>
 
 <!-- Footer -->
@@ -201,7 +209,7 @@ ${report.notes ? `
   <div class="footer-left">
     <strong>BReCAI-FED</strong> — Federated Medical AI Platform<br/>
     Report generated: ${date}<br/>
-    Status: ${report.status === 'final' ? '✅ FINALIZED' : '📝 DRAFT'}
+    Status: ${report.status === 'final' ? 'FINALIZED' : 'DRAFT'}
   </div>
   <div class="footer-right">
     <div class="sig-line">Dr. ${doctor?.name || 'Attending Physician'}</div>
@@ -211,8 +219,12 @@ ${report.notes ? `
 </body>
 </html>`
 
-  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
-  return URL.createObjectURL(blob)
+  // Open in new window for print
+  const printWindow = window.open('', '_blank', 'width=900,height=700')
+  printWindow.document.write(html)
+  printWindow.document.close()
+  printWindow.focus()
+  setTimeout(() => printWindow.print(), 600)
 }
 
 export default function ClinicalReports() {
@@ -221,8 +233,6 @@ export default function ClinicalReports() {
   const [reports, setReports] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [previewUrl, setPreviewUrl] = useState(null)
-  const [previewReport, setPreviewReport] = useState(null)
   const [toast, setToast] = useState({ show: false, msg: '', ok: true })
 
   const showToast = (msg, ok = true) => {
@@ -249,22 +259,15 @@ export default function ClinicalReports() {
   const handlePreview = async (report) => {
     try {
       const full = await doctorApi.reports.get(report.id)
-      const url = generateReportPDF(full, full.patient, user)
-      setPreviewReport(full)
-      setPreviewUrl(url)
+      openReportForPrint(full, full.patient, user)
     } catch { showToast('Failed to load report', false) }
   }
 
   const handleDownload = async (report) => {
     try {
       const full = await doctorApi.reports.get(report.id)
-      const url = generateReportPDF(full, full.patient, user)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `report-${full.patient?.patient_identifier || full.id}.html`
-      a.click()
-      URL.revokeObjectURL(url)
-      showToast('Report downloaded')
+      openReportForPrint(full, full.patient, user)
+      showToast('Report opened — use Ctrl+P to save as PDF')
     } catch { showToast('Failed to download report', false) }
   }
 
@@ -276,12 +279,6 @@ export default function ClinicalReports() {
     } catch (err) {
       showToast(err?.response?.data?.message || 'Failed to finalize', false)
     }
-  }
-
-  const closePreview = () => {
-    if (previewUrl) URL.revokeObjectURL(previewUrl)
-    setPreviewReport(null)
-    setPreviewUrl(null)
   }
 
   const stats = {
@@ -381,14 +378,14 @@ export default function ClinicalReports() {
                 <button
                   onClick={() => handlePreview(r)}
                   className="w-9 h-9 rounded-xl border border-slate-200 flex items-center justify-center text-slate-400 hover:text-[#0572B2] hover:border-[#0572B2] transition"
-                  title={t('doctor.previewPDF')}
+                  title="Print as PDF"
                 >
-                  <Eye className="w-4 h-4" />
+                  <Printer className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => handleDownload(r)}
                   className="w-9 h-9 rounded-xl bg-[#0572B2] flex items-center justify-center text-white hover:bg-[#0462a0] transition"
-                  title={t('doctor.downloadPDF')}
+                  title="Download as PDF"
                 >
                   <Download className="w-4 h-4" />
                 </button>
@@ -406,39 +403,6 @@ export default function ClinicalReports() {
           ))}
         </motion.div>
       )}
-
-      {/* Preview modal */}
-      <AnimatePresence>
-        {previewUrl && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80]"
-              onClick={closePreview}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[90] w-[calc(100%-2rem)] max-w-3xl bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden"
-            >
-              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                <p className="font-extrabold text-slate-900">
-                  Report Preview — {previewReport?.patient?.patient_identifier || `#${previewReport?.id}`}
-                </p>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => handleDownload(previewReport)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0572B2] text-white text-xs font-black hover:bg-[#0462a0] transition">
-                    <Download className="w-3.5 h-3.5" /> Download
-                  </button>
-                  <button onClick={closePreview} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-              <div className="h-[65vh]">
-                <iframe src={previewUrl} className="w-full h-full border-0" title="Report preview" />
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
 
       {/* Toast */}
       <AnimatePresence>
