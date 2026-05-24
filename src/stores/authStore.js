@@ -44,7 +44,8 @@ function lsClear(...keys) { keys.forEach(k => localStorage.removeItem(k)) }
 
 /* ── Store ───────────────────────────────────────────────────── */
 export const useAuthStore = create(
-  (set, get) => ({
+  persist(
+    (set, get) => ({
       /* ── State ────────────────────────────────────────── */
       user:            null,
       isAuthenticated: false,
@@ -264,6 +265,10 @@ export const useAuthStore = create(
           return { ok: false, error: errorMessage(err, 'Failed to load organizations'), details: err?.response?.data }
         }
       },
-    })
+    }),
+    {
+      name: 'brecai-auth',
+      partialize: (s) => ({ user: s.user, isAuthenticated: s.isAuthenticated }),
+    }
   )
 )
