@@ -5,7 +5,7 @@ import {
   Bell, Settings, Menu, X,
   Activity, LayoutDashboard, Users, FileText,
   CreditCard, Brain, BarChart3, ChevronDown,
-  LogOut, User, Mail, Globe, Edit3, Camera, Eye, EyeOff, Check,
+  LogOut, User, Mail, Globe, Edit3, Camera, Eye, EyeOff, Check, Terminal,
 } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import logo from '@/assets/logo.png'
@@ -28,6 +28,7 @@ const instructorNav = [
   { labelKey: 'nav.modelRegistry',path: '/app/instructor/architect',    icon: Brain,           label: 'Model Registry' },
   { labelKey: 'nav.aggLogs',      path: '/app/instructor/logs',         icon: BarChart3,       label: 'Aggregation Logs' },
   { labelKey: 'nav.contributions',path: '/app/instructor/contributions', icon: Users,          label: 'Contributions' },
+  { labelKey: 'nav.localTraining', path: '/app/instructor/local-training', icon: Terminal, label: 'Local Training' },
 ]
 
 const orgNav = [

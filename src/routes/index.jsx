@@ -34,6 +34,7 @@ import TrainingConsole     from '@/pages/instructor/TrainingConsole'
 import ModelArchitect      from '@/pages/instructor/ModelArchitect'
 import AggregationLogs     from '@/pages/instructor/AggregationLogs'
 import ContributionsPanel  from '@/pages/instructor/ContributionsPanel'
+import LocalTrainingPipeline from '@/pages/instructor/LocalTrainingPipeline'
 
 // Org Management
 import OrgDashboard    from '@/pages/org/OrgDashboard'
@@ -147,6 +148,7 @@ export const router = createBrowserRouter([
           { path: 'instructor/architect',      element: <RequireAuth role={RoleEnum.INSTRUCTOR}><ModelArchitect /></RequireAuth> },
           { path: 'instructor/logs',           element: <RequireAuth role={RoleEnum.INSTRUCTOR}><AggregationLogs /></RequireAuth> },
           { path: 'instructor/contributions',  element: <RequireAuth role={RoleEnum.INSTRUCTOR}><ContributionsPanel /></RequireAuth> },
+          { path: 'instructor/local-training', element: <RequireAuth role={RoleEnum.INSTRUCTOR}><LocalTrainingPipeline /></RequireAuth> },
 
           // Org Management (role: org_manager) — dashboard pages only
           // Gate pages (/app/org/pending, /app/org/subscribe) are above, outside DashboardLayout
