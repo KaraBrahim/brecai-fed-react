@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  FileText, Download, Search, Eye, Plus, Calendar,
+  FileText, Search, Eye, Plus, Calendar,
   CheckCircle2, AlertTriangle, Loader2, RefreshCw,
   FileCheck2, Printer, X, Brain,
 } from 'lucide-react'
@@ -263,12 +263,15 @@ export default function ClinicalReports() {
     } catch { showToast('Failed to load report', false) }
   }
 
-  const handleDownload = async (report) => {
+  const handleDelete = async (report) => {
+    if (!confirm('Delete this report? This cannot be undone.')) return
     try {
-      const full = await doctorApi.reports.get(report.id)
-      openReportForPrint(full, full.patient, user)
-      showToast('Report opened — use Ctrl+P to save as PDF')
-    } catch { showToast('Failed to download report', false) }
+      await doctorApi.reports.delete(report.id)
+      showToast('Report deleted')
+      load()
+    } catch (err) {
+      showToast(err?.response?.data?.message || 'Failed to delete', false)
+    }
   }
 
   const handleFinalize = async (report) => {
@@ -377,17 +380,10 @@ export default function ClinicalReports() {
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={() => handlePreview(r)}
-                  className="w-9 h-9 rounded-xl border border-slate-200 flex items-center justify-center text-slate-400 hover:text-[#0572B2] hover:border-[#0572B2] transition"
-                  title="Print as PDF"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#0572B2] text-white text-xs font-black hover:bg-[#0462a0] transition"
+                  title="Open report for print / save as PDF"
                 >
-                  <Printer className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => handleDownload(r)}
-                  className="w-9 h-9 rounded-xl bg-[#0572B2] flex items-center justify-center text-white hover:bg-[#0462a0] transition"
-                  title="Download as PDF"
-                >
-                  <Download className="w-4 h-4" />
+                  <Printer className="w-3.5 h-3.5" /> PDF
                 </button>
                 {r.status === 'draft' && (
                   <button
@@ -395,7 +391,16 @@ export default function ClinicalReports() {
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-teal-200 bg-teal-50 text-[#0BB592] text-xs font-black hover:bg-teal-100 transition"
                     title={t('doctor.finalizeReport')}
                   >
-                    <FileCheck2 className="w-3.5 h-3.5" /> {t('doctor.finalizeReport')}
+                    <FileCheck2 className="w-3.5 h-3.5" /> Finalize
+                  </button>
+                )}
+                {r.status === 'draft' && (
+                  <button
+                    onClick={() => handleDelete(r)}
+                    className="w-9 h-9 rounded-xl border border-red-200 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 transition"
+                    title="Delete report"
+                  >
+                    <X className="w-4 h-4" />
                   </button>
                 )}
               </div>
