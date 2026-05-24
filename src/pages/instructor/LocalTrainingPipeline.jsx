@@ -61,7 +61,7 @@ export default function LocalTrainingPipeline() {
     STATUS.ready, STATUS.locked, STATUS.locked, STATUS.locked, STATUS.locked,
   ])
   const [terminals, setTerminals] = useState([[], [], [], [], []])
-  const [dataConfig, setDataConfig] = useState({ path: '/data/breakhis/partition_1/', modality: 'multimodal' })
+  const [dataConfig, setDataConfig] = useState({ imagePath: '/data/breakhis/partition_1/', clinicalPath: '', modality: 'multimodal' })
   const [trainingConfig, setTrainingConfig] = useState({ epochs: 5, lr: 0.001, batchSize: 32 })
   const [lossData, setLossData] = useState([])
   const [copied, setCopied] = useState(false)
@@ -101,15 +101,22 @@ export default function LocalTrainingPipeline() {
   /* ── Step 1: Data Configuration ─────────────────────────────── */
   const runStep1 = async () => {
     setStatus(0, STATUS.running)
+    const mod = dataConfig.modality
     const lines = [
-      { text: `$ Scanning ${dataConfig.path} ...`, type: 'info' },
-      { text: `  Modality: ${dataConfig.modality}`, type: 'info' },
-      { text: '  Indexing patient directories...', type: 'progress' },
-      { text: '  Found 142 patients, 28,400 patches', type: 'success' },
-      { text: '  Label distribution: Benign 48.2% | Malignant 51.8%', type: 'info' },
-      { text: '  Magnification: 40x (primary), 100x, 200x, 400x', type: 'info' },
-      { text: '[OK] Data configuration complete.', type: 'success' },
+      { text: `$ Scanning data sources (modality: ${mod})...`, type: 'info' },
     ]
+    if (mod === 'multimodal' || mod === 'image_only') {
+      lines.push({ text: `  Image folder: ${dataConfig.imagePath || '(not set)'}`, type: 'info' })
+      lines.push({ text: '  Indexing patient directories...', type: 'progress' })
+      lines.push({ text: '  Found 142 patients, 28,400 patches (40x magnification)', type: 'success' })
+    }
+    if (mod === 'multimodal' || mod === 'clinical_only') {
+      lines.push({ text: `  Clinical file: ${dataConfig.clinicalPath || '(not set)'}`, type: 'info' })
+      lines.push({ text: '  Parsing CSV — 142 records, 19 features', type: 'success' })
+    }
+    lines.push({ text: '  Label distribution: LumA 48.2% | Non-LumA 51.8%', type: 'info' })
+    lines.push({ text: '[OK] Data configuration verified.', type: 'success' })
+
     for (const l of lines) {
       await sleep(400 + Math.random() * 400)
       addLine(0, l)
@@ -311,32 +318,86 @@ function ExecButton({ onClick, disabled, label = 'Execute', gradient }) {
 
 /* ── Step 1 Content ───────────────────────────────────────────── */
 function Step1Content({ config, setConfig, status, onRun }) {
+  const modality = config.modality
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-xs text-slate-400 mb-1">Dataset Path</label>
-          <input
-            value={config.path}
-            onChange={e => setConfig(p => ({ ...p, path: e.target.value }))}
-            disabled={status !== STATUS.ready}
-            className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white font-mono focus:border-blue-500 focus:outline-none disabled:opacity-50"
-          />
-        </div>
-        <div>
-          <label className="block text-xs text-slate-400 mb-1">Modality</label>
-          <select
-            value={config.modality}
-            onChange={e => setConfig(p => ({ ...p, modality: e.target.value }))}
-            disabled={status !== STATUS.ready}
-            className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none disabled:opacity-50"
-          >
-            <option value="multimodal">Multimodal</option>
-            <option value="image_only">Image Only</option>
-            <option value="clinical_only">Clinical Only</option>
-          </select>
+    <div className="space-y-5">
+      {/* Modality selector */}
+      <div>
+        <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Data Modality</label>
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { id: 'multimodal', label: 'Multimodal', desc: 'Images + Clinical' },
+            { id: 'image_only', label: 'Image Only', desc: 'Histopathology patches' },
+            { id: 'clinical_only', label: 'Clinical Only', desc: 'Clinical records' },
+          ].map(m => (
+            <button
+              key={m.id}
+              onClick={() => setConfig(p => ({ ...p, modality: m.id }))}
+              disabled={status !== STATUS.ready}
+              className={`p-3 rounded-xl border-2 text-left transition-all ${
+                modality === m.id
+                  ? 'border-blue-500 bg-blue-950/50'
+                  : 'border-slate-700 bg-slate-800/50 hover:border-slate-500'
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              <p className={`text-sm font-bold ${modality === m.id ? 'text-blue-300' : 'text-slate-300'}`}>{m.label}</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">{m.desc}</p>
+            </button>
+          ))}
         </div>
       </div>
+
+      {/* Data inputs — dynamic based on modality */}
+      <div className="space-y-3">
+        {(modality === 'multimodal' || modality === 'image_only') && (
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+              Image Patches Folder
+            </label>
+            <div className="flex gap-2">
+              <input
+                value={config.imagePath || ''}
+                onChange={e => setConfig(p => ({ ...p, imagePath: e.target.value }))}
+                disabled={status !== STATUS.ready}
+                placeholder="/path/to/breakhis/malignant/"
+                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white font-mono focus:border-blue-500 focus:outline-none disabled:opacity-50"
+              />
+              <button
+                disabled={status !== STATUS.ready}
+                className="px-4 py-2.5 rounded-lg bg-slate-700 border border-slate-600 text-slate-300 text-xs font-bold hover:bg-slate-600 transition disabled:opacity-50"
+              >
+                Browse
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-500 mt-1">Folder containing patient subdirectories with patch images (PNG/JPG)</p>
+          </div>
+        )}
+
+        {(modality === 'multimodal' || modality === 'clinical_only') && (
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+              Clinical Data File
+            </label>
+            <div className="flex gap-2">
+              <input
+                value={config.clinicalPath || ''}
+                onChange={e => setConfig(p => ({ ...p, clinicalPath: e.target.value }))}
+                disabled={status !== STATUS.ready}
+                placeholder="/path/to/clinical_data.csv"
+                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white font-mono focus:border-blue-500 focus:outline-none disabled:opacity-50"
+              />
+              <button
+                disabled={status !== STATUS.ready}
+                className="px-4 py-2.5 rounded-lg bg-slate-700 border border-slate-600 text-slate-300 text-xs font-bold hover:bg-slate-600 transition disabled:opacity-50"
+              >
+                Upload
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-500 mt-1">CSV file with columns: patient_id, er_status, pr_status, her2_binary, age, stage_num, label</p>
+          </div>
+        )}
+      </div>
+
       <ExecButton onClick={onRun} disabled={status !== STATUS.ready} label="Inspect Data" />
     </div>
   )
