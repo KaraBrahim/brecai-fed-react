@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import authApi from '@/api/api-client/auth'
 import { setAuthToken } from '@/api/api-client/client'
 import { ROLE_HOME_MAP } from '@/enums/roles'
