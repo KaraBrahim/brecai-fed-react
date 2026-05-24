@@ -337,15 +337,16 @@ function ResultsPanel({ prediction, xai, patient, onProceed, onReport }) {
       <div className="flex gap-3">
         <button
           onClick={onProceed}
-          className="flex-[2] flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-[#0572B2] text-white font-black text-sm hover:bg-[#0462a0] transition shadow-lg"
+          className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-[#0572B2] text-white font-black text-sm hover:bg-[#0462a0] transition shadow-lg"
         >
           <FileText className="w-4 h-4" /> {t('doctor.proceedExam')}
         </button>
         <button
           onClick={onReport}
-          className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-white border-2 border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 transition"
+          className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-white font-black text-sm transition shadow-lg"
+          style={{ background: 'linear-gradient(135deg, #093A7A, #0572B2)' }}
         >
-          <BarChart3 className="w-4 h-4" /> XAI
+          <BarChart3 className="w-4 h-4" /> View Report
         </button>
       </div>
     </div>
@@ -937,8 +938,8 @@ export default function PredictionWizard({ onClose }) {
                   prediction={prediction}
                   xai={xai}
                   patient={selectedPatient}
-                  onProceed={() => { onClose(); navigate('/app/doctor/exam') }}
-                  onReport={() => { onClose(); navigate('/app/doctor/xai') }}
+                  onProceed={() => { onClose(); navigate('/app/doctor/examinations') }}
+                  onReport={() => { onClose(); navigate('/app/doctor/reports') }}
                 />
               </motion.div>
             )}
