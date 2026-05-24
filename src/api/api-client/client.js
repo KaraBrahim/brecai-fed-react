@@ -45,20 +45,23 @@ client.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error.response?.status;
+    const url = error.config?.url || '';
 
     if (status === 401) {
-      // Clear stored token and redirect to the auth page.
+      // Clear stored token
       setAuthToken(null);
-      window.location.href = '/auth';
+
+      // Don't redirect for /auth/me — it's expected to 401 for guests.
+      // The auth store handles this case gracefully.
+      if (!url.includes('/auth/me')) {
+        window.location.href = '/auth';
+      }
     }
 
     if (status === 403) {
-      // Tag the error so catch blocks can detect permission boundary violations
-      // without having to re-inspect the status code themselves.
       error.isPermissionError = true;
     }
 
-    // 422 (validation), 404, 500 — let each page handle these in its own catch block.
     return Promise.reject(error);
   }
 );

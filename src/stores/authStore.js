@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import authApi from '@/api/api-client/auth'
 import { setAuthToken } from '@/api/api-client/client'
 import { ROLE_HOME_MAP } from '@/enums/roles'
@@ -45,8 +44,7 @@ function lsClear(...keys) { keys.forEach(k => localStorage.removeItem(k)) }
 
 /* ── Store ───────────────────────────────────────────────────── */
 export const useAuthStore = create(
-  persist(
-    (set, get) => ({
+  (set, get) => ({
       /* ── State ────────────────────────────────────────── */
       user:            null,
       isAuthenticated: false,
@@ -266,10 +264,6 @@ export const useAuthStore = create(
           return { ok: false, error: errorMessage(err, 'Failed to load organizations'), details: err?.response?.data }
         }
       },
-    }),
-    {
-      name: 'brecai-auth',
-      partialize: (s) => ({ user: s.user, isAuthenticated: s.isAuthenticated }),
-    }
+    })
   )
 )
