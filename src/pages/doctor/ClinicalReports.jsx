@@ -18,84 +18,196 @@ import doctorApi from '@/api/api-client/doctor'
 function generateReportPDF(report, patient, doctor) {
   const isLumA = report.prediction?.is_lum_a
   const conf = report.prediction?.confidence_lum_a ?? 0
+  const confPct = (conf * 100).toFixed(1)
   const date = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
+  const xai = report.prediction?.xai_result?.top_features || {}
+  const gate = xai.fusion_gate || {}
+
+  // Therapy recommendations based on molecular subtype
+  const therapy = isLumA
+    ? {
+        primary: 'Endocrine (Hormonal) Therapy',
+        drugs: 'Tamoxifen (pre-menopausal) or Aromatase Inhibitors (post-menopausal)',
+        rationale: 'Luminal A tumours are strongly hormone receptor-positive with low Ki-67 proliferation. They respond well to hormonal blockade, making chemotherapy usually unnecessary.',
+        prognosis: 'Generally favourable prognosis. 5-year survival rate >90% with appropriate endocrine therapy.',
+        additional: 'Consider Oncotype DX or MammaPrint genomic assay if borderline case. Adjuvant radiation per staging guidelines.',
+      }
+    : {
+        primary: 'Chemotherapy ± Targeted Therapy',
+        drugs: 'Anthracycline/Taxane-based regimen. Add Trastuzumab if HER2+. Consider CDK4/6 inhibitors if Luminal B.',
+        rationale: 'Non-Luminal A subtypes typically exhibit higher proliferation rates and may lack strong hormone receptor expression, necessitating cytotoxic or targeted approaches.',
+        prognosis: 'Variable prognosis depending on exact subtype. Multi-disciplinary tumour board consultation strongly recommended.',
+        additional: 'Evaluate PD-L1 expression for potential immunotherapy eligibility. Genetic counselling if BRCA mutation suspected.',
+      }
+
+  // Clinical interpretation
+  const erPr = `${patient?.er_status ? 'ER+' : 'ER−'} / ${patient?.pr_status ? 'PR+' : 'PR−'} / ${patient?.her2_binary ? 'HER2+' : 'HER2−'}`
+  const stageLabel = patient?.stage_num ? `Stage ${['I', 'II', 'III', 'IV'][patient.stage_num - 1] || patient.stage_num}` : '—'
 
   const html = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8"/>
-<title>Clinical Report — ${patient?.patient_identifier || 'Patient'}</title>
+<title>BReCAI Clinical Report — ${patient?.patient_identifier || 'Patient'}</title>
 <style>
-  body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 40px; color: #1e293b; }
-  .header { background: linear-gradient(135deg, #072a5e, #0572B2); color: white; padding: 32px 40px; border-radius: 12px; margin-bottom: 32px; }
-  .header h1 { margin: 0 0 4px; font-size: 28px; font-weight: 900; }
-  .header p { margin: 0; opacity: 0.7; font-size: 13px; }
-  .badge { display: inline-block; padding: 4px 14px; border-radius: 20px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-top: 12px; }
-  .badge-luma { background: rgba(11,181,146,0.2); color: #0BB592; border: 1px solid rgba(11,181,146,0.4); }
-  .badge-nonluma { background: rgba(245,84,134,0.2); color: #F55486; border: 1px solid rgba(245,84,134,0.4); }
-  .section { margin-bottom: 24px; }
-  .section-title { font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; color: #94a3b8; margin-bottom: 12px; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; }
-  .card-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; margin-bottom: 4px; }
-  .card-value { font-size: 18px; font-weight: 900; color: #1e293b; }
-  .result-box { background: ${isLumA ? '#f0fdf4' : '#fff1f2'}; border: 2px solid ${isLumA ? '#86efac' : '#fda4af'}; border-radius: 12px; padding: 20px 24px; margin-bottom: 24px; }
-  .result-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: #94a3b8; }
-  .result-value { font-size: 32px; font-weight: 900; color: ${isLumA ? '#0BB592' : '#F55486'}; margin: 4px 0; }
-  .conf-bar { height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; margin-top: 8px; }
-  .conf-fill { height: 100%; background: ${isLumA ? '#0BB592' : '#F55486'}; border-radius: 4px; width: ${(conf * 100).toFixed(1)}%; }
-  .therapy { background: ${isLumA ? '#f0fdf4' : '#fff1f2'}; border-left: 4px solid ${isLumA ? '#0BB592' : '#F55486'}; padding: 14px 16px; border-radius: 0 8px 8px 0; font-size: 13px; line-height: 1.6; }
-  .notes { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; font-size: 13px; line-height: 1.7; color: #475569; }
-  .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; font-size: 11px; color: #94a3b8; }
-  .signature { margin-top: 40px; }
-  .sig-line { border-top: 1px solid #1e293b; width: 200px; margin-top: 40px; padding-top: 8px; font-size: 12px; font-weight: 700; }
+  * { box-sizing: border-box; }
+  @page { margin: 24px; size: A4; }
+  body { font-family: 'Segoe UI', -apple-system, Arial, sans-serif; margin: 0; padding: 32px 40px; color: #1e293b; font-size: 13px; line-height: 1.6; }
+
+  /* Header */
+  .report-header { background: linear-gradient(135deg, #093A7A 0%, #0572B2 100%); color: white; padding: 28px 32px; border-radius: 16px; margin-bottom: 28px; position: relative; overflow: hidden; }
+  .report-header::after { content: ''; position: absolute; top: -60px; right: -60px; width: 180px; height: 180px; background: rgba(11,181,146,0.15); border-radius: 50%; }
+  .report-header h1 { margin: 0; font-size: 22px; font-weight: 900; letter-spacing: -0.5px; }
+  .report-header .subtitle { opacity: 0.7; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 6px; }
+  .report-header .meta { display: flex; gap: 24px; margin-top: 14px; font-size: 11px; opacity: 0.85; }
+  .report-header .meta span { display: flex; align-items: center; gap: 4px; }
+
+  /* Badge */
+  .subtype-badge { display: inline-block; padding: 5px 16px; border-radius: 24px; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 12px; }
+  .badge-luma { background: rgba(11,181,146,0.2); color: #0BB592; border: 1.5px solid rgba(11,181,146,0.4); }
+  .badge-nonluma { background: rgba(245,84,134,0.2); color: #F55486; border: 1.5px solid rgba(245,84,134,0.4); }
+
+  /* Sections */
+  .section { margin-bottom: 22px; }
+  .section-title { font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 2.5px; color: #0572B2; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 2px solid #e2e8f0; }
+
+  /* Info grid */
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .info-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; }
+  .info-card .lbl { font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; color: #94a3b8; margin-bottom: 3px; }
+  .info-card .val { font-size: 15px; font-weight: 900; color: #1e293b; }
+
+  /* Result box */
+  .result-box { background: ${isLumA ? 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)' : 'linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%)'}; border: 2px solid ${isLumA ? '#86efac' : '#fda4af'}; border-radius: 14px; padding: 22px 26px; margin-bottom: 22px; display: flex; align-items: center; gap: 24px; }
+  .result-main { flex: 1; }
+  .result-label { font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; color: #64748b; }
+  .result-value { font-size: 28px; font-weight: 900; color: ${isLumA ? '#0BB592' : '#F55486'}; margin: 4px 0; }
+  .result-conf { font-size: 12px; color: #475569; }
+  .conf-ring { width: 72px; height: 72px; border-radius: 50%; border: 6px solid ${isLumA ? '#0BB592' : '#F55486'}; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 900; color: ${isLumA ? '#0BB592' : '#F55486'}; background: white; }
+
+  /* Therapy */
+  .therapy-box { background: white; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; margin-bottom: 22px; }
+  .therapy-header { background: ${isLumA ? '#0BB592' : '#F55486'}; color: white; padding: 10px 18px; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; }
+  .therapy-body { padding: 16px 18px; }
+  .therapy-row { display: flex; gap: 12px; margin-bottom: 10px; }
+  .therapy-row .label { width: 100px; flex-shrink: 0; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; color: #64748b; padding-top: 2px; }
+  .therapy-row .content { font-size: 12px; color: #334155; line-height: 1.6; }
+
+  /* XAI */
+  .xai-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px 18px; margin-bottom: 22px; }
+  .xai-title { font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; color: #0572B2; margin-bottom: 10px; }
+  .gate-bar { display: flex; height: 24px; border-radius: 8px; overflow: hidden; margin-bottom: 8px; }
+  .gate-img { background: #0572B2; display: flex; align-items: center; justify-content: center; color: white; font-size: 10px; font-weight: 800; }
+  .gate-clin { background: #0BB592; display: flex; align-items: center; justify-content: center; color: white; font-size: 10px; font-weight: 800; }
+  .gate-legend { display: flex; gap: 16px; font-size: 10px; color: #64748b; font-weight: 700; }
+  .gate-legend span::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+  .gate-legend .leg-img::before { background: #0572B2; }
+  .gate-legend .leg-clin::before { background: #0BB592; }
+
+  /* Notes */
+  .notes-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 14px 16px; font-size: 12px; color: #92400e; line-height: 1.7; }
+
+  /* Footer */
+  .report-footer { margin-top: 32px; padding-top: 16px; border-top: 2px solid #e2e8f0; display: flex; justify-content: space-between; align-items: flex-end; }
+  .footer-left { font-size: 10px; color: #94a3b8; line-height: 1.6; }
+  .footer-right { text-align: right; }
+  .sig-line { border-top: 1.5px solid #1e293b; width: 180px; margin-top: 32px; padding-top: 6px; font-size: 11px; font-weight: 800; color: #1e293b; }
+
+  /* Disclaimer */
+  .disclaimer { margin-top: 20px; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 16px; font-size: 10px; color: #64748b; line-height: 1.6; }
+  .disclaimer strong { color: #475569; }
 </style>
 </head>
 <body>
-<div class="header">
-  <p>BRECAI-FED · Clinical Diagnostic Report</p>
-  <h1>${patient?.patient_identifier || 'Patient Report'}</h1>
-  <p>Generated: ${date}</p>
-  <span class="badge ${isLumA ? 'badge-luma' : 'badge-nonluma'}">${isLumA ? 'Luminal A' : 'Non-Luminal A'}</span>
+
+<!-- Header -->
+<div class="report-header">
+  <div class="subtitle">BReCAI-FED · Molecular Subtype Classification Report</div>
+  <h1>${patient?.patient_identifier || 'Clinical Diagnostic Report'}</h1>
+  <div class="meta">
+    <span>📋 Report #${report.id}</span>
+    <span>📅 ${date}</span>
+    <span>👨‍⚕️ Dr. ${doctor?.name || 'Attending Physician'}</span>
+    <span>🏥 ${doctor?.organization?.name || 'BReCAI Platform'}</span>
+  </div>
+  <span class="subtype-badge ${isLumA ? 'badge-luma' : 'badge-nonluma'}">${isLumA ? '● Luminal A' : '● Non-Luminal A'}</span>
 </div>
 
+<!-- Patient Information -->
 <div class="section">
-  <div class="section-title">Patient Information</div>
-  <div class="grid">
-    <div class="card"><div class="card-label">Patient ID</div><div class="card-value">${patient?.patient_identifier || '—'}</div></div>
-    <div class="card"><div class="card-label">Age</div><div class="card-value">${patient?.age ?? '—'} years</div></div>
-    <div class="card"><div class="card-label">Stage</div><div class="card-value">Stage ${patient?.stage_num ?? '—'}</div></div>
-    <div class="card"><div class="card-label">ER / PR / HER2</div><div class="card-value">${patient?.er_status ? 'ER+' : 'ER-'} / ${patient?.pr_status ? 'PR+' : 'PR-'} / ${patient?.her2_binary ? 'HER2+' : 'HER2-'}</div></div>
+  <div class="section-title">Patient & Clinical Profile</div>
+  <div class="info-grid">
+    <div class="info-card"><div class="lbl">Patient ID</div><div class="val">${patient?.patient_identifier || '—'}</div></div>
+    <div class="info-card"><div class="lbl">Age</div><div class="val">${patient?.age ?? '—'} years</div></div>
+    <div class="info-card"><div class="lbl">Stage</div><div class="val">${stageLabel}</div></div>
+    <div class="info-card"><div class="lbl">Receptor Status</div><div class="val">${erPr}</div></div>
+    <div class="info-card"><div class="lbl">Inference Mode</div><div class="val">${report.prediction?.mode === 'FULL' ? 'Full (Genomic)' : 'DZ (Clinical Only)'}</div></div>
+    <div class="info-card"><div class="lbl">AI Model</div><div class="val">A6 Cross-Attention Fusion</div></div>
   </div>
 </div>
 
+<!-- AI Prediction Result -->
 <div class="result-box">
-  <div class="result-label">AI Prediction Result</div>
-  <div class="result-value">${isLumA ? 'Luminal A' : 'Non-Luminal A'}</div>
-  <p style="margin:0;font-size:13px;color:#475569;">Luminal A probability: <strong>${(conf * 100).toFixed(1)}%</strong></p>
-  <div class="conf-bar"><div class="conf-fill"></div></div>
+  <div class="result-main">
+    <div class="result-label">AI Classification Result</div>
+    <div class="result-value">${isLumA ? 'Luminal A' : 'Non-Luminal A'}</div>
+    <div class="result-conf">Confidence: <strong>${confPct}%</strong> probability of Luminal A subtype (threshold: 51%)</div>
+  </div>
+  <div class="conf-ring">${confPct}%</div>
 </div>
 
-<div class="section">
-  <div class="section-title">Therapy Recommendation</div>
-  <div class="therapy">
-    ${isLumA
-      ? '<strong>Luminal A</strong> subtype confirmed. Patient is a strong candidate for <strong>Endocrine (Hormonal) Therapy</strong> — Tamoxifen / Aromatase Inhibitors. Chemotherapy is likely not indicated given the low proliferation signature.'
-      : '<strong>Non-Luminal A</strong> subtype identified. Higher risk profile suggests <strong>Chemotherapy or Targeted Therapy</strong> may be required. Consult multi-disciplinary oncology board for escalation protocol.'}
+<!-- Therapy Recommendation -->
+<div class="therapy-box">
+  <div class="therapy-header">🎯 Recommended Therapeutic Strategy</div>
+  <div class="therapy-body">
+    <div class="therapy-row"><div class="label">Primary</div><div class="content"><strong>${therapy.primary}</strong></div></div>
+    <div class="therapy-row"><div class="label">Agents</div><div class="content">${therapy.drugs}</div></div>
+    <div class="therapy-row"><div class="label">Rationale</div><div class="content">${therapy.rationale}</div></div>
+    <div class="therapy-row"><div class="label">Prognosis</div><div class="content">${therapy.prognosis}</div></div>
+    <div class="therapy-row"><div class="label">Additional</div><div class="content">${therapy.additional}</div></div>
   </div>
 </div>
 
-${report.notes ? `<div class="section"><div class="section-title">Clinical Notes</div><div class="notes">${report.notes}</div></div>` : ''}
+<!-- XAI Explainability -->
+${gate.image_weight != null ? `
+<div class="xai-box">
+  <div class="xai-title">Explainability — Modality Contribution</div>
+  <div class="gate-bar">
+    <div class="gate-img" style="width:${(gate.image_weight * 100).toFixed(0)}%">Image ${(gate.image_weight * 100).toFixed(0)}%</div>
+    <div class="gate-clin" style="width:${(gate.clinical_weight * 100).toFixed(0)}%">Clinical ${(gate.clinical_weight * 100).toFixed(0)}%</div>
+  </div>
+  <div class="gate-legend">
+    <span class="leg-img">Histopathology Image (CONCH features)</span>
+    <span class="leg-clin">Clinical Data (receptor, stage, age)</span>
+  </div>
+</div>
+` : ''}
 
-<div class="signature">
-  <div class="sig-line">Dr. ${doctor?.name || 'Attending Physician'}</div>
+<!-- Clinical Notes -->
+${report.notes ? `
+<div class="section">
+  <div class="section-title">Physician Notes</div>
+  <div class="notes-box">${report.notes}</div>
+</div>
+` : ''}
+
+<!-- Disclaimer -->
+<div class="disclaimer">
+  <strong>⚠️ Legal Disclaimer:</strong> This AI-generated report is intended as a <strong>diagnostic aid</strong> and must be reviewed by a licensed medical professional before making clinical decisions. The BReCAI system provides molecular subtype classification to assist in treatment planning — it does not replace professional medical judgement. All therapeutic recommendations should be validated by a multi-disciplinary oncology team.
 </div>
 
-<div class="footer">
-  <span>BRECAI-FED · Federated Medical AI Platform</span>
-  <span>Report generated: ${date}</span>
-  <span>Status: ${report.status === 'final' ? 'FINAL' : 'DRAFT'}</span>
+<!-- Footer -->
+<div class="report-footer">
+  <div class="footer-left">
+    <strong>BReCAI-FED</strong> — Federated Medical AI Platform<br/>
+    Report generated: ${date}<br/>
+    Status: ${report.status === 'final' ? '✅ FINALIZED' : '📝 DRAFT'}
+  </div>
+  <div class="footer-right">
+    <div class="sig-line">Dr. ${doctor?.name || 'Attending Physician'}</div>
+  </div>
 </div>
+
 </body>
 </html>`
 

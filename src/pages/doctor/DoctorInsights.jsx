@@ -165,8 +165,7 @@ export default function DoctorInsights() {
           { label: t('nav.patients'),     value: kpis?.my_patients ?? '—',    sub: 'registered',   to: '/app/doctor/patients',     color: 'blue',   icon: Users       },
           { label: t('nav.examinations'), value: kpis?.my_examinations ?? '—',sub: 'total',        to: '/app/doctor/examinations', color: 'amber',  icon: FileText    },
           { label: t('nav.predictions'),  value: kpis?.my_predictions ?? '—', sub: `${completionRate}% done`, to: '/app/doctor/predictions', color: 'pink', icon: Brain },
-          { label: t('nav.finalExam'),    value: kpis?.pending_examinations ?? '—', sub: 'pending review', to: '/app/doctor/exam', color: 'teal', icon: CheckCircle2 },
-          { label: t('nav.reports'),      value: kpis?.my_reports ?? '—',     sub: 'generated',    to: '/app/doctor/reports',      color: 'slate',  icon: BarChart3   },
+          { label: t('nav.reports'),      value: kpis?.my_reports ?? '—',     sub: 'generated',    to: '/app/doctor/reports',      color: 'teal',  icon: BarChart3   },
           { label: t('nav.xai'),          value: predResults?.total ?? '—',   sub: 'predictions',  to: '/app/doctor/xai',          color: 'violet', icon: Activity    },
         ].map(a => (
           <button key={a.to} onClick={() => navigate(a.to)}

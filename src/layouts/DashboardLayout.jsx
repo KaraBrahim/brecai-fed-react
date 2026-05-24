@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Stethoscope, Network, Building2, ShieldCheck,
+  Network, Building2, ShieldCheck,
   Bell, Settings, Menu, X,
   Activity, LayoutDashboard, Users, FileText,
   CreditCard, Brain, BarChart3, ChevronDown,
@@ -18,7 +18,6 @@ const doctorNav = [
   { labelKey: 'nav.patients',     path: '/app/doctor/patients',      icon: Users,          label: 'Patients' },
   { labelKey: 'nav.examinations', path: '/app/doctor/examinations',  icon: FileText,       label: 'Examinations' },
   { labelKey: 'nav.predictions',  path: '/app/doctor/predictions',   icon: Brain,          label: 'Predictions' },
-  { labelKey: 'nav.finalExam',    path: '/app/doctor/exam',          icon: Stethoscope,    label: 'Final Exam' },
   { labelKey: 'nav.reports',      path: '/app/doctor/reports',       icon: BarChart3,      label: 'Reports' },
   { labelKey: 'nav.xai',          path: '/app/doctor/xai',           icon: Activity,       label: 'XAI Lab' },
 ]
