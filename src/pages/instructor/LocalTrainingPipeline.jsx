@@ -224,18 +224,26 @@ export default function LocalTrainingPipeline() {
 
   /* ── Render ─────────────────────────────────────────────────── */
   return (
-    <div className="w-full min-h-screen py-8 px-4 md:px-8 lg:px-12">
+    <div className="w-full min-h-screen py-8 px-4 md:px-8 lg:px-12 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
       {/* Header */}
-      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-10">
-        <div className="flex items-center gap-3 mb-2">
-          <Terminal size={28} style={{ color: BRAND.blue }} />
-          <h1 className="text-2xl font-bold text-white">Local Training Pipeline</h1>
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-10 max-w-5xl">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})` }}>
+            <Terminal size={22} className="text-white" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-black text-white tracking-tight">Local Training Pipeline</h1>
+            <p className="text-slate-400 text-sm font-medium mt-0.5">Federated Learning · Step-by-step training execution</p>
+          </div>
         </div>
-        <p className="text-slate-400 text-sm">Execute the federated learning pipeline step-by-step on your local node. Demo mode — no real API calls.</p>
+        <div className="flex items-center gap-2 mt-4 px-3 py-2 rounded-lg bg-amber-950/30 border border-amber-800/40 inline-flex">
+          <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+          <span className="text-xs font-semibold text-amber-300">Demo mode — local execution simulation, no real API calls</span>
+        </div>
       </motion.div>
 
       {/* Pipeline */}
-      <div className="relative">
+      <div className="relative max-w-5xl">
         {/* Vertical line */}
         <div className="absolute left-4 top-4 bottom-4 w-0.5" style={{ background: `linear-gradient(to bottom, ${BRAND.blue}, ${BRAND.teal})` }} />
 
@@ -319,6 +327,23 @@ function ExecButton({ onClick, disabled, label = 'Execute', gradient }) {
 /* ── Step 1 Content ───────────────────────────────────────────── */
 function Step1Content({ config, setConfig, status, onRun }) {
   const modality = config.modality
+  const imageFolderRef = useRef(null)
+  const clinicalFileRef = useRef(null)
+
+  const handleImageFolderPick = (e) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+    // Get the folder path from the first file's webkitRelativePath
+    const folderName = files[0].webkitRelativePath.split('/')[0]
+    setConfig(p => ({ ...p, imagePath: folderName, imageFileCount: files.length }))
+  }
+
+  const handleClinicalFilePick = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setConfig(p => ({ ...p, clinicalPath: file.name, clinicalFile: file }))
+  }
+
   return (
     <div className="space-y-5">
       {/* Modality selector */}
@@ -354,19 +379,27 @@ function Step1Content({ config, setConfig, status, onRun }) {
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
               Image Patches Folder
             </label>
+            <input
+              ref={imageFolderRef}
+              type="file"
+              webkitdirectory=""
+              directory=""
+              multiple
+              onChange={handleImageFolderPick}
+              className="hidden"
+            />
             <div className="flex gap-2">
-              <input
-                value={config.imagePath || ''}
-                onChange={e => setConfig(p => ({ ...p, imagePath: e.target.value }))}
-                disabled={status !== STATUS.ready}
-                placeholder="/path/to/breakhis/malignant/"
-                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white font-mono focus:border-blue-500 focus:outline-none disabled:opacity-50"
-              />
+              <div className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white font-mono truncate">
+                {config.imagePath || <span className="text-slate-500">No folder selected</span>}
+                {config.imageFileCount && <span className="text-emerald-400 ml-2">({config.imageFileCount} files)</span>}
+              </div>
               <button
+                type="button"
+                onClick={() => imageFolderRef.current?.click()}
                 disabled={status !== STATUS.ready}
-                className="px-4 py-2.5 rounded-lg bg-slate-700 border border-slate-600 text-slate-300 text-xs font-bold hover:bg-slate-600 transition disabled:opacity-50"
+                className="px-4 py-2.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Browse
+                Browse Folder
               </button>
             </div>
             <p className="text-[10px] text-slate-500 mt-1">Folder containing patient subdirectories with patch images (PNG/JPG)</p>
@@ -378,22 +411,27 @@ function Step1Content({ config, setConfig, status, onRun }) {
             <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
               Clinical Data File
             </label>
+            <input
+              ref={clinicalFileRef}
+              type="file"
+              accept=".csv,.tsv,.xlsx,.xls"
+              onChange={handleClinicalFilePick}
+              className="hidden"
+            />
             <div className="flex gap-2">
-              <input
-                value={config.clinicalPath || ''}
-                onChange={e => setConfig(p => ({ ...p, clinicalPath: e.target.value }))}
-                disabled={status !== STATUS.ready}
-                placeholder="/path/to/clinical_data.csv"
-                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white font-mono focus:border-blue-500 focus:outline-none disabled:opacity-50"
-              />
+              <div className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white font-mono truncate">
+                {config.clinicalPath || <span className="text-slate-500">No file selected</span>}
+              </div>
               <button
+                type="button"
+                onClick={() => clinicalFileRef.current?.click()}
                 disabled={status !== STATUS.ready}
-                className="px-4 py-2.5 rounded-lg bg-slate-700 border border-slate-600 text-slate-300 text-xs font-bold hover:bg-slate-600 transition disabled:opacity-50"
+                className="px-4 py-2.5 rounded-lg bg-teal-600 text-white text-xs font-bold hover:bg-teal-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Upload
+                Upload File
               </button>
             </div>
-            <p className="text-[10px] text-slate-500 mt-1">CSV file with columns: patient_id, er_status, pr_status, her2_binary, age, stage_num, label</p>
+            <p className="text-[10px] text-slate-500 mt-1">CSV/Excel file with: patient_id, er_status, pr_status, her2_binary, age, stage_num, label</p>
           </div>
         )}
       </div>
