@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import {
   FileText, Trash2, RefreshCw, Search, ChevronLeft, ChevronRight,
-  Loader2, Brain, CheckCircle2, Clock, AlertTriangle, Eye, Zap,
+  Loader2, Brain, CheckCircle2, Clock, AlertTriangle, Eye, Zap, FileCheck2,
 } from 'lucide-react'
 import { stagger, fadeUp, SectionCard } from '@/components/shared'
 import { StatusPill, MetricTile } from '@/components/admin'
@@ -209,7 +209,7 @@ export default function ExaminationsList() {
                   {exam.status === 'predicted' && (
                     <button
                       onClick={() => navigate('/app/doctor/exam')}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-[#0572B2] text-xs font-black hover:bg-blue-100 transition"
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-teal-200 bg-teal-50 text-[#0BB592] text-xs font-black hover:bg-teal-100 transition"
                     >
                       <Eye className="w-3.5 h-3.5" /> Review
                     </button>
@@ -220,6 +220,14 @@ export default function ExaminationsList() {
                       className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-teal-200 bg-teal-50 text-[#0BB592] text-xs font-black hover:bg-teal-100 transition"
                     >
                       <Brain className="w-3.5 h-3.5" /> XAI
+                    </button>
+                  )}
+                  {exam.status === 'concluded' && (
+                    <button
+                      onClick={() => navigate('/app/doctor/reports')}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-teal-200 bg-teal-50 text-[#0BB592] text-xs font-black hover:bg-teal-100 transition"
+                    >
+                      <FileCheck2 className="w-3.5 h-3.5" /> Report
                     </button>
                   )}
                   {/* Show delete for all non-concluded exams */}

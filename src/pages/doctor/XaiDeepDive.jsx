@@ -3,6 +3,7 @@
  * Shows SHAP/attention data from completed predictions.
  */
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -17,6 +18,7 @@ import doctorApi from '@/api/api-client/doctor'
 
 export default function XaiDeepDive() {
   const t = useT()
+  const navigate = useNavigate()
   const [predictions, setPredictions] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedPredId, setSelectedPredId] = useState(null)
@@ -268,14 +270,61 @@ export default function XaiDeepDive() {
             </motion.div>
           )}
 
+          {/* Medical Interpretation */}
+          <motion.div variants={fadeUp} className="mt-5">
+            <SectionCard title="Clinical Interpretation" subtitle="AI-assisted molecular subtype analysis" icon={Brain} iconColor="blue">
+              <div className="px-5 pb-5 pt-3 space-y-4">
+                <div className={`rounded-xl p-4 border ${selectedPred?.is_lum_a ? 'bg-teal-50/50 border-teal-200' : 'bg-pink-50/50 border-pink-200'}`}>
+                  <p className="text-sm font-bold text-slate-900 mb-2">
+                    {selectedPred?.is_lum_a ? '✅ Luminal A Subtype Identified' : '⚠️ Non-Luminal A Subtype Identified'}
+                  </p>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    {selectedPred?.is_lum_a
+                      ? 'This tumour exhibits a Luminal A molecular profile characterized by strong hormone receptor positivity and low proliferative activity. Patients with this subtype typically have a favourable prognosis and respond well to endocrine therapy (Tamoxifen or Aromatase Inhibitors). Chemotherapy is usually not indicated.'
+                      : 'This tumour exhibits a Non-Luminal A molecular profile suggesting higher proliferative activity or reduced hormone receptor expression. This subtype may require more aggressive treatment including chemotherapy, targeted therapy, or combination approaches. Multi-disciplinary tumour board consultation is recommended.'}
+                  </p>
+                </div>
+                
+                {fusionGate && (
+                  <div className="rounded-xl bg-slate-50 border border-slate-200 p-4">
+                    <p className="text-xs font-bold text-slate-700 mb-1">Modality Analysis</p>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      The AI model weighted histopathology image features at {(fusionGate.image_weight * 100).toFixed(0)}% and clinical data at {(fusionGate.clinical_weight * 100).toFixed(0)}%.
+                      {fusionGate.image_weight > 0.6 
+                        ? ' The model relied more heavily on tissue morphology patterns for this classification.'
+                        : fusionGate.clinical_weight > 0.6
+                          ? ' The model relied more heavily on clinical markers (receptor status, stage) for this classification.'
+                          : ' Both modalities contributed equally to this classification.'}
+                    </p>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => navigate('/app/doctor/reports')}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-white text-sm font-black"
+                  style={{ background: 'linear-gradient(135deg, #093A7A, #0572B2)' }}
+                >
+                  <Zap className="w-4 h-4" />
+                  Generate Clinical Report
+                </button>
+              </div>
+            </SectionCard>
+          </motion.div>
+
           {/* No XAI data */}
           {topPatches.length === 0 && clinicalChartData.length === 0 && !fusionGate && (
             <div className="text-center py-12">
               <Brain className="w-12 h-12 text-slate-300 mx-auto mb-4" />
               <p className="text-slate-700 font-bold mb-2">Clinical-only prediction</p>
-              <p className="text-slate-400 text-sm font-medium max-w-sm mx-auto">
+              <p className="text-slate-400 text-sm font-medium max-w-sm mx-auto mb-4">
                 This prediction used clinical data only (no WSI image). XAI feature attribution is not available for clinical-only mode. Upload a slide image in the wizard to get patch attention heatmaps.
               </p>
+              <button
+                onClick={() => navigate('/app/doctor/predict')}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0572B2] text-white text-sm font-black hover:bg-[#0462a0] transition"
+              >
+                <Zap className="w-4 h-4" /> Run Prediction with Image
+              </button>
             </div>
           )}
         </>

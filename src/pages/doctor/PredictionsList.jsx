@@ -222,12 +222,12 @@ export default function PredictionsList() {
                     <BarChart3 className="w-3.5 h-3.5" /> XAI
                   </button>
                 )}
-                {pred.status === 'completed' && pred.examination?.status === 'predicted' && (
+                {pred.status === 'completed' && (
                   <button
-                    onClick={() => navigate('/app/doctor/exam')}
+                    onClick={() => navigate('/app/doctor/reports')}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-[#0572B2] text-xs font-black hover:bg-blue-100 transition"
                   >
-                    <Eye className="w-3.5 h-3.5" /> Review
+                    <Eye className="w-3.5 h-3.5" /> Report
                   </button>
                 )}
                 {pred.status === 'failed' && (
