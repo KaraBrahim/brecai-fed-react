@@ -1,5 +1,9 @@
 /**
  * Client-side dataset scanner — analyzes File[] arrays without uploading.
+ * 
+ * IMPORTANT: scanImageFolder uses ONLY file metadata (name, webkitRelativePath, size).
+ * It NEVER reads file contents (no FileReader, arrayBuffer, blob, text()).
+ * This makes scanning 5000+ images instant.
  */
 
 const REQUIRED_CLINICAL_COLUMNS = [
@@ -9,6 +13,11 @@ const REQUIRED_CLINICAL_COLUMNS = [
 const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.tif', '.tiff']
 
 /* ── Image folder scan ──────────────────────────────────────── */
+/**
+ * Scans image folder using ONLY filename metadata.
+ * Uses: f.name, f.webkitRelativePath, f.size
+ * NEVER uses: FileReader, arrayBuffer, blob, text()
+ */
 export function scanImageFolder(files) {
   if (!files || files.length === 0) {
     return { error: 'No files selected', total: 0 }
@@ -23,13 +32,15 @@ export function scanImageFolder(files) {
     return { error: 'No valid image files found (PNG, JPG, TIFF expected)', total: 0 }
   }
 
-  // Detect subfolders from webkitRelativePath
+  // Detect subfolders from webkitRelativePath (metadata only, no content reading)
   const folderCounts = {}
+  let totalSizeBytes = 0
   for (const f of imageFiles) {
     const path = f.webkitRelativePath || f.name
     const parts = path.split('/')
     const subfolder = parts.length > 2 ? parts[1] : '__root__'
     folderCounts[subfolder] = (folderCounts[subfolder] || 0) + 1
+    totalSizeBytes += f.size || 0
   }
 
   const subfolderNames = Object.keys(folderCounts).filter(n => n !== '__root__')
@@ -40,14 +51,14 @@ export function scanImageFolder(files) {
   const luma_count = lumaKey ? folderCounts[lumaKey] : 0
   const nonluma_count = nonLumaKey ? folderCounts[nonLumaKey] : 0
 
-  // Detect magnifications from filenames
+  // Detect magnifications from filenames (metadata only)
   const magSet = new Set()
   for (const f of imageFiles.slice(0, 200)) {
     const m = f.name.match(/[-_](40|100|200|400)[xX][-_.]/)
     if (m) magSet.add(`${m[1]}X`)
   }
 
-  // Sample filenames
+  // Sample filenames (metadata only)
   const sample_files = imageFiles.slice(0, 5).map(f => f.name)
 
   return {
@@ -60,10 +71,15 @@ export function scanImageFolder(files) {
     magnifications: Array.from(magSet),
     sample_files,
     folder_counts: folderCounts,
+    total_size_mb: Math.round(totalSizeBytes / (1024 * 1024)),
   }
 }
 
 /* ── CSV / Excel scan ───────────────────────────────────────── */
+/**
+ * Reads CSV text content (necessary to parse columns).
+ * This is fine since it's typically one small file.
+ */
 export async function scanClinicalFile(file) {
   if (!file) return { error: 'No file selected' }
 
@@ -73,7 +89,6 @@ export async function scanClinicalFile(file) {
   }
 
   if (ext === 'xlsx' || ext === 'xls') {
-    // Excel parsing requires extra deps — for now we rely on CSV.
     return {
       error: 'Excel parsing not yet supported in browser. Please convert to CSV.',
       filename: file.name,
@@ -96,7 +111,6 @@ export async function scanClinicalFile(file) {
     // Label distribution
     const labelIdx = columns.indexOf('label')
     let luma_count = 0, nonluma_count = 0, nulls = 0
-    let label_dist = 'unknown'
 
     for (const row of rows) {
       if (labelIdx >= 0) {
@@ -119,7 +133,7 @@ export async function scanClinicalFile(file) {
       }
     }
 
-    label_dist = `LumA: ${luma_count}, non-LumA: ${nonluma_count}`
+    const clinical_dist = `LumA: ${luma_count}, non-LumA: ${nonluma_count}`
 
     return {
       total: rows.length,
@@ -130,7 +144,7 @@ export async function scanClinicalFile(file) {
       missing_columns: missing,
       required_cols_ok,
       nulls: totalNulls,
-      clinical_dist: label_dist,
+      clinical_dist,
       sample_rows: rows.slice(0, 3),
       filename: file.name,
     }

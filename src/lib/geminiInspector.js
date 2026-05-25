@@ -1,13 +1,14 @@
 /**
  * Gemini 2.0 Flash data inspector for FL wizard.
  * Falls back to rule-based analysis if API fails.
+ * Includes machine resource awareness and training script recommendations.
  */
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent'
 
 const SYSTEM_PROMPT = `You are a medical AI data quality inspector for a federated learning platform that classifies breast cancer into LumA vs non-LumA subtypes.
 
-Analyze the provided dataset statistics and return a JSON response ONLY (no markdown, no prose) with this exact structure:
+Analyze the provided dataset statistics and machine resources, then return a JSON response ONLY (no markdown, no prose) with this exact structure:
 {
   "overall_status": "ready|warning|error",
   "summary": "2-3 sentence plain english summary",
@@ -16,12 +17,38 @@ Analyze the provided dataset statistics and return a JSON response ONLY (no mark
   ],
   "fl_suitability": "excellent|good|poor|unsuitable",
   "recommendations": ["rec1", "rec2", "rec3"],
-  "estimated_rounds": 5
+  "estimated_rounds": 5,
+  "recommended_script": {
+    "name": "train_resnet18_fl.py",
+    "reason": "Why this script is recommended based on dataset and resources",
+    "batch_size": 16,
+    "epochs": 3,
+    "lr": 0.001,
+    "augmentation": true,
+    "pretrained": true
+  },
+  "resource_warnings": ["warning about GPU memory", "warning about RAM"],
+  "estimated_training_time_minutes": 25
 }`
 
-export async function inspectDatasetWithGemini(stats) {
+export async function inspectDatasetWithGemini(stats, resources) {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY
-  if (!apiKey) return ruleBased(stats)
+  if (!apiKey) return ruleBased(stats, resources)
+
+  const resourceInfo = resources ? `
+- Machine OS: ${resources.os || 'Unknown'}
+- RAM total: ${resources.ram_total_gb || 'Unknown'} GB
+- RAM available: ${resources.ram_available_gb || 'Unknown'} GB
+- RAM usage: ${resources.ram_percent || 'Unknown'}%
+- CPU cores: ${resources.cpu_cores || 'Unknown'}
+- CPU usage: ${resources.cpu_percent || 'Unknown'}%
+- GPU available: ${resources.gpu?.available ? 'Yes' : 'No'}
+- GPU name: ${resources.gpu?.name || 'None'}
+- GPU VRAM: ${resources.gpu?.vram_gb || 0} GB
+- Disk free: ${resources.disk_free_gb || 'Unknown'} GB
+- Python available: ${resources.python || 'Unknown'}
+- Resource source: ${resources._source || 'Unknown'}` : `
+- Machine resources: Not available`
 
   const userMessage = `Dataset statistics:
 - Modality: ${stats.modality}
@@ -35,7 +62,9 @@ export async function inspectDatasetWithGemini(stats) {
 - Missing values: ${stats.nulls ?? 'n/a'}
 - Clinical label distribution: ${stats.clinical_dist || 'n/a'}
 - Folder structure valid: ${stats.structure_valid ?? 'n/a'}
-- Required columns present: ${stats.required_cols_ok ?? 'n/a'}`
+- Required columns present: ${stats.required_cols_ok ?? 'n/a'}
+
+Machine resources:${resourceInfo}`
 
   try {
     const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
@@ -57,11 +86,11 @@ export async function inspectDatasetWithGemini(stats) {
     return { ...parsed, _source: 'gemini' }
   } catch (err) {
     console.warn('[Gemini] inspection failed, falling back to rules:', err)
-    return ruleBased(stats)
+    return ruleBased(stats, resources)
   }
 }
 
-function ruleBased(stats) {
+function ruleBased(stats, resources) {
   const checks = []
   const recs = []
   let overall = 'ready'
@@ -150,13 +179,82 @@ function ruleBased(stats) {
       ? 'Dataset is usable but has minor issues that may affect training quality.'
       : 'Your dataset appears well-balanced and ready for federated learning.'
 
+  // Resource-aware recommended script
+  const hasGpu = resources?.gpu?.available
+  const ramGb = resources?.ram_available_gb || resources?.ram_total_gb || 4
+  const isImageModality = stats.modality === 'image_only' || stats.modality === 'multimodal'
+
+  let scriptName, scriptReason, recBatchSize, recEpochs, recLr, useAugmentation, usePretrained
+  const resourceWarnings = []
+
+  if (isImageModality) {
+    if (hasGpu && ramGb >= 8) {
+      scriptName = 'train_resnet50_fl.py'
+      scriptReason = 'GPU available with sufficient RAM — ResNet-50 for best accuracy'
+      recBatchSize = 32
+      recEpochs = 5
+      recLr = 0.001
+      usePretrained = true
+      useAugmentation = true
+    } else if (hasGpu) {
+      scriptName = 'train_resnet18_fl.py'
+      scriptReason = 'GPU available but limited RAM — lighter ResNet-18'
+      recBatchSize = 16
+      recEpochs = 3
+      recLr = 0.001
+      usePretrained = true
+      useAugmentation = true
+      resourceWarnings.push('Limited RAM may cause OOM with larger batch sizes')
+    } else {
+      scriptName = 'train_mobilenet_fl.py'
+      scriptReason = 'No GPU detected — MobileNet for CPU-friendly training'
+      recBatchSize = 8
+      recEpochs = 3
+      recLr = 0.0005
+      usePretrained = true
+      useAugmentation = false
+      resourceWarnings.push('No GPU detected — training will be significantly slower')
+      resourceWarnings.push('Augmentation disabled to reduce CPU load')
+    }
+  } else {
+    // Clinical only
+    scriptName = 'train_tabular_fl.py'
+    scriptReason = 'Clinical tabular data — lightweight gradient boosting + MLP approach'
+    recBatchSize = 64
+    recEpochs = 5
+    recLr = 0.001
+    usePretrained = false
+    useAugmentation = false
+  }
+
+  if (ramGb < 4) {
+    resourceWarnings.push('Very low available RAM — consider closing other applications')
+  }
+
+  // Estimate training time
+  const samplesPerSec = hasGpu ? 50 : 5
+  const totalSamples = stats.total || 100
+  const estRounds = overall === 'error' ? 0 : Math.max(3, Math.min(10, Math.ceil(50 / Math.max(totalSamples, 10)) * 5))
+  const estTimeMinutes = Math.ceil((totalSamples * recEpochs * estRounds) / (samplesPerSec * 60))
+
   return {
     overall_status: overall,
     summary,
     checks,
     fl_suitability: suitability,
     recommendations: recs,
-    estimated_rounds: overall === 'error' ? 0 : Math.max(3, Math.min(10, Math.ceil(50 / Math.max(stats.total || 50, 10)) * 5)),
+    estimated_rounds: estRounds,
+    recommended_script: {
+      name: scriptName,
+      reason: scriptReason,
+      batch_size: recBatchSize,
+      epochs: recEpochs,
+      lr: recLr,
+      augmentation: useAugmentation,
+      pretrained: usePretrained,
+    },
+    resource_warnings: resourceWarnings,
+    estimated_training_time_minutes: estTimeMinutes,
     _source: 'rules',
   }
 }

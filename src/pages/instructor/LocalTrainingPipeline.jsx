@@ -1,18 +1,21 @@
 /**
  * LocalTrainingPipeline.jsx — FL Wizard for instructor role.
  * 5-step guided flow: Modality → Data → Inspection → Config → Confirm.
+ * Wrapped with Round Status gating (Cases A/B/C/D).
  * Real Gemini-powered data inspection with rule-based fallback.
  */
-import { useState, useRef, useMemo } from 'react'
+import { useState, useRef, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Image as ImageIcon, FileSpreadsheet, Layers, ArrowRight, ArrowLeft,
   CheckCircle2, AlertTriangle, AlertCircle, Loader2, Download, FolderOpen,
   Upload, Sparkles, Settings, Send, Star, Clock, FileCheck2, X,
+  Shield, Cpu, HardDrive, Zap, Monitor, Activity,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { scanImageFolder, scanClinicalFile, downloadCsvTemplate } from '@/lib/datasetScanner'
 import { inspectDatasetWithGemini } from '@/lib/geminiInspector'
+import { fetchMachineResources, classifyResources } from '@/lib/resourceAgent'
 
 const BRAND = { blue: '#0572B2', teal: '#0BB592', pink: '#F55486', navy: '#093A7A' }
 
@@ -50,6 +53,267 @@ const MODALITIES = [
     color: BRAND.navy,
   },
 ]
+
+/* ── Round Status Screens ─────────────────────────────────── */
+function RoundStatusNoActive() {
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-center min-h-[60vh]">
+      <div className="bg-slate-900/60 border border-slate-700 rounded-2xl p-10 max-w-md text-center">
+        <div className="w-16 h-16 rounded-full mx-auto mb-5 flex items-center justify-center bg-slate-800 border-2 border-slate-600">
+          <Clock size={28} className="text-slate-400" />
+        </div>
+        <h2 className="text-2xl font-black text-white mb-2">No Active FL Round</h2>
+        <p className="text-sm text-slate-400 mb-6">There is no federated learning round currently in progress.</p>
+        <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4 text-left space-y-2">
+          <div className="flex justify-between">
+            <span className="text-xs text-slate-500 font-bold uppercase">Last Round</span>
+            <span className="text-xs text-slate-300 font-bold">Round #3 — Completed</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-xs text-slate-500 font-bold uppercase">Next Round</span>
+            <span className="text-xs text-slate-400 font-bold">TBD</span>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+function RoundStatusInvitation({ onAccept, onDecline }) {
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-center min-h-[60vh]">
+      <div className="bg-slate-900/60 border-2 border-blue-700/50 rounded-2xl p-10 max-w-lg text-center">
+        <div className="w-16 h-16 rounded-full mx-auto mb-5 flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})` }}>
+          <Send size={24} className="text-white" />
+        </div>
+        <h2 className="text-2xl font-black text-white mb-2">FL Round Invitation</h2>
+        <p className="text-sm text-slate-400 mb-6">You have been invited to participate in a new federated learning round.</p>
+        <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4 text-left space-y-2 mb-6">
+          <div className="flex justify-between">
+            <span className="text-xs text-slate-500 font-bold uppercase">Round</span>
+            <span className="text-xs text-blue-300 font-bold">#4</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-xs text-slate-500 font-bold uppercase">Model</span>
+            <span className="text-xs text-slate-300 font-bold">LumA Classifier v2</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-xs text-slate-500 font-bold uppercase">Deadline</span>
+            <span className="text-xs text-slate-300 font-bold">48 hours</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-xs text-slate-500 font-bold uppercase">Participants</span>
+            <span className="text-xs text-slate-300 font-bold">3 / 5 accepted</span>
+          </div>
+        </div>
+        <div className="flex gap-3 justify-center">
+          <button onClick={onDecline} className="px-5 py-2.5 rounded-xl border border-slate-600 text-slate-300 text-sm font-bold hover:bg-slate-800 transition">
+            Decline
+          </button>
+          <button onClick={onAccept} className="px-6 py-2.5 rounded-xl text-white font-bold text-sm hover:scale-[1.02] transition" style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})` }}>
+            Accept & Start
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+function RoundStatusCompleted() {
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-center min-h-[60vh]">
+      <div className="bg-slate-900/60 border-2 border-emerald-700/50 rounded-2xl p-10 max-w-lg text-center">
+        <div className="w-16 h-16 rounded-full mx-auto mb-5 flex items-center justify-center bg-emerald-950/60 border-2 border-emerald-600">
+          <CheckCircle2 size={28} className="text-emerald-400" />
+        </div>
+        <h2 className="text-2xl font-black text-white mb-2">Round Submission Complete</h2>
+        <p className="text-sm text-slate-400 mb-6">Your model weights have been submitted for this round.</p>
+        <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4 text-left space-y-3 mb-4">
+          <div className="flex justify-between items-start">
+            <span className="text-xs text-slate-500 font-bold uppercase">TX Hash</span>
+            <span className="text-[11px] text-emerald-300 font-mono break-all max-w-[200px] text-right">0x7f3a...b42d</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-xs text-slate-500 font-bold uppercase">Weights Hash</span>
+            <span className="text-[11px] text-slate-300 font-mono">sha256:e4c9...1fa8</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-xs text-slate-500 font-bold uppercase">Submitted</span>
+            <span className="text-xs text-slate-300 font-bold">2 hours ago</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-xs text-slate-500 font-bold uppercase">Aggregation</span>
+            <span className="text-xs text-amber-300 font-bold">Pending (2/5 received)</span>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+function RoundStatusDeclined({ onChangeDecision }) {
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-center min-h-[60vh]">
+      <div className="bg-slate-900/60 border border-slate-700 rounded-2xl p-10 max-w-md text-center">
+        <div className="w-16 h-16 rounded-full mx-auto mb-5 flex items-center justify-center bg-red-950/60 border-2 border-red-700">
+          <X size={28} className="text-red-400" />
+        </div>
+        <h2 className="text-2xl font-black text-white mb-2">Round Declined</h2>
+        <p className="text-sm text-slate-400 mb-6">You declined participation in Round #4.</p>
+        <button onClick={onChangeDecision} className="px-6 py-2.5 rounded-xl text-white font-bold text-sm hover:scale-[1.02] transition" style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})` }}>
+          Change Decision
+        </button>
+      </div>
+    </motion.div>
+  )
+}
+
+function RoundBanner() {
+  return (
+    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-6 bg-emerald-950/40 border border-emerald-700/50 rounded-xl px-4 py-2.5 flex items-center gap-3">
+      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+      <span className="text-sm font-bold text-emerald-300">Participating in Round #4</span>
+      <span className="text-xs text-slate-400 ml-auto">Deadline: 46h remaining</span>
+    </motion.div>
+  )
+}
+
+/* ── Resource Card ────────────────────────────────────────── */
+function ResourceCard({ resources, classification }) {
+  if (!resources) return null
+  const ramPercent = resources.ram_percent || 0
+  const ramColor = ramPercent > 80 ? 'bg-red-500' : ramPercent > 60 ? 'bg-amber-500' : 'bg-emerald-500'
+  const gpuAvailable = resources.gpu?.available
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-slate-900/60 border border-slate-700 rounded-2xl p-5 mb-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Monitor size={16} className="text-blue-400" />
+          <h3 className="font-black text-white text-sm">Machine Resources</h3>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+            resources._source === 'agent' ? 'text-emerald-300 bg-emerald-950/50 border-emerald-700' : 'text-amber-300 bg-amber-950/50 border-amber-700'
+          }`}>
+            {resources._source === 'agent' ? 'Agent' : 'Browser estimate'}
+          </span>
+          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+            classification === 'excellent' ? 'text-emerald-300 bg-emerald-950/50 border-emerald-700' :
+            classification === 'good' ? 'text-blue-300 bg-blue-950/50 border-blue-700' :
+            'text-amber-300 bg-amber-950/50 border-amber-700'
+          }`}>
+            {classification}
+          </span>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {/* RAM */}
+        <div className="bg-slate-800/60 rounded-xl p-3">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Activity size={12} className="text-blue-400" />
+            <span className="text-[10px] font-bold uppercase text-slate-500">RAM</span>
+          </div>
+          <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden mb-1">
+            <div className={`h-full ${ramColor} rounded-full transition-all`} style={{ width: `${ramPercent}%` }} />
+          </div>
+          <p className="text-xs text-slate-300 font-bold">{resources.ram_available_gb ?? '?'} GB free</p>
+        </div>
+        {/* CPU */}
+        <div className="bg-slate-800/60 rounded-xl p-3">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Cpu size={12} className="text-teal-400" />
+            <span className="text-[10px] font-bold uppercase text-slate-500">CPU</span>
+          </div>
+          <p className="text-lg font-black text-white">{resources.cpu_cores || '?'}</p>
+          <p className="text-[10px] text-slate-400">cores{resources.cpu_percent ? ` · ${resources.cpu_percent}%` : ''}</p>
+        </div>
+        {/* GPU */}
+        <div className="bg-slate-800/60 rounded-xl p-3">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Zap size={12} className={gpuAvailable ? 'text-emerald-400' : 'text-slate-500'} />
+            <span className="text-[10px] font-bold uppercase text-slate-500">GPU</span>
+          </div>
+          <p className={`text-xs font-bold ${gpuAvailable ? 'text-emerald-300' : 'text-slate-500'}`}>
+            {gpuAvailable ? 'Available' : 'Not detected'}
+          </p>
+          <p className="text-[10px] text-slate-400 truncate">{resources.gpu?.name || 'N/A'}</p>
+        </div>
+        {/* Disk */}
+        <div className="bg-slate-800/60 rounded-xl p-3">
+          <div className="flex items-center gap-1.5 mb-2">
+            <HardDrive size={12} className="text-purple-400" />
+            <span className="text-[10px] font-bold uppercase text-slate-500">Disk</span>
+          </div>
+          <p className="text-lg font-black text-white">{resources.disk_free_gb ?? '?'}</p>
+          <p className="text-[10px] text-slate-400">GB free</p>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+/* ── Recommended Script Card ──────────────────────────────── */
+function RecommendedScriptCard({ result }) {
+  const script = result?.recommended_script
+  const warnings = result?.resource_warnings || []
+  const estTime = result?.estimated_training_time_minutes
+  if (!script) return null
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-slate-900/60 border border-blue-700/40 rounded-2xl p-5 mt-5">
+      <div className="flex items-center gap-2 mb-4">
+        <Settings size={16} className="text-blue-400" />
+        <h3 className="font-black text-white text-sm">Recommended Training Script</h3>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Script</p>
+          <p className="text-sm font-bold text-blue-300 font-mono">{script.name}</p>
+          <p className="text-xs text-slate-400 mt-1">{script.reason}</p>
+        </div>
+        <div className="space-y-2">
+          <div className="flex justify-between">
+            <span className="text-xs text-slate-500">Batch Size</span>
+            <span className="text-xs font-bold text-white">{script.batch_size}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-xs text-slate-500">Epochs</span>
+            <span className="text-xs font-bold text-white">{script.epochs}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-xs text-slate-500">Learning Rate</span>
+            <span className="text-xs font-bold text-white">{script.lr}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-xs text-slate-500">Augmentation</span>
+            <span className={`text-xs font-bold ${script.augmentation ? 'text-emerald-300' : 'text-slate-400'}`}>{script.augmentation ? 'Yes' : 'No'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-xs text-slate-500">Pretrained</span>
+            <span className={`text-xs font-bold ${script.pretrained ? 'text-emerald-300' : 'text-slate-400'}`}>{script.pretrained ? 'Yes' : 'No'}</span>
+          </div>
+        </div>
+      </div>
+      {estTime && (
+        <div className="flex items-center gap-2 mb-3">
+          <Clock size={12} className="text-slate-400" />
+          <span className="text-xs text-slate-300">Estimated training time: <span className="font-bold text-white">~{estTime} min</span></span>
+        </div>
+      )}
+      {warnings.length > 0 && (
+        <div className="space-y-1.5">
+          {warnings.map((w, i) => (
+            <div key={i} className="flex items-start gap-2 text-xs">
+              <AlertTriangle size={12} className="text-amber-400 mt-0.5 shrink-0" />
+              <span className="text-amber-300">{w}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </motion.div>
+  )
+}
 
 /* ── Progress Bar ─────────────────────────────────────────── */
 function ProgressBar({ current }) {
@@ -105,10 +369,7 @@ function ModalityCard({ modality, selected, onClick }) {
         />
       )}
       <div className="relative">
-        <div
-          className="w-12 h-12 rounded-xl flex items-center justify-center mb-4"
-          style={{ background: `${modality.color}20`, color: modality.color }}
-        >
+        <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style={{ background: `${modality.color}20`, color: modality.color }}>
           <Icon size={22} />
         </div>
         <h3 className={`text-lg font-black mb-1 ${active ? 'text-white' : 'text-slate-200'}`}>{modality.title}</h3>
@@ -119,7 +380,6 @@ function ModalityCard({ modality, selected, onClick }) {
     </motion.button>
   )
 }
-
 
 /* ── Step 1: Modality Selection ───────────────────────────── */
 function Step1Modality({ modality, setModality, onNext }) {
@@ -187,25 +447,13 @@ function Step2Data({ modality, dataState, setDataState, onNext, onBack }) {
             <ImageIcon size={18} className="text-blue-400" />
             <h3 className="font-black text-white">Image Patches Folder</h3>
           </div>
-          <input
-            ref={folderRef}
-            type="file"
-            webkitdirectory=""
-            directory=""
-            multiple
-            onChange={handleFolderPick}
-            className="hidden"
-          />
+          <input ref={folderRef} type="file" webkitdirectory="" directory="" multiple onChange={handleFolderPick} className="hidden" />
           <div className="flex gap-3 mb-3">
             <div className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm font-mono text-white truncate min-h-[42px] flex items-center">
               {dataState.imageFolderName || <span className="text-slate-500">No folder selected</span>}
               {dataState.imageFiles?.length > 0 && <span className="ml-2 text-emerald-400 text-xs">({dataState.imageFiles.length} files)</span>}
             </div>
-            <button
-              type="button"
-              onClick={() => folderRef.current?.click()}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 transition"
-            >
+            <button type="button" onClick={() => folderRef.current?.click()} className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 transition">
               <FolderOpen size={14} /> Browse Folder
             </button>
           </div>
@@ -228,22 +476,12 @@ function Step2Data({ modality, dataState, setDataState, onNext, onBack }) {
             <FileSpreadsheet size={18} className="text-teal-400" />
             <h3 className="font-black text-white">Clinical Data File</h3>
           </div>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".csv,.tsv,.xlsx,.xls"
-            onChange={handleFilePick}
-            className="hidden"
-          />
+          <input ref={fileRef} type="file" accept=".csv,.tsv,.xlsx,.xls" onChange={handleFilePick} className="hidden" />
           <div className="flex gap-3 mb-3">
             <div className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm font-mono text-white truncate min-h-[42px] flex items-center">
               {dataState.clinicalFile ? dataState.clinicalFile.name : <span className="text-slate-500">No file selected</span>}
             </div>
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-teal-600 text-white text-xs font-bold hover:bg-teal-500 transition"
-            >
+            <button type="button" onClick={() => fileRef.current?.click()} className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-teal-600 text-white text-xs font-bold hover:bg-teal-500 transition">
               <Upload size={14} /> Upload File
             </button>
           </div>
@@ -252,10 +490,7 @@ function Step2Data({ modality, dataState, setDataState, onNext, onBack }) {
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Required columns</p>
               <p className="text-[11px] text-slate-400 font-mono">patient_id, er_status, pr_status, her2_binary, age, stage_num, label</p>
             </div>
-            <button
-              onClick={downloadCsvTemplate}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-600 text-slate-300 text-[11px] font-bold hover:bg-slate-800 transition shrink-0"
-            >
+            <button onClick={downloadCsvTemplate} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-600 text-slate-300 text-[11px] font-bold hover:bg-slate-800 transition shrink-0">
               <Download size={12} /> Template
             </button>
           </div>
@@ -276,19 +511,13 @@ function Step2Data({ modality, dataState, setDataState, onNext, onBack }) {
         <button onClick={onBack} className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-600 text-slate-300 text-sm font-bold hover:bg-slate-800 transition">
           <ArrowLeft size={16} /> Back
         </button>
-        <button
-          onClick={onNext}
-          disabled={!canProceed}
-          className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:scale-[1.02]"
-          style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})` }}
-        >
+        <button onClick={onNext} disabled={!canProceed} className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:scale-[1.02]" style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})` }}>
           Inspect Data <ArrowRight size={16} />
         </button>
       </div>
     </motion.div>
   )
 }
-
 
 /* ── Step 3: Inspection ───────────────────────────────────── */
 function CheckRow({ check }) {
@@ -328,7 +557,7 @@ function SuitabilityBadge({ level }) {
   )
 }
 
-function Step3Inspection({ modality, dataState, inspection, setInspection, runInspection, onNext, onBack, ackImbalance, setAckImbalance }) {
+function Step3Inspection({ modality, dataState, inspection, setInspection, runInspection, onNext, onBack, ackImbalance, setAckImbalance, resources, resourceClassification }) {
   const isLoading = inspection?.loading
   const result = inspection?.result
   const error = inspection?.error
@@ -349,16 +578,14 @@ function Step3Inspection({ modality, dataState, inspection, setInspection, runIn
         <p className="text-sm text-slate-400">Powered by Gemini 2.0 Flash. Falls back to rule-based checks if unavailable.</p>
       </div>
 
+      <ResourceCard resources={resources} classification={resourceClassification} />
+
       {!result && !isLoading && (
         <div className="bg-slate-900/60 border border-slate-700 rounded-2xl p-8 text-center">
           <Sparkles size={32} className="text-blue-400 mx-auto mb-4" />
           <p className="text-white font-bold mb-2">Ready to inspect your dataset</p>
           <p className="text-sm text-slate-400 mb-5">We'll scan your data locally and ask the AI to verify FL suitability.</p>
-          <button
-            onClick={runInspection}
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm hover:scale-[1.02] transition"
-            style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})` }}
-          >
+          <button onClick={runInspection} className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm hover:scale-[1.02] transition" style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})` }}>
             <Sparkles size={16} /> Start Inspection
           </button>
         </div>
@@ -438,15 +665,12 @@ function Step3Inspection({ modality, dataState, inspection, setInspection, runIn
               </div>
             )}
 
+            <RecommendedScriptCard result={result} />
+
             {isImbalanced && (
               <div className="bg-red-950/30 border-2 border-red-800/60 rounded-xl p-4">
                 <label className="flex items-start gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={ackImbalance}
-                    onChange={e => setAckImbalance(e.target.checked)}
-                    className="mt-1 w-4 h-4 accent-red-500"
-                  />
+                  <input type="checkbox" checked={ackImbalance} onChange={e => setAckImbalance(e.target.checked)} className="mt-1 w-4 h-4 accent-red-500" />
                   <div>
                     <p className="text-sm font-bold text-red-200">Acknowledge data imbalance</p>
                     <p className="text-xs text-red-400/80 mt-1">I understand my data is imbalanced and FL training results may be unreliable. I want to proceed anyway for demonstration purposes.</p>
@@ -463,12 +687,7 @@ function Step3Inspection({ modality, dataState, inspection, setInspection, runIn
           <ArrowLeft size={16} /> Back
         </button>
         {result && (
-          <button
-            onClick={onNext}
-            disabled={!canProceed}
-            className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:scale-[1.02]"
-            style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})` }}
-          >
+          <button onClick={onNext} disabled={!canProceed} className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:scale-[1.02]" style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})` }}>
             Configure FL <ArrowRight size={16} />
           </button>
         )}
@@ -476,7 +695,6 @@ function Step3Inspection({ modality, dataState, inspection, setInspection, runIn
     </motion.div>
   )
 }
-
 
 /* ── Step 4: FL Configuration ─────────────────────────────── */
 function Step4Config({ flConfig, setFlConfig, onNext, onBack }) {
@@ -490,46 +708,28 @@ function Step4Config({ flConfig, setFlConfig, onNext, onBack }) {
       </div>
 
       <div className="bg-slate-900/60 border border-slate-700 rounded-2xl p-6 space-y-5">
-        {/* Number of rounds */}
         <div>
           <div className="flex justify-between items-center mb-2">
             <label className="text-sm font-bold text-white">Number of Rounds</label>
             <span className="text-lg font-black text-blue-400 font-mono">{flConfig.rounds}</span>
           </div>
-          <input
-            type="range" min={1} max={20} value={flConfig.rounds}
-            onChange={e => updateField('rounds', Number(e.target.value))}
-            className="w-full accent-blue-500"
-          />
-          <div className="flex justify-between text-[10px] text-slate-500 mt-1">
-            <span>1</span><span>20</span>
-          </div>
+          <input type="range" min={1} max={20} value={flConfig.rounds} onChange={e => updateField('rounds', Number(e.target.value))} className="w-full accent-blue-500" />
+          <div className="flex justify-between text-[10px] text-slate-500 mt-1"><span>1</span><span>20</span></div>
         </div>
 
-        {/* Local epochs */}
         <div>
           <div className="flex justify-between items-center mb-2">
             <label className="text-sm font-bold text-white">Local Epochs per Round</label>
             <span className="text-lg font-black text-teal-400 font-mono">{flConfig.epochs}</span>
           </div>
-          <input
-            type="range" min={1} max={10} value={flConfig.epochs}
-            onChange={e => updateField('epochs', Number(e.target.value))}
-            className="w-full accent-teal-500"
-          />
-          <div className="flex justify-between text-[10px] text-slate-500 mt-1">
-            <span>1</span><span>10</span>
-          </div>
+          <input type="range" min={1} max={10} value={flConfig.epochs} onChange={e => updateField('epochs', Number(e.target.value))} className="w-full accent-teal-500" />
+          <div className="flex justify-between text-[10px] text-slate-500 mt-1"><span>1</span><span>10</span></div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-bold text-white mb-2">Learning Rate</label>
-            <select
-              value={flConfig.lr}
-              onChange={e => updateField('lr', e.target.value)}
-              className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white focus:border-blue-500 focus:outline-none"
-            >
+            <select value={flConfig.lr} onChange={e => updateField('lr', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white focus:border-blue-500 focus:outline-none">
               <option value="0.0001">0.0001</option>
               <option value="0.0005">0.0005</option>
               <option value="0.001">0.001 (default)</option>
@@ -537,39 +737,25 @@ function Step4Config({ flConfig, setFlConfig, onNext, onBack }) {
               <option value="0.01">0.01</option>
             </select>
           </div>
-
           <div>
             <label className="block text-sm font-bold text-white mb-2">Batch Size</label>
-            <select
-              value={flConfig.batchSize}
-              onChange={e => updateField('batchSize', Number(e.target.value))}
-              className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white focus:border-blue-500 focus:outline-none"
-            >
+            <select value={flConfig.batchSize} onChange={e => updateField('batchSize', Number(e.target.value))} className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white focus:border-blue-500 focus:outline-none">
               <option value={8}>8</option>
               <option value={16}>16 (default)</option>
               <option value={32}>32</option>
+              <option value={64}>64</option>
             </select>
           </div>
-
           <div>
             <label className="block text-sm font-bold text-white mb-2">Aggregation Strategy</label>
-            <select
-              value={flConfig.aggregation}
-              onChange={e => updateField('aggregation', e.target.value)}
-              className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white focus:border-blue-500 focus:outline-none"
-            >
+            <select value={flConfig.aggregation} onChange={e => updateField('aggregation', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white focus:border-blue-500 focus:outline-none">
               <option value="FedAvg">FedAvg (default)</option>
               <option value="FedProx">FedProx (heterogeneous data)</option>
             </select>
           </div>
-
           <div>
             <label className="block text-sm font-bold text-white mb-2">Contribution Weight</label>
-            <select
-              value={flConfig.weight}
-              onChange={e => updateField('weight', e.target.value)}
-              className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white focus:border-blue-500 focus:outline-none"
-            >
+            <select value={flConfig.weight} onChange={e => updateField('weight', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white focus:border-blue-500 focus:outline-none">
               <option value="auto">Auto (based on data size)</option>
               <option value="equal">Equal weighting</option>
             </select>
@@ -581,11 +767,7 @@ function Step4Config({ flConfig, setFlConfig, onNext, onBack }) {
         <button onClick={onBack} className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-600 text-slate-300 text-sm font-bold hover:bg-slate-800 transition">
           <ArrowLeft size={16} /> Back
         </button>
-        <button
-          onClick={onNext}
-          className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm transition-all hover:scale-[1.02]"
-          style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})` }}
-        >
+        <button onClick={onNext} className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm transition-all hover:scale-[1.02]" style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})` }}>
           Review & Confirm <ArrowRight size={16} />
         </button>
       </div>
@@ -593,27 +775,20 @@ function Step4Config({ flConfig, setFlConfig, onNext, onBack }) {
   )
 }
 
-
 /* ── Step 5: Confirm & Register ───────────────────────────── */
 function Step5Confirm({ modality, dataState, scanResults, inspection, flConfig, hospitalName, onBack, onSubmit, registered }) {
   const result = inspection?.result
   const lumaCount = scanResults?.image?.luma_count ?? scanResults?.clinical?.luma_count ?? 0
   const nonLumaCount = scanResults?.image?.nonluma_count ?? scanResults?.clinical?.nonluma_count ?? 0
   const total = scanResults?.image?.total ?? scanResults?.clinical?.total ?? 0
-  const estTimeMin = (flConfig.rounds * flConfig.epochs * Math.max(2, Math.ceil(total / 50))).toFixed(0)
-
+  const estTimeMin = result?.estimated_training_time_minutes || (flConfig.rounds * flConfig.epochs * Math.max(2, Math.ceil(total / 50))).toFixed(0)
   const modLabel = MODALITIES.find(m => m.id === modality)?.title || modality
 
   if (registered) {
     return (
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
         <div className="bg-gradient-to-br from-blue-950/60 to-emerald-950/40 border border-blue-700/50 rounded-2xl p-10 text-center">
-          <motion.div
-            animate={{ scale: [1, 1.1, 1] }}
-            transition={{ duration: 2, repeat: Infinity }}
-            className="w-16 h-16 rounded-full mx-auto mb-5 flex items-center justify-center"
-            style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})` }}
-          >
+          <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ duration: 2, repeat: Infinity }} className="w-16 h-16 rounded-full mx-auto mb-5 flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})` }}>
             <Clock size={28} className="text-white" />
           </motion.div>
           <h3 className="text-2xl font-black text-white mb-2">Registration Complete</h3>
@@ -643,12 +818,8 @@ function Step5Confirm({ modality, dataState, scanResults, inspection, flConfig, 
         <div className="p-6 space-y-4">
           <SummaryRow label="Hospital" value={hospitalName} />
           <SummaryRow label="Modality" value={modLabel} />
-          {modality !== 'clinical_only' && (
-            <SummaryRow label="Images" value={`${total} (LumA: ${lumaCount}, non-LumA: ${nonLumaCount})`} />
-          )}
-          {modality !== 'image_only' && scanResults?.clinical && (
-            <SummaryRow label="Clinical Records" value={`${scanResults.clinical.total ?? 0} rows`} />
-          )}
+          {modality !== 'clinical_only' && <SummaryRow label="Images" value={`${total} (LumA: ${lumaCount}, non-LumA: ${nonLumaCount})`} />}
+          {modality !== 'image_only' && scanResults?.clinical && <SummaryRow label="Clinical Records" value={`${scanResults.clinical.total ?? 0} rows`} />}
           <div className="h-px bg-slate-700 my-3" />
           <SummaryRow label="Rounds" value={flConfig.rounds} />
           <SummaryRow label="Epochs per round" value={flConfig.epochs} />
@@ -659,10 +830,7 @@ function Step5Confirm({ modality, dataState, scanResults, inspection, flConfig, 
           <div className="h-px bg-slate-700 my-3" />
           <div className="flex justify-between items-center">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Data Quality</span>
-            <span className={`text-sm font-black ${
-              result?.overall_status === 'ready' ? 'text-emerald-400' :
-              result?.overall_status === 'warning' ? 'text-amber-400' : 'text-red-400'
-            }`}>
+            <span className={`text-sm font-black ${result?.overall_status === 'ready' ? 'text-emerald-400' : result?.overall_status === 'warning' ? 'text-amber-400' : 'text-red-400'}`}>
               {result?.overall_status === 'ready' ? 'Ready' : result?.overall_status === 'warning' ? 'Acceptable' : 'Issues detected'}
             </span>
           </div>
@@ -674,11 +842,7 @@ function Step5Confirm({ modality, dataState, scanResults, inspection, flConfig, 
         <button onClick={onBack} className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-600 text-slate-300 text-sm font-bold hover:bg-slate-800 transition">
           <ArrowLeft size={16} /> Back
         </button>
-        <button
-          onClick={onSubmit}
-          className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-black text-sm transition-all hover:scale-[1.02] shadow-lg shadow-emerald-500/20"
-          style={{ background: 'linear-gradient(135deg, #059669, #0BB592)' }}
-        >
+        <button onClick={onSubmit} className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-black text-sm transition-all hover:scale-[1.02] shadow-lg shadow-emerald-500/20" style={{ background: 'linear-gradient(135deg, #059669, #0BB592)' }}>
           <Send size={16} /> Register & Wait
         </button>
       </div>
@@ -695,10 +859,31 @@ function SummaryRow({ label, value }) {
   )
 }
 
+/* ── Dev Toggle (only in dev mode) ────────────────────────── */
+function DevRoundToggle({ roundStatus, setRoundStatus }) {
+  if (import.meta.env.PROD) return null
+  const statuses = ['loading', 'no_active', 'invitation', 'accepted', 'completed', 'declined']
+  return (
+    <div className="fixed bottom-4 right-4 z-50 bg-slate-800 border border-slate-600 rounded-xl p-3 shadow-2xl">
+      <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-2">Dev: Round Status</p>
+      <div className="flex flex-wrap gap-1">
+        {statuses.map(s => (
+          <button key={s} onClick={() => setRoundStatus(s)} className={`text-[10px] px-2 py-1 rounded font-bold transition ${roundStatus === s ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-400 hover:text-white'}`}>
+            {s}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /* ── Main Component ───────────────────────────────────────── */
 export default function LocalTrainingPipeline() {
   const { user } = useAuthStore()
   const hospitalName = user?.organization?.name || 'Your Hospital'
+
+  // Round status gating — default to 'accepted' for demo
+  const [roundStatus, setRoundStatus] = useState('accepted')
 
   const [step, setStep] = useState(1)
   const [modality, setModality] = useState(null)
@@ -713,6 +898,18 @@ export default function LocalTrainingPipeline() {
     aggregation: 'FedAvg', weight: 'auto',
   })
   const [registered, setRegistered] = useState(false)
+  const [resources, setResources] = useState(null)
+  const [resourceClassification, setResourceClassification] = useState('unknown')
+
+  // Auto-fetch resources when entering step 3
+  useEffect(() => {
+    if (step === 3 && !resources) {
+      fetchMachineResources().then(res => {
+        setResources(res)
+        setResourceClassification(classifyResources(res))
+      })
+    }
+  }, [step, resources])
 
   const runInspection = async () => {
     setInspection({ loading: true, result: null, error: null })
@@ -732,7 +929,6 @@ export default function LocalTrainingPipeline() {
 
       setScanResults({ image: imgScan, clinical: clinScan })
 
-      // Build stats payload
       const stats = {
         modality,
         total: imgScan?.total ?? clinScan?.total,
@@ -748,18 +944,76 @@ export default function LocalTrainingPipeline() {
         required_cols_ok: clinScan?.required_cols_ok,
       }
 
-      const result = await inspectDatasetWithGemini(stats)
+      // Pass resources to Gemini inspector
+      const result = await inspectDatasetWithGemini(stats, resources)
       setInspection({ loading: false, result, error: null })
+
+      // Auto-fill Step 4 config from recommended_script
+      if (result?.recommended_script) {
+        const rec = result.recommended_script
+        setFlConfig(prev => ({
+          ...prev,
+          epochs: rec.epochs || prev.epochs,
+          batchSize: rec.batch_size || prev.batchSize,
+          lr: String(rec.lr || prev.lr),
+        }))
+      }
     } catch (e) {
       setInspection({ loading: false, result: null, error: e.message })
     }
   }
 
   const handleSubmit = () => {
-    // TODO: POST to /api/fl/register-client when backend is ready
     setRegistered(true)
   }
 
+  // Round status gating
+  if (roundStatus === 'loading') {
+    return (
+      <div className="w-full min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+        <Loader2 size={36} className="text-blue-400 animate-spin" />
+        <DevRoundToggle roundStatus={roundStatus} setRoundStatus={setRoundStatus} />
+      </div>
+    )
+  }
+
+  if (roundStatus === 'no_active') {
+    return (
+      <div className="w-full min-h-screen py-8 px-4 md:px-8 lg:px-12 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+        <RoundStatusNoActive />
+        <DevRoundToggle roundStatus={roundStatus} setRoundStatus={setRoundStatus} />
+      </div>
+    )
+  }
+
+  if (roundStatus === 'invitation') {
+    return (
+      <div className="w-full min-h-screen py-8 px-4 md:px-8 lg:px-12 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+        <RoundStatusInvitation onAccept={() => setRoundStatus('accepted')} onDecline={() => setRoundStatus('declined')} />
+        <DevRoundToggle roundStatus={roundStatus} setRoundStatus={setRoundStatus} />
+      </div>
+    )
+  }
+
+  if (roundStatus === 'completed') {
+    return (
+      <div className="w-full min-h-screen py-8 px-4 md:px-8 lg:px-12 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+        <RoundStatusCompleted />
+        <DevRoundToggle roundStatus={roundStatus} setRoundStatus={setRoundStatus} />
+      </div>
+    )
+  }
+
+  if (roundStatus === 'declined') {
+    return (
+      <div className="w-full min-h-screen py-8 px-4 md:px-8 lg:px-12 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+        <RoundStatusDeclined onChangeDecision={() => setRoundStatus('invitation')} />
+        <DevRoundToggle roundStatus={roundStatus} setRoundStatus={setRoundStatus} />
+      </div>
+    )
+  }
+
+  // Case C: accepted — show banner + wizard
   return (
     <div className="w-full min-h-screen py-8 px-4 md:px-8 lg:px-12 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
       {/* Header */}
@@ -776,33 +1030,19 @@ export default function LocalTrainingPipeline() {
       </motion.div>
 
       <div className="max-w-5xl">
+        <RoundBanner />
         <ProgressBar current={step} />
 
         <AnimatePresence mode="wait">
-          {step === 1 && (
-            <Step1Modality key="s1" modality={modality} setModality={setModality} onNext={() => setStep(2)} />
-          )}
-          {step === 2 && (
-            <Step2Data key="s2" modality={modality} dataState={dataState} setDataState={setDataState}
-              onNext={() => { setStep(3); }} onBack={() => setStep(1)} />
-          )}
-          {step === 3 && (
-            <Step3Inspection key="s3" modality={modality} dataState={dataState}
-              inspection={inspection} setInspection={setInspection} runInspection={runInspection}
-              ackImbalance={ackImbalance} setAckImbalance={setAckImbalance}
-              onNext={() => setStep(4)} onBack={() => setStep(2)} />
-          )}
-          {step === 4 && (
-            <Step4Config key="s4" flConfig={flConfig} setFlConfig={setFlConfig}
-              onNext={() => setStep(5)} onBack={() => setStep(3)} />
-          )}
-          {step === 5 && (
-            <Step5Confirm key="s5" modality={modality} dataState={dataState} scanResults={scanResults}
-              inspection={inspection} flConfig={flConfig} hospitalName={hospitalName}
-              onBack={() => setStep(4)} onSubmit={handleSubmit} registered={registered} />
-          )}
+          {step === 1 && <Step1Modality key="s1" modality={modality} setModality={setModality} onNext={() => setStep(2)} />}
+          {step === 2 && <Step2Data key="s2" modality={modality} dataState={dataState} setDataState={setDataState} onNext={() => setStep(3)} onBack={() => setStep(1)} />}
+          {step === 3 && <Step3Inspection key="s3" modality={modality} dataState={dataState} inspection={inspection} setInspection={setInspection} runInspection={runInspection} ackImbalance={ackImbalance} setAckImbalance={setAckImbalance} resources={resources} resourceClassification={resourceClassification} onNext={() => setStep(4)} onBack={() => setStep(2)} />}
+          {step === 4 && <Step4Config key="s4" flConfig={flConfig} setFlConfig={setFlConfig} onNext={() => setStep(5)} onBack={() => setStep(3)} />}
+          {step === 5 && <Step5Confirm key="s5" modality={modality} dataState={dataState} scanResults={scanResults} inspection={inspection} flConfig={flConfig} hospitalName={hospitalName} onBack={() => setStep(4)} onSubmit={handleSubmit} registered={registered} />}
         </AnimatePresence>
       </div>
+
+      <DevRoundToggle roundStatus={roundStatus} setRoundStatus={setRoundStatus} />
     </div>
   )
 }
