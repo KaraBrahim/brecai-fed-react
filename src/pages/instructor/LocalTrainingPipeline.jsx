@@ -159,7 +159,7 @@ function RoundStatusDeclined({ onChangeDecision }) {
           <X size={28} className="text-red-400" />
         </div>
         <h2 className="text-2xl font-black text-white mb-2">Round Declined</h2>
-        <p className="text-sm text-slate-400 mb-6">You declined participation in Round #4.</p>
+        <p className="text-sm text-slate-400 mb-6">You declined participation in this round.</p>
         <button onClick={onChangeDecision} className="px-6 py-2.5 rounded-xl text-white font-bold text-sm hover:scale-[1.02] transition" style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})` }}>
           Change Decision
         </button>
@@ -168,12 +168,17 @@ function RoundStatusDeclined({ onChangeDecision }) {
   )
 }
 
-function RoundBanner() {
+function RoundBanner({ roundData }) {
+  const num = roundData?.round?.round_number ?? '—'
   return (
     <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-6 bg-emerald-950/40 border border-emerald-700/50 rounded-xl px-4 py-2.5 flex items-center gap-3">
       <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-      <span className="text-sm font-bold text-emerald-300">Participating in Round #4</span>
-      <span className="text-xs text-slate-400 ml-auto">Deadline: 46h remaining</span>
+      <span className="text-sm font-bold text-emerald-300">Participating in Round #{num}</span>
+      {roundData?.participation && (
+        <span className="text-xs text-slate-400 ml-auto">
+          {roundData.participation.accepted}/{roundData.participation.total_invited} hospitals accepted
+        </span>
+      )}
     </motion.div>
   )
 }
@@ -882,8 +887,29 @@ export default function LocalTrainingPipeline() {
   const { user } = useAuthStore()
   const hospitalName = user?.organization?.name || 'Your Hospital'
 
-  // Round status gating — default to 'accepted' for demo
-  const [roundStatus, setRoundStatus] = useState('accepted')
+  // Round status from real API
+  const [roundStatus, setRoundStatus] = useState('loading')
+  const [roundData, setRoundData] = useState(null)
+
+  // Fetch current round on mount
+  useEffect(() => {
+    let cancelled = false
+    import('@/api/api-client/instructor').then(({ default: instructor }) => {
+      instructor.rounds.current()
+        .then(data => {
+          if (cancelled) return
+          setRoundData(data)
+          if (data.state === 'no_active') setRoundStatus('no_active')
+          else if (data.state === 'invitation') setRoundStatus('invitation')
+          else if (data.state === 'accepted') setRoundStatus('accepted')
+          else if (data.state === 'declined') setRoundStatus('declined')
+          else if (data.state === 'completed') setRoundStatus('completed')
+          else setRoundStatus('no_active')
+        })
+        .catch(() => { if (!cancelled) setRoundStatus('no_active') })
+    })
+    return () => { cancelled = true }
+  }, [])
 
   const [step, setStep] = useState(1)
   const [modality, setModality] = useState(null)
@@ -1030,7 +1056,7 @@ export default function LocalTrainingPipeline() {
       </motion.div>
 
       <div className="max-w-5xl">
-        <RoundBanner />
+        <RoundBanner roundData={roundData} />
         <ProgressBar current={step} />
 
         <AnimatePresence mode="wait">

@@ -17,6 +17,7 @@ import SignUpPage from '@/pages/auth/SignUpPage'
 import OtpPage    from '@/pages/auth/OtpPage'
 import PendingPage from '@/pages/auth/PendingPage'
 import InstructorInvitePage from '@/pages/auth/InstructorInvitePage'
+import FlInvitePage from '@/pages/auth/FlInvitePage'
 
 // Doctor
 import DoctorInsights    from '@/pages/doctor/DoctorInsights'
@@ -105,6 +106,12 @@ export const router = createBrowserRouter([
       {
         path: '/auth/invite/:token',
         element: <InstructorInvitePage />,
+      },
+
+      // ── FL round invitation — public, token-based, no auth required ──
+      {
+        path: '/fl-invite/:token',
+        element: <FlInvitePage />,
       },
 
       // ── Org gate pages — full-screen, NO DashboardLayout ───

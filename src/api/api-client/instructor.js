@@ -117,6 +117,16 @@ const instructor = {
     complete(id, data) {
       return client.post(`/fl/rounds/${id}/complete`, data).then((r) => r.data);
     },
+
+    /** GET /api/fl/rounds/current — instructor's current invitation/round state */
+    current() {
+      return client.get('/fl/rounds/current').then((r) => r.data);
+    },
+
+    /** POST /api/fl/rounds/submit-contribution — submit local training result */
+    submitContribution(data) {
+      return client.post('/fl/rounds/submit-contribution', data).then((r) => r.data);
+    },
   },
 
   // ─── Contributions ───────────────────────────────────────────────────────────
