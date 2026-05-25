@@ -1,573 +1,808 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+/**
+ * LocalTrainingPipeline.jsx — FL Wizard for instructor role.
+ * 5-step guided flow: Modality → Data → Inspection → Config → Confirm.
+ * Real Gemini-powered data inspection with rule-based fallback.
+ */
+import { useState, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Terminal, Database, Cpu, Brain, ShieldCheck, Upload,
-  CheckCircle2, Lock, Play, Loader2, Copy, Check,
+  Image as ImageIcon, FileSpreadsheet, Layers, ArrowRight, ArrowLeft,
+  CheckCircle2, AlertTriangle, AlertCircle, Loader2, Download, FolderOpen,
+  Upload, Sparkles, Settings, Send, Star, Clock, FileCheck2, X,
 } from 'lucide-react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { useAuthStore } from '@/stores/authStore'
+import { scanImageFolder, scanClinicalFile, downloadCsvTemplate } from '@/lib/datasetScanner'
+import { inspectDatasetWithGemini } from '@/lib/geminiInspector'
 
-/* ── Constants ────────────────────────────────────────────────── */
 const BRAND = { blue: '#0572B2', teal: '#0BB592', pink: '#F55486', navy: '#093A7A' }
 
-const STEP_META = [
-  { id: 1, title: 'Data Configuration',      icon: Database,    color: BRAND.blue },
-  { id: 2, title: 'Feature Extraction',      icon: Cpu,         color: BRAND.teal },
-  { id: 3, title: 'Local Training',          icon: Brain,       color: BRAND.pink },
-  { id: 4, title: 'Validation & Hashing',    icon: ShieldCheck, color: BRAND.navy },
-  { id: 5, title: 'Submit Weights',          icon: Upload,      color: BRAND.blue },
+const STEPS = [
+  { id: 1, title: 'Modality',     short: 'Select data type' },
+  { id: 2, title: 'Data',         short: 'Provide your dataset' },
+  { id: 3, title: 'Inspection',   short: 'AI quality check' },
+  { id: 4, title: 'Configuration',short: 'FL hyperparameters' },
+  { id: 5, title: 'Confirm',      short: 'Register & wait' },
 ]
 
-const STATUS = { locked: 'locked', ready: 'ready', running: 'running', done: 'done' }
+const MODALITIES = [
+  {
+    id: 'image_only',
+    title: 'Image Only',
+    desc: 'Histopathology patches only',
+    icon: ImageIcon,
+    needs: 'Image folder',
+    color: BRAND.blue,
+  },
+  {
+    id: 'clinical_only',
+    title: 'Clinical Only',
+    desc: 'Patient records only',
+    icon: FileSpreadsheet,
+    needs: 'CSV / Excel file',
+    color: BRAND.teal,
+  },
+  {
+    id: 'multimodal',
+    title: 'Multimodal',
+    desc: 'Images + Clinical data',
+    icon: Layers,
+    needs: 'Both folder & file',
+    color: BRAND.navy,
+  },
+]
 
-/* ── Helpers ──────────────────────────────────────────────────── */
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
-
-function TerminalBlock({ lines, termRef }) {
+/* ── Progress Bar ─────────────────────────────────────────── */
+function ProgressBar({ current }) {
   return (
-    <div
-      ref={termRef}
-      className="bg-[#0f172a] rounded-2xl p-4 font-mono text-sm max-h-64 overflow-y-auto mt-4 border border-slate-700/50"
-    >
-      {lines.map((l, i) => (
-        <div key={i} className={`leading-6 ${
-          l.type === 'success' ? 'text-emerald-400' :
-          l.type === 'error'   ? 'text-red-400' :
-          l.type === 'progress'? 'text-cyan-300' :
-          'text-slate-300'
-        }`}>
-          {l.text}
-        </div>
-      ))}
-      {lines.length === 0 && <span className="text-slate-500">Waiting for execution...</span>}
-    </div>
-  )
-}
-
-function StepCircle({ status, color, index }) {
-  const base = 'w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all duration-300 z-10'
-  if (status === STATUS.done) return <div className={base} style={{ background: color, borderColor: color, color: '#fff' }}><CheckCircle2 size={16} /></div>
-  if (status === STATUS.running) return (
-    <div className={`${base} border-transparent`} style={{ borderColor: color, color }}>
-      <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 1.2, repeat: Infinity }} className="w-3 h-3 rounded-full" style={{ background: color }} />
-    </div>
-  )
-  if (status === STATUS.ready) return <div className={base} style={{ borderColor: color, color }}>{index + 1}</div>
-  return <div className={`${base} border-slate-600 text-slate-500 bg-slate-800`}><Lock size={14} /></div>
-}
-
-/* ── Main Component ───────────────────────────────────────────── */
-export default function LocalTrainingPipeline() {
-  const [steps, setSteps] = useState([
-    STATUS.ready, STATUS.locked, STATUS.locked, STATUS.locked, STATUS.locked,
-  ])
-  const [terminals, setTerminals] = useState([[], [], [], [], []])
-  const [dataConfig, setDataConfig] = useState({ imagePath: '/data/breakhis/partition_1/', clinicalPath: '', modality: 'multimodal' })
-  const [trainingConfig, setTrainingConfig] = useState({ epochs: 5, lr: 0.001, batchSize: 32 })
-  const [lossData, setLossData] = useState([])
-  const [copied, setCopied] = useState(false)
-
-  const termRefs = useRef([])
-  const stepRefs = useRef([])
-
-  const scrollTerminal = (idx) => {
-    const el = termRefs.current[idx]
-    if (el) el.scrollTop = el.scrollHeight
-  }
-
-  const scrollToStep = (idx) => {
-    const el = stepRefs.current[idx]
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-
-  const addLine = useCallback((stepIdx, line) => {
-    setTerminals(prev => {
-      const copy = [...prev]
-      copy[stepIdx] = [...copy[stepIdx], line]
-      return copy
-    })
-  }, [])
-
-  const setStatus = (idx, status) => {
-    setSteps(prev => { const c = [...prev]; c[idx] = status; return c })
-  }
-
-  const unlockNext = (idx) => {
-    if (idx < 4) {
-      setStatus(idx + 1, STATUS.ready)
-      setTimeout(() => scrollToStep(idx + 1), 300)
-    }
-  }
-
-  /* ── Step 1: Data Configuration ─────────────────────────────── */
-  const runStep1 = async () => {
-    setStatus(0, STATUS.running)
-    const mod = dataConfig.modality
-    const lines = [
-      { text: `$ Scanning data sources (modality: ${mod})...`, type: 'info' },
-    ]
-    if (mod === 'multimodal' || mod === 'image_only') {
-      lines.push({ text: `  Image folder: ${dataConfig.imagePath || '(not set)'}`, type: 'info' })
-      lines.push({ text: '  Indexing patient directories...', type: 'progress' })
-      lines.push({ text: '  Found 142 patients, 28,400 patches (40x magnification)', type: 'success' })
-    }
-    if (mod === 'multimodal' || mod === 'clinical_only') {
-      lines.push({ text: `  Clinical file: ${dataConfig.clinicalPath || '(not set)'}`, type: 'info' })
-      lines.push({ text: '  Parsing CSV — 142 records, 19 features', type: 'success' })
-    }
-    lines.push({ text: '  Label distribution: LumA 48.2% | Non-LumA 51.8%', type: 'info' })
-    lines.push({ text: '[OK] Data configuration verified.', type: 'success' })
-
-    for (const l of lines) {
-      await sleep(400 + Math.random() * 400)
-      addLine(0, l)
-      scrollTerminal(0)
-    }
-    setStatus(0, STATUS.done)
-    unlockNext(0)
-  }
-
-  /* ── Step 2: Feature Extraction ─────────────────────────────── */
-  const runStep2 = async () => {
-    setStatus(1, STATUS.running)
-    scrollToStep(1)
-    addLine(1, { text: '$ Extracting CONCH features (ViT-B/16)...', type: 'info' })
-    scrollTerminal(1)
-    await sleep(600)
-
-    for (let p = 0; p <= 100; p += 5) {
-      await sleep(300)
-      addLine(1, { text: `  [${'#'.repeat(p / 5)}${'.'.repeat(20 - p / 5)}] ${p}%  (${Math.floor(p * 284 / 100)} / 28400 patches)`, type: 'progress' })
-      scrollTerminal(1)
-    }
-    await sleep(400)
-    addLine(1, { text: '  Created 142 bags (avg 200 patches/bag)', type: 'success' })
-    addLine(1, { text: '  Time elapsed: 4m 32s', type: 'info' })
-    addLine(1, { text: '[OK] Feature extraction complete.', type: 'success' })
-    scrollTerminal(1)
-    setStatus(1, STATUS.done)
-    unlockNext(1)
-  }
-
-  /* ── Step 3: Local Training ─────────────────────────────────── */
-  const runStep3 = async () => {
-    setStatus(2, STATUS.running)
-    scrollToStep(2)
-    const epochs = Number(trainingConfig.epochs)
-    addLine(2, { text: `$ Training ABMIL model (epochs=${epochs}, lr=${trainingConfig.lr}, bs=${trainingConfig.batchSize})`, type: 'info' })
-    scrollTerminal(2)
-    await sleep(600)
-
-    const losses = []
-    for (let e = 1; e <= epochs; e++) {
-      await sleep(800)
-      const loss = (0.55 - e * 0.07 + Math.random() * 0.02).toFixed(3)
-      const acc = (72 + e * 5.2 + Math.random() * 2).toFixed(1)
-      addLine(2, { text: `  Epoch ${e}/${epochs}: loss=${loss}  acc=${acc}%`, type: 'progress' })
-      scrollTerminal(2)
-      losses.push({ epoch: e, loss: parseFloat(loss), acc: parseFloat(acc) })
-      setLossData([...losses])
-    }
-    await sleep(400)
-    addLine(2, { text: '[OK] Local training complete.', type: 'success' })
-    scrollTerminal(2)
-    setStatus(2, STATUS.done)
-    unlockNext(2)
-  }
-
-  /* ── Step 4: Validation & Hashing ───────────────────────────── */
-  const runStep4 = async () => {
-    setStatus(3, STATUS.running)
-    scrollToStep(3)
-    const lines = [
-      { text: '$ Validating on held-out set...', type: 'info' },
-      { text: '  Samples: 2,840 patches (10% holdout)', type: 'info' },
-      { text: '  AUC: 0.891  Bal.Acc: 0.843  F1: 0.867', type: 'success' },
-      { text: '$ Computing model hash...', type: 'info' },
-      { text: '  SHA-256: a3f9c8e2b71d4f5a6c9e0123456789abcdef0123456789abcdef012345678901', type: 'success' },
-      { text: '[OK] Validation and hashing complete.', type: 'success' },
-    ]
-    for (const l of lines) {
-      await sleep(500 + Math.random() * 300)
-      addLine(3, l)
-      scrollTerminal(3)
-    }
-    setStatus(3, STATUS.done)
-    unlockNext(3)
-  }
-
-  /* ── Step 5: Submit Weights ─────────────────────────────────── */
-  const runStep5 = async () => {
-    setStatus(4, STATUS.running)
-    scrollToStep(4)
-    const lines = [
-      { text: '$ Uploading weights (2.4 MB)...', type: 'info' },
-      { text: '  Encrypting payload with TLS 1.3...', type: 'progress' },
-      { text: '  Transmitting to federation server...', type: 'progress' },
-      { text: '  Submitted successfully. Round contribution recorded.', type: 'success' },
-      { text: '[OK] Weights submitted to federation.', type: 'success' },
-    ]
-    for (const l of lines) {
-      await sleep(600 + Math.random() * 400)
-      addLine(4, l)
-      scrollTerminal(4)
-    }
-    setStatus(4, STATUS.done)
-  }
-
-  const runners = [runStep1, runStep2, runStep3, runStep4, runStep5]
-
-  const handleCopyHash = () => {
-    navigator.clipboard.writeText('a3f9c8e2b71d4f5a6c9e0123456789abcdef0123456789abcdef012345678901')
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  /* ── Render ─────────────────────────────────────────────────── */
-  return (
-    <div className="w-full min-h-screen py-8 px-4 md:px-8 lg:px-12 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-      {/* Header */}
-      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-10 max-w-5xl">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})` }}>
-            <Terminal size={22} className="text-white" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-black text-white tracking-tight">Local Training Pipeline</h1>
-            <p className="text-slate-400 text-sm font-medium mt-0.5">Federated Learning · Step-by-step training execution</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 mt-4 px-3 py-2 rounded-lg bg-amber-950/30 border border-amber-800/40 inline-flex">
-          <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-          <span className="text-xs font-semibold text-amber-300">Demo mode — local execution simulation, no real API calls</span>
-        </div>
-      </motion.div>
-
-      {/* Pipeline */}
-      <div className="relative max-w-5xl">
-        {/* Vertical line */}
-        <div className="absolute left-4 top-4 bottom-4 w-0.5" style={{ background: `linear-gradient(to bottom, ${BRAND.blue}, ${BRAND.teal})` }} />
-
-        {STEP_META.map((meta, idx) => (
-          <motion.div
-            key={meta.id}
-            ref={el => stepRefs.current[idx] = el}
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: idx * 0.1, duration: 0.4 }}
-            className="relative pl-14 pb-10"
-          >
-            {/* Circle on timeline */}
-            <div className="absolute left-0 top-2">
-              <StepCircle status={steps[idx]} color={meta.color} index={idx} />
-            </div>
-
-            {/* Card */}
-            <div className={`rounded-2xl border p-6 transition-all duration-300 ${
-              steps[idx] === STATUS.locked
-                ? 'bg-slate-900/40 border-slate-700/50 opacity-50'
-                : 'bg-slate-900/80 border-slate-700 shadow-lg'
-            }`}>
-              {/* Card Header */}
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <meta.icon size={20} style={{ color: meta.color }} />
-                  <h2 className="text-lg font-semibold text-white">{meta.title}</h2>
-                </div>
-                <StatusBadge status={steps[idx]} />
+    <div className="mb-10">
+      <div className="flex items-center justify-between mb-3">
+        {STEPS.map((s, i) => (
+          <div key={s.id} className="flex items-center flex-1">
+            <div className="flex flex-col items-center flex-1">
+              <div
+                className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-black border-2 transition-all duration-300 ${
+                  current > s.id ? 'border-emerald-400 bg-emerald-400 text-white' :
+                  current === s.id ? 'border-blue-500 bg-blue-500 text-white scale-110 shadow-lg shadow-blue-500/30' :
+                  'border-slate-700 bg-slate-800 text-slate-500'
+                }`}
+              >
+                {current > s.id ? <CheckCircle2 size={16} /> : s.id}
               </div>
-
-              {/* Step-specific content */}
-              {idx === 0 && <Step1Content config={dataConfig} setConfig={setDataConfig} status={steps[0]} onRun={runners[0]} />}
-              {idx === 1 && <Step2Content status={steps[1]} onRun={runners[1]} />}
-              {idx === 2 && <Step3Content config={trainingConfig} setConfig={setTrainingConfig} status={steps[2]} onRun={runners[2]} lossData={lossData} />}
-              {idx === 3 && <Step4Content status={steps[3]} onRun={runners[3]} onCopy={handleCopyHash} copied={copied} />}
-              {idx === 4 && <Step5Content status={steps[4]} onRun={runners[4]} lossData={lossData} />}
-
-              {/* Terminal */}
-              <TerminalBlock lines={terminals[idx]} termRef={el => termRefs.current[idx] = el} />
+              <p className={`mt-2 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap ${
+                current === s.id ? 'text-blue-300' : current > s.id ? 'text-emerald-400' : 'text-slate-500'
+              }`}>{s.title}</p>
             </div>
-          </motion.div>
+            {i < STEPS.length - 1 && (
+              <div className={`h-0.5 flex-1 mx-2 -mt-6 transition-all duration-500 ${current > s.id ? 'bg-emerald-400' : 'bg-slate-700'}`} />
+            )}
+          </div>
         ))}
       </div>
     </div>
   )
 }
 
-/* ── Status Badge ─────────────────────────────────────────────── */
-function StatusBadge({ status }) {
-  const map = {
-    locked:  { text: 'Locked',  cls: 'bg-slate-700 text-slate-400' },
-    ready:   { text: 'Ready',   cls: 'bg-blue-900/50 text-blue-300' },
-    running: { text: 'Running', cls: 'bg-amber-900/50 text-amber-300' },
-    done:    { text: 'Done',    cls: 'bg-emerald-900/50 text-emerald-300' },
-  }
-  const s = map[status]
+/* ── Modality Card ────────────────────────────────────────── */
+function ModalityCard({ modality, selected, onClick }) {
+  const Icon = modality.icon
+  const active = selected === modality.id
   return (
-    <span className={`px-3 py-1 rounded-full text-xs font-medium ${s.cls}`}>
-      {status === 'running' && <Loader2 size={12} className="inline mr-1 animate-spin" />}
-      {s.text}
-    </span>
-  )
-}
-
-/* ── Execute Button ───────────────────────────────────────────── */
-function ExecButton({ onClick, disabled, label = 'Execute', gradient }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.02] active:scale-[0.98]"
-      style={{ background: disabled ? '#334155' : (gradient || `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})`) }}
+    <motion.button
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+      onClick={() => onClick(modality.id)}
+      className={`relative p-6 rounded-2xl border-2 text-left transition-all duration-300 ${
+        active
+          ? 'border-blue-500 bg-blue-950/40 shadow-xl shadow-blue-500/20'
+          : 'border-slate-700 bg-slate-900/60 hover:border-slate-500'
+      }`}
     >
-      <Play size={16} /> {label}
-    </button>
+      {active && (
+        <motion.div
+          layoutId="modality-glow"
+          className="absolute inset-0 rounded-2xl pointer-events-none"
+          style={{ background: `radial-gradient(circle at 50% 0%, ${modality.color}30, transparent 70%)` }}
+        />
+      )}
+      <div className="relative">
+        <div
+          className="w-12 h-12 rounded-xl flex items-center justify-center mb-4"
+          style={{ background: `${modality.color}20`, color: modality.color }}
+        >
+          <Icon size={22} />
+        </div>
+        <h3 className={`text-lg font-black mb-1 ${active ? 'text-white' : 'text-slate-200'}`}>{modality.title}</h3>
+        <p className="text-xs text-slate-400 mb-4">{modality.desc}</p>
+        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Needs</div>
+        <p className="text-xs font-semibold text-slate-300 mt-1">{modality.needs}</p>
+      </div>
+    </motion.button>
   )
 }
 
-/* ── Step 1 Content ───────────────────────────────────────────── */
-function Step1Content({ config, setConfig, status, onRun }) {
-  const modality = config.modality
-  const imageFolderRef = useRef(null)
-  const clinicalFileRef = useRef(null)
 
-  const handleImageFolderPick = (e) => {
+/* ── Step 1: Modality Selection ───────────────────────────── */
+function Step1Modality({ modality, setModality, onNext }) {
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-black text-white mb-1">Select Your Data Modality</h2>
+        <p className="text-sm text-slate-400">Choose which type of medical data your hospital will contribute to the federation.</p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {MODALITIES.map(m => (
+          <ModalityCard key={m.id} modality={m} selected={modality} onClick={setModality} />
+        ))}
+      </div>
+      <div className="flex justify-end pt-4">
+        <button
+          onClick={onNext}
+          disabled={!modality}
+          className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:scale-[1.02]"
+          style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})` }}
+        >
+          Continue <ArrowRight size={16} />
+        </button>
+      </div>
+    </motion.div>
+  )
+}
+
+/* ── Step 2: Provide Data ─────────────────────────────────── */
+function Step2Data({ modality, dataState, setDataState, onNext, onBack }) {
+  const folderRef = useRef(null)
+  const fileRef = useRef(null)
+
+  const handleFolderPick = (e) => {
     const files = Array.from(e.target.files || [])
     if (files.length === 0) return
-    // Get the folder path from the first file's webkitRelativePath
-    const folderName = files[0].webkitRelativePath.split('/')[0]
-    setConfig(p => ({ ...p, imagePath: folderName, imageFileCount: files.length }))
+    const folderName = files[0].webkitRelativePath?.split('/')[0] || 'selected folder'
+    setDataState(p => ({ ...p, imageFiles: files, imageFolderName: folderName, scanError: null }))
   }
 
-  const handleClinicalFilePick = (e) => {
+  const handleFilePick = (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-    setConfig(p => ({ ...p, clinicalPath: file.name, clinicalFile: file }))
+    setDataState(p => ({ ...p, clinicalFile: file, scanError: null }))
   }
 
+  const needsImages = modality === 'image_only' || modality === 'multimodal'
+  const needsClinical = modality === 'clinical_only' || modality === 'multimodal'
+
+  const canProceed = (
+    (!needsImages || (dataState.imageFiles && dataState.imageFiles.length > 0)) &&
+    (!needsClinical || dataState.clinicalFile)
+  )
+
   return (
-    <div className="space-y-5">
-      {/* Modality selector */}
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
       <div>
-        <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Data Modality</label>
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { id: 'multimodal', label: 'Multimodal', desc: 'Images + Clinical' },
-            { id: 'image_only', label: 'Image Only', desc: 'Histopathology patches' },
-            { id: 'clinical_only', label: 'Clinical Only', desc: 'Clinical records' },
-          ].map(m => (
+        <h2 className="text-2xl font-black text-white mb-1">Provide Your Dataset</h2>
+        <p className="text-sm text-slate-400">All processing happens locally in your browser — nothing is uploaded yet.</p>
+      </div>
+
+      {needsImages && (
+        <div className="bg-slate-900/60 border border-slate-700 rounded-2xl p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <ImageIcon size={18} className="text-blue-400" />
+            <h3 className="font-black text-white">Image Patches Folder</h3>
+          </div>
+          <input
+            ref={folderRef}
+            type="file"
+            webkitdirectory=""
+            directory=""
+            multiple
+            onChange={handleFolderPick}
+            className="hidden"
+          />
+          <div className="flex gap-3 mb-3">
+            <div className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm font-mono text-white truncate min-h-[42px] flex items-center">
+              {dataState.imageFolderName || <span className="text-slate-500">No folder selected</span>}
+              {dataState.imageFiles?.length > 0 && <span className="ml-2 text-emerald-400 text-xs">({dataState.imageFiles.length} files)</span>}
+            </div>
             <button
-              key={m.id}
-              onClick={() => setConfig(p => ({ ...p, modality: m.id }))}
-              disabled={status !== STATUS.ready}
-              className={`p-3 rounded-xl border-2 text-left transition-all ${
-                modality === m.id
-                  ? 'border-blue-500 bg-blue-950/50'
-                  : 'border-slate-700 bg-slate-800/50 hover:border-slate-500'
-              } disabled:opacity-50 disabled:cursor-not-allowed`}
+              type="button"
+              onClick={() => folderRef.current?.click()}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 transition"
             >
-              <p className={`text-sm font-bold ${modality === m.id ? 'text-blue-300' : 'text-slate-300'}`}>{m.label}</p>
-              <p className="text-[10px] text-slate-500 mt-0.5">{m.desc}</p>
+              <FolderOpen size={14} /> Browse Folder
             </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Data inputs — dynamic based on modality */}
-      <div className="space-y-3">
-        {(modality === 'multimodal' || modality === 'image_only') && (
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-              Image Patches Folder
-            </label>
-            <input
-              ref={imageFolderRef}
-              type="file"
-              webkitdirectory=""
-              directory=""
-              multiple
-              onChange={handleImageFolderPick}
-              className="hidden"
-            />
-            <div className="flex gap-2">
-              <div className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white font-mono truncate">
-                {config.imagePath || <span className="text-slate-500">No folder selected</span>}
-                {config.imageFileCount && <span className="text-emerald-400 ml-2">({config.imageFileCount} files)</span>}
-              </div>
-              <button
-                type="button"
-                onClick={() => imageFolderRef.current?.click()}
-                disabled={status !== STATUS.ready}
-                className="px-4 py-2.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Browse Folder
-              </button>
-            </div>
-            <p className="text-[10px] text-slate-500 mt-1">Folder containing patient subdirectories with patch images (PNG/JPG)</p>
           </div>
-        )}
-
-        {(modality === 'multimodal' || modality === 'clinical_only') && (
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-              Clinical Data File
-            </label>
-            <input
-              ref={clinicalFileRef}
-              type="file"
-              accept=".csv,.tsv,.xlsx,.xls"
-              onChange={handleClinicalFilePick}
-              className="hidden"
-            />
-            <div className="flex gap-2">
-              <div className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white font-mono truncate">
-                {config.clinicalPath || <span className="text-slate-500">No file selected</span>}
-              </div>
-              <button
-                type="button"
-                onClick={() => clinicalFileRef.current?.click()}
-                disabled={status !== STATUS.ready}
-                className="px-4 py-2.5 rounded-lg bg-teal-600 text-white text-xs font-bold hover:bg-teal-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Upload File
-              </button>
-            </div>
-            <p className="text-[10px] text-slate-500 mt-1">CSV/Excel file with: patient_id, er_status, pr_status, her2_binary, age, stage_num, label</p>
+          <div className="bg-slate-950/60 border border-slate-700/50 rounded-lg p-3 mt-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Accepted formats: PNG, JPG, TIFF</p>
+            <pre className="text-[11px] text-slate-400 font-mono leading-snug">{`folder/
+├── LumA/
+│   ├── image1.png
+│   └── image2.png
+└── non_LumA/
+    ├── image3.png
+    └── image4.png`}</pre>
           </div>
-        )}
-      </div>
-
-      <ExecButton onClick={onRun} disabled={status !== STATUS.ready} label="Inspect Data" />
-    </div>
-  )
-}
-
-/* ── Step 2 Content ───────────────────────────────────────────── */
-function Step2Content({ status, onRun }) {
-  return (
-    <div>
-      <p className="text-slate-400 text-sm mb-4">Extract deep features from histopathology patches using a pre-trained vision encoder (CONCH ViT-B/16).</p>
-      <ExecButton onClick={onRun} disabled={status !== STATUS.ready} label="Extract Features" />
-    </div>
-  )
-}
-
-/* ── Step 3 Content ───────────────────────────────────────────── */
-function Step3Content({ config, setConfig, status, onRun, lossData }) {
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
-          <label className="block text-xs text-slate-400 mb-1">Epochs</label>
-          <input
-            type="number" min={1} max={50}
-            value={config.epochs}
-            onChange={e => setConfig(p => ({ ...p, epochs: e.target.value }))}
-            disabled={status !== STATUS.ready}
-            className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none disabled:opacity-50"
-          />
-        </div>
-        <div>
-          <label className="block text-xs text-slate-400 mb-1">Learning Rate</label>
-          <input
-            type="number" step={0.0001}
-            value={config.lr}
-            onChange={e => setConfig(p => ({ ...p, lr: e.target.value }))}
-            disabled={status !== STATUS.ready}
-            className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none disabled:opacity-50"
-          />
-        </div>
-        <div>
-          <label className="block text-xs text-slate-400 mb-1">Batch Size</label>
-          <input
-            type="number" min={1}
-            value={config.batchSize}
-            onChange={e => setConfig(p => ({ ...p, batchSize: e.target.value }))}
-            disabled={status !== STATUS.ready}
-            className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none disabled:opacity-50"
-          />
-        </div>
-      </div>
-
-      <ExecButton onClick={onRun} disabled={status !== STATUS.ready} label="Start Training" />
-
-      {/* Live loss chart */}
-      {lossData.length > 0 && (
-        <div className="mt-4 bg-slate-800/60 rounded-xl p-4 border border-slate-700/50">
-          <p className="text-xs text-slate-400 mb-2">Training Loss</p>
-          <ResponsiveContainer width="100%" height={140}>
-            <LineChart data={lossData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis dataKey="epoch" stroke="#64748b" tick={{ fontSize: 11 }} />
-              <YAxis stroke="#64748b" tick={{ fontSize: 11 }} />
-              <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8 }} />
-              <Line type="monotone" dataKey="loss" stroke={BRAND.pink} strokeWidth={2} dot={{ fill: BRAND.pink }} animationDuration={300} />
-            </LineChart>
-          </ResponsiveContainer>
         </div>
       )}
+
+      {needsClinical && (
+        <div className="bg-slate-900/60 border border-slate-700 rounded-2xl p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <FileSpreadsheet size={18} className="text-teal-400" />
+            <h3 className="font-black text-white">Clinical Data File</h3>
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv,.tsv,.xlsx,.xls"
+            onChange={handleFilePick}
+            className="hidden"
+          />
+          <div className="flex gap-3 mb-3">
+            <div className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm font-mono text-white truncate min-h-[42px] flex items-center">
+              {dataState.clinicalFile ? dataState.clinicalFile.name : <span className="text-slate-500">No file selected</span>}
+            </div>
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-teal-600 text-white text-xs font-bold hover:bg-teal-500 transition"
+            >
+              <Upload size={14} /> Upload File
+            </button>
+          </div>
+          <div className="bg-slate-950/60 border border-slate-700/50 rounded-lg p-3 mt-3 flex items-start justify-between gap-3">
+            <div className="flex-1">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Required columns</p>
+              <p className="text-[11px] text-slate-400 font-mono">patient_id, er_status, pr_status, her2_binary, age, stage_num, label</p>
+            </div>
+            <button
+              onClick={downloadCsvTemplate}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-600 text-slate-300 text-[11px] font-bold hover:bg-slate-800 transition shrink-0"
+            >
+              <Download size={12} /> Template
+            </button>
+          </div>
+        </div>
+      )}
+
+      {dataState.scanError && (
+        <div className="bg-red-950/40 border border-red-800/60 rounded-xl p-4 flex items-start gap-3">
+          <AlertCircle size={18} className="text-red-400 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-bold text-red-300">Validation Error</p>
+            <p className="text-xs text-red-400/80 mt-0.5">{dataState.scanError}</p>
+          </div>
+        </div>
+      )}
+
+      <div className="flex justify-between pt-4">
+        <button onClick={onBack} className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-600 text-slate-300 text-sm font-bold hover:bg-slate-800 transition">
+          <ArrowLeft size={16} /> Back
+        </button>
+        <button
+          onClick={onNext}
+          disabled={!canProceed}
+          className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:scale-[1.02]"
+          style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})` }}
+        >
+          Inspect Data <ArrowRight size={16} />
+        </button>
+      </div>
+    </motion.div>
+  )
+}
+
+
+/* ── Step 3: Inspection ───────────────────────────────────── */
+function CheckRow({ check }) {
+  const iconMap = {
+    pass: { icon: CheckCircle2, color: 'text-emerald-400', bg: 'bg-emerald-950/40 border-emerald-800/40' },
+    warn: { icon: AlertTriangle, color: 'text-amber-400', bg: 'bg-amber-950/40 border-amber-800/40' },
+    fail: { icon: AlertCircle, color: 'text-red-400', bg: 'bg-red-950/40 border-red-800/40' },
+  }
+  const m = iconMap[check.status] || iconMap.pass
+  const Icon = m.icon
+  return (
+    <div className={`flex items-start gap-3 p-3 rounded-lg border ${m.bg}`}>
+      <Icon size={16} className={`${m.color} mt-0.5 shrink-0`} />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-bold text-white">{check.name}</p>
+        <p className="text-xs text-slate-400 mt-0.5">{check.message}</p>
+      </div>
     </div>
   )
 }
 
-/* ── Step 4 Content ───────────────────────────────────────────── */
-function Step4Content({ status, onRun, onCopy, copied }) {
+function SuitabilityBadge({ level }) {
+  const map = {
+    excellent: { stars: 5, color: 'text-emerald-400' },
+    good:      { stars: 4, color: 'text-blue-400' },
+    poor:      { stars: 2, color: 'text-amber-400' },
+    unsuitable:{ stars: 1, color: 'text-red-400' },
+  }
+  const m = map[level] || map.good
   return (
-    <div className="space-y-4">
-      <p className="text-slate-400 text-sm">Validate model on held-out data and compute a SHA-256 hash for integrity verification.</p>
-      <ExecButton onClick={onRun} disabled={status !== STATUS.ready} label="Validate & Hash" />
-      {status === STATUS.done && (
-        <div className="flex items-center gap-2 bg-slate-800 rounded-lg px-3 py-2 border border-slate-600">
-          <code className="text-xs text-emerald-400 flex-1 truncate">SHA-256: a3f9c8e2b71d4f5a6c9e0123456789abcdef0123456789abcdef012345678901</code>
-          <button onClick={onCopy} className="text-slate-400 hover:text-white transition-colors">
-            {copied ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} />}
+    <div className="flex items-center gap-1">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <Star key={i} size={14} className={i < m.stars ? `${m.color} fill-current` : 'text-slate-700'} />
+      ))}
+      <span className={`ml-2 text-xs font-bold uppercase tracking-wider ${m.color}`}>{level}</span>
+    </div>
+  )
+}
+
+function Step3Inspection({ modality, dataState, inspection, setInspection, runInspection, onNext, onBack, ackImbalance, setAckImbalance }) {
+  const isLoading = inspection?.loading
+  const result = inspection?.result
+  const error = inspection?.error
+
+  const overallMap = {
+    ready:   { color: '#0BB592', bg: 'bg-emerald-950/40 border-emerald-700/50', label: 'READY FOR FL', icon: CheckCircle2 },
+    warning: { color: '#f59e0b', bg: 'bg-amber-950/40 border-amber-700/50',     label: 'PROCEED WITH CAUTION', icon: AlertTriangle },
+    error:   { color: '#F55486', bg: 'bg-red-950/40 border-red-700/50',         label: 'NOT READY',  icon: AlertCircle },
+  }
+
+  const isImbalanced = result?.checks?.some(c => c.name === 'Label balance' && c.status === 'fail')
+  const canProceed = result && (result.overall_status !== 'error' || (isImbalanced && ackImbalance))
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-black text-white mb-1">AI Data Quality Inspection</h2>
+        <p className="text-sm text-slate-400">Powered by Gemini 2.0 Flash. Falls back to rule-based checks if unavailable.</p>
+      </div>
+
+      {!result && !isLoading && (
+        <div className="bg-slate-900/60 border border-slate-700 rounded-2xl p-8 text-center">
+          <Sparkles size={32} className="text-blue-400 mx-auto mb-4" />
+          <p className="text-white font-bold mb-2">Ready to inspect your dataset</p>
+          <p className="text-sm text-slate-400 mb-5">We'll scan your data locally and ask the AI to verify FL suitability.</p>
+          <button
+            onClick={runInspection}
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm hover:scale-[1.02] transition"
+            style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})` }}
+          >
+            <Sparkles size={16} /> Start Inspection
           </button>
         </div>
       )}
+
+      {isLoading && (
+        <div className="bg-slate-900/60 border border-slate-700 rounded-2xl p-12 text-center">
+          <Loader2 size={36} className="text-blue-400 mx-auto mb-4 animate-spin" />
+          <p className="text-white font-bold">Analyzing your dataset...</p>
+          <p className="text-xs text-slate-500 mt-1">Scanning files and consulting the AI inspector</p>
+        </div>
+      )}
+
+      {error && !isLoading && (
+        <div className="bg-red-950/40 border border-red-800/60 rounded-2xl p-5">
+          <div className="flex items-start gap-3">
+            <AlertCircle size={20} className="text-red-400 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-bold text-red-300">Inspection Failed</p>
+              <p className="text-sm text-red-400/80 mt-1">{error}</p>
+              <button onClick={runInspection} className="mt-3 text-xs font-bold text-red-300 hover:text-red-200 underline">Try again</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {result && !isLoading && (() => {
+        const overall = overallMap[result.overall_status] || overallMap.ready
+        const OIcon = overall.icon
+        return (
+          <div className="space-y-5">
+            <div className={`rounded-2xl border-2 p-5 ${overall.bg}`}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <OIcon size={28} style={{ color: overall.color }} />
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Overall Status</p>
+                    <p className="text-xl font-black" style={{ color: overall.color }}>{overall.label}</p>
+                  </div>
+                </div>
+                <div className="text-xs px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-slate-400 font-bold uppercase tracking-wider">
+                  {result._source === 'gemini' ? 'AI Inspector' : 'Rule-based'}
+                </div>
+              </div>
+              <p className="text-sm text-slate-300 leading-relaxed">{result.summary}</p>
+            </div>
+
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Quality Checks</p>
+              <div className="space-y-2">
+                {(result.checks || []).map((c, i) => <CheckRow key={i} check={c} />)}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-slate-900/60 border border-slate-700 rounded-xl p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">FL Suitability</p>
+                <SuitabilityBadge level={result.fl_suitability} />
+              </div>
+              <div className="bg-slate-900/60 border border-slate-700 rounded-xl p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Estimated Rounds</p>
+                <p className="text-2xl font-black text-white">{result.estimated_rounds || '—'}</p>
+              </div>
+            </div>
+
+            {result.recommendations?.length > 0 && (
+              <div className="bg-slate-900/60 border border-slate-700 rounded-xl p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-3">Recommendations</p>
+                <ul className="space-y-2">
+                  {result.recommendations.map((r, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
+                      <ArrowRight size={14} className="text-blue-400 mt-1 shrink-0" />
+                      <span>{r}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {isImbalanced && (
+              <div className="bg-red-950/30 border-2 border-red-800/60 rounded-xl p-4">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={ackImbalance}
+                    onChange={e => setAckImbalance(e.target.checked)}
+                    className="mt-1 w-4 h-4 accent-red-500"
+                  />
+                  <div>
+                    <p className="text-sm font-bold text-red-200">Acknowledge data imbalance</p>
+                    <p className="text-xs text-red-400/80 mt-1">I understand my data is imbalanced and FL training results may be unreliable. I want to proceed anyway for demonstration purposes.</p>
+                  </div>
+                </label>
+              </div>
+            )}
+          </div>
+        )
+      })()}
+
+      <div className="flex justify-between pt-4">
+        <button onClick={onBack} className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-600 text-slate-300 text-sm font-bold hover:bg-slate-800 transition">
+          <ArrowLeft size={16} /> Back
+        </button>
+        {result && (
+          <button
+            onClick={onNext}
+            disabled={!canProceed}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:scale-[1.02]"
+            style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})` }}
+          >
+            Configure FL <ArrowRight size={16} />
+          </button>
+        )}
+      </div>
+    </motion.div>
+  )
+}
+
+
+/* ── Step 4: FL Configuration ─────────────────────────────── */
+function Step4Config({ flConfig, setFlConfig, onNext, onBack }) {
+  const updateField = (k, v) => setFlConfig(p => ({ ...p, [k]: v }))
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-black text-white mb-1">Federated Learning Configuration</h2>
+        <p className="text-sm text-slate-400">These settings control how your local model trains and contributes to the global model.</p>
+      </div>
+
+      <div className="bg-slate-900/60 border border-slate-700 rounded-2xl p-6 space-y-5">
+        {/* Number of rounds */}
+        <div>
+          <div className="flex justify-between items-center mb-2">
+            <label className="text-sm font-bold text-white">Number of Rounds</label>
+            <span className="text-lg font-black text-blue-400 font-mono">{flConfig.rounds}</span>
+          </div>
+          <input
+            type="range" min={1} max={20} value={flConfig.rounds}
+            onChange={e => updateField('rounds', Number(e.target.value))}
+            className="w-full accent-blue-500"
+          />
+          <div className="flex justify-between text-[10px] text-slate-500 mt-1">
+            <span>1</span><span>20</span>
+          </div>
+        </div>
+
+        {/* Local epochs */}
+        <div>
+          <div className="flex justify-between items-center mb-2">
+            <label className="text-sm font-bold text-white">Local Epochs per Round</label>
+            <span className="text-lg font-black text-teal-400 font-mono">{flConfig.epochs}</span>
+          </div>
+          <input
+            type="range" min={1} max={10} value={flConfig.epochs}
+            onChange={e => updateField('epochs', Number(e.target.value))}
+            className="w-full accent-teal-500"
+          />
+          <div className="flex justify-between text-[10px] text-slate-500 mt-1">
+            <span>1</span><span>10</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-bold text-white mb-2">Learning Rate</label>
+            <select
+              value={flConfig.lr}
+              onChange={e => updateField('lr', e.target.value)}
+              className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white focus:border-blue-500 focus:outline-none"
+            >
+              <option value="0.0001">0.0001</option>
+              <option value="0.0005">0.0005</option>
+              <option value="0.001">0.001 (default)</option>
+              <option value="0.005">0.005</option>
+              <option value="0.01">0.01</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-white mb-2">Batch Size</label>
+            <select
+              value={flConfig.batchSize}
+              onChange={e => updateField('batchSize', Number(e.target.value))}
+              className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white focus:border-blue-500 focus:outline-none"
+            >
+              <option value={8}>8</option>
+              <option value={16}>16 (default)</option>
+              <option value={32}>32</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-white mb-2">Aggregation Strategy</label>
+            <select
+              value={flConfig.aggregation}
+              onChange={e => updateField('aggregation', e.target.value)}
+              className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white focus:border-blue-500 focus:outline-none"
+            >
+              <option value="FedAvg">FedAvg (default)</option>
+              <option value="FedProx">FedProx (heterogeneous data)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-white mb-2">Contribution Weight</label>
+            <select
+              value={flConfig.weight}
+              onChange={e => updateField('weight', e.target.value)}
+              className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white focus:border-blue-500 focus:outline-none"
+            >
+              <option value="auto">Auto (based on data size)</option>
+              <option value="equal">Equal weighting</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex justify-between pt-4">
+        <button onClick={onBack} className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-600 text-slate-300 text-sm font-bold hover:bg-slate-800 transition">
+          <ArrowLeft size={16} /> Back
+        </button>
+        <button
+          onClick={onNext}
+          className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm transition-all hover:scale-[1.02]"
+          style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})` }}
+        >
+          Review & Confirm <ArrowRight size={16} />
+        </button>
+      </div>
+    </motion.div>
+  )
+}
+
+
+/* ── Step 5: Confirm & Register ───────────────────────────── */
+function Step5Confirm({ modality, dataState, scanResults, inspection, flConfig, hospitalName, onBack, onSubmit, registered }) {
+  const result = inspection?.result
+  const lumaCount = scanResults?.image?.luma_count ?? scanResults?.clinical?.luma_count ?? 0
+  const nonLumaCount = scanResults?.image?.nonluma_count ?? scanResults?.clinical?.nonluma_count ?? 0
+  const total = scanResults?.image?.total ?? scanResults?.clinical?.total ?? 0
+  const estTimeMin = (flConfig.rounds * flConfig.epochs * Math.max(2, Math.ceil(total / 50))).toFixed(0)
+
+  const modLabel = MODALITIES.find(m => m.id === modality)?.title || modality
+
+  if (registered) {
+    return (
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+        <div className="bg-gradient-to-br from-blue-950/60 to-emerald-950/40 border border-blue-700/50 rounded-2xl p-10 text-center">
+          <motion.div
+            animate={{ scale: [1, 1.1, 1] }}
+            transition={{ duration: 2, repeat: Infinity }}
+            className="w-16 h-16 rounded-full mx-auto mb-5 flex items-center justify-center"
+            style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})` }}
+          >
+            <Clock size={28} className="text-white" />
+          </motion.div>
+          <h3 className="text-2xl font-black text-white mb-2">Registration Complete</h3>
+          <p className="text-slate-300 mb-1">Waiting for FL coordinator to start session...</p>
+          <p className="text-sm text-slate-500 mt-4">Your hospital is registered. Training will begin when the coordinator opens the next round.</p>
+          <div className="mt-6 inline-flex items-center gap-2 text-xs font-bold text-blue-300 bg-blue-950/50 px-4 py-2 rounded-full border border-blue-800/50">
+            <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+            Standing by
+          </div>
+        </div>
+      </motion.div>
+    )
+  }
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-black text-white mb-1">Review & Register</h2>
+        <p className="text-sm text-slate-400">Confirm your configuration before joining the federation.</p>
+      </div>
+
+      <div className="bg-slate-900/60 border border-slate-700 rounded-2xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-700 flex items-center gap-2">
+          <FileCheck2 size={18} className="text-blue-400" />
+          <h3 className="font-black text-white">Training Configuration Summary</h3>
+        </div>
+        <div className="p-6 space-y-4">
+          <SummaryRow label="Hospital" value={hospitalName} />
+          <SummaryRow label="Modality" value={modLabel} />
+          {modality !== 'clinical_only' && (
+            <SummaryRow label="Images" value={`${total} (LumA: ${lumaCount}, non-LumA: ${nonLumaCount})`} />
+          )}
+          {modality !== 'image_only' && scanResults?.clinical && (
+            <SummaryRow label="Clinical Records" value={`${scanResults.clinical.total ?? 0} rows`} />
+          )}
+          <div className="h-px bg-slate-700 my-3" />
+          <SummaryRow label="Rounds" value={flConfig.rounds} />
+          <SummaryRow label="Epochs per round" value={flConfig.epochs} />
+          <SummaryRow label="Learning rate" value={flConfig.lr} />
+          <SummaryRow label="Batch size" value={flConfig.batchSize} />
+          <SummaryRow label="Aggregation" value={flConfig.aggregation} />
+          <SummaryRow label="Contribution weight" value={flConfig.weight} />
+          <div className="h-px bg-slate-700 my-3" />
+          <div className="flex justify-between items-center">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Data Quality</span>
+            <span className={`text-sm font-black ${
+              result?.overall_status === 'ready' ? 'text-emerald-400' :
+              result?.overall_status === 'warning' ? 'text-amber-400' : 'text-red-400'
+            }`}>
+              {result?.overall_status === 'ready' ? 'Ready' : result?.overall_status === 'warning' ? 'Acceptable' : 'Issues detected'}
+            </span>
+          </div>
+          <SummaryRow label="Estimated time" value={`~${estTimeMin} minutes`} />
+        </div>
+      </div>
+
+      <div className="flex justify-between pt-4">
+        <button onClick={onBack} className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-600 text-slate-300 text-sm font-bold hover:bg-slate-800 transition">
+          <ArrowLeft size={16} /> Back
+        </button>
+        <button
+          onClick={onSubmit}
+          className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-black text-sm transition-all hover:scale-[1.02] shadow-lg shadow-emerald-500/20"
+          style={{ background: 'linear-gradient(135deg, #059669, #0BB592)' }}
+        >
+          <Send size={16} /> Register & Wait
+        </button>
+      </div>
+    </motion.div>
+  )
+}
+
+function SummaryRow({ label, value }) {
+  return (
+    <div className="flex justify-between items-center">
+      <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{label}</span>
+      <span className="text-sm font-bold text-white">{value}</span>
     </div>
   )
 }
 
-/* ── Step 5 Content ───────────────────────────────────────────── */
-function Step5Content({ status, onRun, lossData }) {
-  const lastEpoch = lossData[lossData.length - 1]
+/* ── Main Component ───────────────────────────────────────── */
+export default function LocalTrainingPipeline() {
+  const { user } = useAuthStore()
+  const hospitalName = user?.organization?.name || 'Your Hospital'
+
+  const [step, setStep] = useState(1)
+  const [modality, setModality] = useState(null)
+  const [dataState, setDataState] = useState({
+    imageFiles: null, imageFolderName: null, clinicalFile: null, scanError: null,
+  })
+  const [scanResults, setScanResults] = useState({ image: null, clinical: null })
+  const [inspection, setInspection] = useState({ loading: false, result: null, error: null })
+  const [ackImbalance, setAckImbalance] = useState(false)
+  const [flConfig, setFlConfig] = useState({
+    rounds: 5, epochs: 3, lr: '0.001', batchSize: 16,
+    aggregation: 'FedAvg', weight: 'auto',
+  })
+  const [registered, setRegistered] = useState(false)
+
+  const runInspection = async () => {
+    setInspection({ loading: true, result: null, error: null })
+    setAckImbalance(false)
+
+    try {
+      let imgScan = null, clinScan = null
+
+      if (modality === 'image_only' || modality === 'multimodal') {
+        imgScan = scanImageFolder(dataState.imageFiles)
+        if (imgScan.error) throw new Error(imgScan.error)
+      }
+      if (modality === 'clinical_only' || modality === 'multimodal') {
+        clinScan = await scanClinicalFile(dataState.clinicalFile)
+        if (clinScan.error) throw new Error(clinScan.error)
+      }
+
+      setScanResults({ image: imgScan, clinical: clinScan })
+
+      // Build stats payload
+      const stats = {
+        modality,
+        total: imgScan?.total ?? clinScan?.total,
+        luma_count: imgScan?.luma_count ?? clinScan?.luma_count,
+        nonluma_count: imgScan?.nonluma_count ?? clinScan?.nonluma_count,
+        balance_ratio: imgScan?.balance_ratio ?? clinScan?.balance_ratio,
+        magnifications: imgScan?.magnifications,
+        sample_files: imgScan?.sample_files,
+        columns: clinScan?.columns,
+        nulls: clinScan?.nulls,
+        clinical_dist: clinScan?.clinical_dist,
+        structure_valid: imgScan?.structure_valid,
+        required_cols_ok: clinScan?.required_cols_ok,
+      }
+
+      const result = await inspectDatasetWithGemini(stats)
+      setInspection({ loading: false, result, error: null })
+    } catch (e) {
+      setInspection({ loading: false, result: null, error: e.message })
+    }
+  }
+
+  const handleSubmit = () => {
+    // TODO: POST to /api/fl/register-client when backend is ready
+    setRegistered(true)
+  }
+
   return (
-    <div className="space-y-4">
-      {status === STATUS.ready && lastEpoch && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[
-            { label: 'Final Acc', value: `${lastEpoch.acc}%` },
-            { label: 'Final Loss', value: lastEpoch.loss.toFixed(3) },
-            { label: 'AUC', value: '0.891' },
-            { label: 'Weights', value: '2.4 MB' },
-          ].map(s => (
-            <div key={s.label} className="bg-slate-800 rounded-xl p-3 border border-slate-700/50 text-center">
-              <p className="text-xs text-slate-400">{s.label}</p>
-              <p className="text-lg font-bold text-white">{s.value}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <ExecButton
-        onClick={onRun}
-        disabled={status !== STATUS.ready}
-        label="Submit to Federation Server"
-        gradient={`linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})`}
-      />
-
-      {status === STATUS.done && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="flex items-center gap-3 bg-emerald-900/30 border border-emerald-700/50 rounded-xl p-4"
-        >
-          <CheckCircle2 size={24} className="text-emerald-400" />
-          <div>
-            <p className="text-emerald-300 font-semibold">Submission Complete</p>
-            <p className="text-emerald-400/70 text-sm">Your local model weights have been recorded for the current federation round.</p>
+    <div className="w-full min-h-screen py-8 px-4 md:px-8 lg:px-12 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      {/* Header */}
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-8 max-w-5xl">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-11 h-11 rounded-2xl flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})` }}>
+            <Sparkles size={20} className="text-white" />
           </div>
-        </motion.div>
-      )}
+          <div>
+            <h1 className="text-2xl font-black text-white tracking-tight">Federated Learning Wizard</h1>
+            <p className="text-xs text-slate-400 font-medium">Smart guided setup · {hospitalName}</p>
+          </div>
+        </div>
+      </motion.div>
+
+      <div className="max-w-5xl">
+        <ProgressBar current={step} />
+
+        <AnimatePresence mode="wait">
+          {step === 1 && (
+            <Step1Modality key="s1" modality={modality} setModality={setModality} onNext={() => setStep(2)} />
+          )}
+          {step === 2 && (
+            <Step2Data key="s2" modality={modality} dataState={dataState} setDataState={setDataState}
+              onNext={() => { setStep(3); }} onBack={() => setStep(1)} />
+          )}
+          {step === 3 && (
+            <Step3Inspection key="s3" modality={modality} dataState={dataState}
+              inspection={inspection} setInspection={setInspection} runInspection={runInspection}
+              ackImbalance={ackImbalance} setAckImbalance={setAckImbalance}
+              onNext={() => setStep(4)} onBack={() => setStep(2)} />
+          )}
+          {step === 4 && (
+            <Step4Config key="s4" flConfig={flConfig} setFlConfig={setFlConfig}
+              onNext={() => setStep(5)} onBack={() => setStep(3)} />
+          )}
+          {step === 5 && (
+            <Step5Confirm key="s5" modality={modality} dataState={dataState} scanResults={scanResults}
+              inspection={inspection} flConfig={flConfig} hospitalName={hospitalName}
+              onBack={() => setStep(4)} onSubmit={handleSubmit} registered={registered} />
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   )
 }
