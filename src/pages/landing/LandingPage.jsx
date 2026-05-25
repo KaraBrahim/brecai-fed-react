@@ -23,20 +23,20 @@ import {
 import logo from "@/assets/brecai-fed logo.png";
 
 /* ════════════════════════════════════════════════════════════════════════
-   PALETTE — Extracted from BrecaiFed Logo
+   PALETTE — Sky Blue / #4A9FD4 Primary Theme
    ════════════════════════════════════════════════════════════════════════ */
 const P = {
-  cream: "#F7F5F0",
+  cream: "#EBF5FB",      // light sky-blue tint — main section bg
   white: "#FFFFFF",
-  ink: "#0A0E1A",
-  slate: "#3D4F6B",
-  muted: "#8A94A6",
-  blue: "#0A4DA6",
-  teal: "#00A896",
-  pink: "#FF6B9D",
-  coral: "#FF8C42",
-  gold: "#FFB800",
-  lavender: "#7B61FF",
+  ink: "#0D2B45",        // deep navy — headings & body text (high contrast on sky blue)
+  slate: "#1A4A6B",      // dark blue-slate — secondary text
+  muted: "#5A8FAA",      // muted blue — captions / labels
+  blue: "#4A9FD4",       // PRIMARY — sky blue #4A9FD4
+  teal: "#2E86AB",       // deeper blue-teal — secondary accent
+  pink: "#FF6B9D",       // keep pink accent
+  coral: "#FF8C42",      // keep coral accent
+  gold: "#FFB800",       // keep gold accent
+  lavender: "#7B61FF",   // keep lavender accent
 };
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -231,6 +231,7 @@ function ParticleField() {
     const ctx = canvas.getContext("2d");
     let w, h, particles = [];
     const particleCount = window.innerWidth < 768 ? 40 : 80;
+    const COLORS = [P.blue, P.teal, P.pink, P.coral];
 
     const resize = () => {
       w = canvas.width = canvas.offsetWidth;
@@ -239,31 +240,78 @@ function ParticleField() {
     resize();
     window.addEventListener("resize", resize);
 
-    for (let i = 0; i < particleCount; i++) {
-      particles.push({
-        x: Math.random() * w,
+    // Spawn only in left/right side strips — avoid the center content area
+    const spawnParticle = () => {
+      const sideWidth = w * 0.22; // each side strip is 22% of canvas width
+      const side = Math.random() < 0.5 ? "left" : "right";
+      const px = side === "left"
+        ? Math.random() * sideWidth
+        : w - Math.random() * sideWidth;
+      return {
+        x: px,
         y: Math.random() * h,
         vx: (Math.random() - 0.5) * 0.3,
         vy: (Math.random() - 0.5) * 0.3,
-        r: Math.random() * 2 + 0.5,
-        color: [P.blue, P.teal, P.pink, P.coral][Math.floor(Math.random() * 4)],
-      });
+        r: Math.random() * 3 + 1,              // varied size 1–4px
+        color: COLORS[Math.floor(Math.random() * COLORS.length)],
+        alpha: 0,
+        maxAlpha: Math.random() * 0.5 + 0.5,   // peak opacity 0.5–1.0
+        fadeSpeed: Math.random() * 0.008 + 0.004,
+        phase: Math.random() < 0.5 ? "in" : "visible",
+        visibleTime: 0,
+        visibleDuration: Math.random() * 300 + 150,
+        side,
+        sideWidth,
+      };
+    };
+
+    for (let i = 0; i < particleCount; i++) {
+      particles.push(spawnParticle());
     }
 
     let anim;
     const draw = () => {
       ctx.clearRect(0, 0, w, h);
+
+      // --- dots with lifecycle ---
       particles.forEach((p) => {
         p.x += p.vx;
         p.y += p.vy;
-        if (p.x < 0 || p.x > w) p.vx *= -1;
+
+        // Bounce off canvas edges
         if (p.y < 0 || p.y > h) p.vy *= -1;
+
+        // Bounce off the center boundary to keep particles in their side strip
+        const centerLeft = w * 0.22;
+        const centerRight = w * 0.78;
+        if (p.side === "left" && p.x > centerLeft) { p.x = centerLeft; p.vx *= -1; }
+        if (p.side === "right" && p.x < centerRight) { p.x = centerRight; p.vx *= -1; }
+        if (p.x < 0) { p.x = 0; p.vx *= -1; }
+        if (p.x > w) { p.x = w; p.vx *= -1; }
+
+        // Lifecycle: fade in → stay → fade out → respawn
+        if (p.phase === "in") {
+          p.alpha += p.fadeSpeed;
+          if (p.alpha >= p.maxAlpha) { p.alpha = p.maxAlpha; p.phase = "visible"; }
+        } else if (p.phase === "visible") {
+          p.visibleTime++;
+          if (p.visibleTime >= p.visibleDuration) p.phase = "out";
+        } else if (p.phase === "out") {
+          p.alpha -= p.fadeSpeed;
+          if (p.alpha <= 0) {
+            const fresh = spawnParticle();
+            Object.assign(p, fresh);
+          }
+        }
+
+        ctx.globalAlpha = p.alpha;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
         ctx.fillStyle = p.color;
-        ctx.globalAlpha = 0.4;
         ctx.fill();
       });
+
+      // --- lines (unchanged) ---
       ctx.globalAlpha = 0.08;
       for (let i = 0; i < particles.length; i++) {
         for (let j = i + 1; j < particles.length; j++) {
@@ -280,6 +328,8 @@ function ParticleField() {
           }
         }
       }
+
+      ctx.globalAlpha = 1;
       anim = requestAnimationFrame(draw);
     };
     draw();
@@ -329,7 +379,7 @@ function Navbar() {
         initial={{ y: -100 }}
         animate={{ y: 0 }}
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-        className="fixed top-0 left-0 right-0 z-50 bg-white/70 backdrop-blur-2xl border-b border-black/5"
+        className="fixed top-0 left-0 right-0 z-50 bg-sky-50/80 backdrop-blur-2xl border-b border-sky-200/60"
       >
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
@@ -354,7 +404,7 @@ function Navbar() {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   className="px-5 py-2 rounded-full text-white text-xs font-black transition-colors"
-                  style={{ backgroundColor: P.ink }}
+                  style={{ backgroundColor: P.blue }}
                 >
                   Launch
                 </motion.button>
@@ -410,7 +460,7 @@ function Navbar() {
                   <motion.button
                     whileTap={{ scale: 0.95 }}
                     className="w-full mt-4 px-6 py-3 rounded-full text-white font-black text-sm"
-                    style={{ backgroundColor: P.ink }}
+                    style={{ backgroundColor: P.blue }}
                   >
                     Launch Platform →
                   </motion.button>
@@ -442,7 +492,7 @@ function Hero() {
   const title2 = useTextScramble("INTELLIGENCE", scrambleTrigger);
 
   return (
-    <section className="relative min-h-screen flex items-center justify-center overflow-hidden" style={{ backgroundColor: P.cream }}>
+    <section className="py-3 relative min-h-screen flex items-center justify-center overflow-hidden" style={{ background: `linear-gradient(160deg, #bae8feff 0%, #EBF5FB 50%, #bae8feff 100%)` }}>
       <ParticleField />
       <OrbitRings />
 
@@ -498,7 +548,7 @@ function Hero() {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 className="px-8 py-4 rounded-full text-white font-black text-sm tracking-wide shadow-xl transition-colors"
-                style={{ backgroundColor: P.ink }}
+                style={{ backgroundColor: P.blue }}
               >
                 Enter Platform →
               </motion.button>
@@ -506,10 +556,10 @@ function Hero() {
           </Magnetic>
           <Magnetic>
             <motion.button
-              whileHover={{ scale: 1.05, backgroundColor: P.ink, color: "#fff" }}
+              whileHover={{ scale: 1.05, backgroundColor: P.blue, color: "#fff" }}
               whileTap={{ scale: 0.95 }}
               className="px-8 py-4 rounded-full border-2 font-black text-sm tracking-wide transition-colors"
-              style={{ borderColor: P.ink, color: P.ink, backgroundColor: "transparent" }}
+              style={{ borderColor: P.blue, color: P.blue, backgroundColor: "transparent" }}
             >
               <Play size={14} className="inline mr-1" /> View Documentation
             </motion.button>
@@ -568,7 +618,7 @@ function TrustBadges() {
     <section className="py-16 border-y border-black/5" style={{ backgroundColor: P.white }}>
       <div className="max-w-7xl mx-auto px-6 text-center">
         <p className="text-xs font-bold uppercase tracking-widest mb-8" style={{ color: P.muted }}>
-          Trusted by leading healthcare institutions
+          Trusted by healthcare institutions worldwide
         </p>
         <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16 opacity-60">
           {partners.map((badge) => (
@@ -595,7 +645,7 @@ function TrustBadges() {
 function StackingCards() {
   const cards = [
     { icon: Scan, title: "Multimodal Fusion", desc: "Fuses histopathological WSI embeddings with clinical metadata and biomarkers through deep cross-attention layers for superior diagnostic accuracy.", color: P.blue, bg: "bg-blue-50" },
-    { icon: Radio, title: "Federated Training", desc: "Train across 30+ hospitals without centralizing patient data. Each site contributes multimodal model updates, never raw records.", color: P.teal, bg: "bg-teal-50" },
+    { icon: Radio, title: "Federated Training", desc: "Train across multiple hospitals without centralizing patient data. Each site contributes model updates, never raw records.", color: P.teal, bg: "bg-teal-50" },
     { icon: Eye, title: "XAI Explainability", desc: "SHAP visual evidence for every clinical prediction. Attention heatmaps overlaid on histology slides + ranked clinical factor contributions.", color: P.pink, bg: "bg-pink-50" },
     { icon: FileText, title: "Clinical Reports", desc: "One-click regulatory-ready PDF generation with full multimodal evidence: WSI heatmaps, biomarker profiles, and confidence intervals.", color: P.coral, bg: "bg-orange-50" },
     { icon: Shield, title: "Enterprise Security", desc: "HIPAA, GDPR, SOC 2. Differential privacy. End-to-end encryption. Raw WSI and clinical data never leave hospital firewalls.", color: P.lavender, bg: "bg-violet-50" },
@@ -827,10 +877,10 @@ function AnimatedCounter({ value, suffix = "" }) {
    ════════════════════════════════════════════════════════════════════════ */
 function Stats() {
   const stats = [
-    { value: "34", suffix: "+", label: "Hospital Networks", color: P.blue },
-    { value: "12.8", suffix: "K", label: "Multimodal Cases", color: P.teal },
-    { value: "94.2", suffix: "%", label: "Fusion Accuracy", color: P.pink },
-    { value: "128", suffix: "", label: "Federated Rounds", color: P.coral },
+    { value: "5", suffix: "+", label: "Organizations", color: P.blue },
+    { value: "31", suffix: "", label: "Registered Patients", color: P.teal },
+    { value: "10", suffix: "", label: "Platform Users", color: P.pink },
+    { value: "99.9", suffix: "%", label: "System Uptime", color: P.coral },
   ];
 
   return (
@@ -871,7 +921,7 @@ function Testimonials() {
       avatar: "👩‍⚕️"
     },
     {
-      quote: "The federated multimodal training reduced our model development time by 60% while maintaining 94% accuracy. Combining WSI and clinical features through cross-attention is clinically transformative.",
+      quote: "The federated multimodal training significantly reduced our model development time while maintaining strong accuracy. Combining imaging and clinical features through cross-attention is clinically transformative.",
       author: "Prof. Marcus Webb",
       role: "AI Research Lead, Johns Hopkins",
       avatar: "👨‍🔬"
@@ -1093,107 +1143,183 @@ function HowItWorks() {
     {
       number: "01",
       icon: Database,
-      title: "Multimodal Data Stays Local",
-      desc: "Each hospital retains its WSI pathology slides, biomarker panels, and EHR records behind its own firewall. Raw multimodal data never moves — only model gradients are shared.",
-      color: P.blue,
+      title: "Upload Your Data Securely",
+      desc: "Doctors and hospitals upload patient scans and medical records through our encrypted platform. Your data is protected at every step — only authorized users can access it.",
+      gradient: "linear-gradient(135deg, #4A9FD4, #2E86AB)",
+      iconBg: "rgba(74,159,212,0.12)",
+      tag: "Secure Upload",
+      stat: "Encrypted & Compliant",
+      pulse: "#4A9FD4",
     },
     {
       number: "02",
       icon: Scan,
-      title: "Local Multimodal Training",
-      desc: "BRECAI-FED trains a multimodal encoder on each institution's data: ViT processes histopathology tiles while a clinical transformer encodes biomarkers. Cross-attention fuses both modalities locally.",
-      color: P.teal,
+      title: "AI Analyzes the Case",
+      desc: "Our AI reads the scan images and the patient's medical history together — the same way an expert doctor would — to understand the full picture before making any assessment.",
+      gradient: "linear-gradient(135deg, #FF6B9D, #e05588)",
+      iconBg: "rgba(255,107,157,0.12)",
+      tag: "Smart Analysis",
+      stat: "Images + Medical History",
+      pulse: "#FF6B9D",
     },
     {
       number: "03",
       icon: Merge,
-      title: "Secure Gradient Fusion",
-      desc: "Encrypted multimodal weight updates are aggregated using secure multi-party computation (SMPC). Differential privacy noise (ε ≤ 1.2) ensures mathematical un-linkability of any single patient's data.",
-      color: P.pink,
+      title: "Hospitals Learn Together",
+      desc: "Hospitals across the network improve the AI together — without ever sharing patient data with each other. Only anonymous learnings are exchanged, keeping every patient's privacy intact.",
+      gradient: "linear-gradient(135deg, #2E86AB, #0B7A75)",
+      iconBg: "rgba(46,134,171,0.12)",
+      tag: "Private Collaboration",
+      stat: "No Patient Data Shared",
+      pulse: "#2E86AB",
     },
     {
       number: "04",
       icon: TrendingUp,
-      title: "Global Multimodal Model",
-      desc: "The aggregated global model — trained on the collective intelligence of 34+ hospital networks and thousands of multimodal cases — is distributed back to each site. Every round improves diagnostic accuracy without centralizing data.",
-      color: P.coral,
+      title: "Better Results for Every Patient",
+      desc: "The more hospitals participate, the smarter the AI becomes. Every patient benefits from insights gathered across the entire network — leading to more accurate and confident diagnoses.",
+      gradient: "linear-gradient(135deg, #FF8C42, #e07030)",
+      iconBg: "rgba(255,140,66,0.12)",
+      tag: "Collective Benefit",
+      stat: "Continuously Improving",
+      pulse: "#FF8C42",
     },
   ];
 
   return (
-    <section className="py-32 bg-white relative overflow-hidden">
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden">
-        <span className="text-[18vw] font-black text-black/[0.025] tracking-tighter whitespace-nowrap">
-          MULTIMODAL
-        </span>
-      </div>
+    <section className="py-13 relative overflow-hidden" style={{
+      background: "linear-gradient(160deg, #fdf6f9 0%, #f0f7ff 50%, #fdf0f5 100%)"
+    }}>
+      <style>{`
+        @keyframes hiw-ring-spin { to { transform: rotate(360deg); } }
+        @keyframes hiw-ring-rev  { to { transform: rotate(-360deg); } }
+        @keyframes hiw-icon-float { 0%,100%{transform:translateY(0px) scale(1)} 50%{transform:translateY(-5px) scale(1.05)} }
+        @keyframes hiw-dot-pulse  { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.6);opacity:0} }
+        @keyframes hiw-line-flow  { from{stroke-dashoffset:0} to{stroke-dashoffset:-32} }
+        .hiw-ring-a { animation: hiw-ring-spin 10s linear infinite; }
+        .hiw-ring-b { animation: hiw-ring-rev  7s linear infinite; }
+        .hiw-icon-float { animation: hiw-icon-float 3s ease-in-out infinite; }
+        .hiw-dot-pulse  { animation: hiw-dot-pulse 2s ease-out infinite; }
+      `}</style>
+
+      {/* Soft blobs */}
+      <div className="absolute top-0 left-0 w-[500px] h-[500px] rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(255,107,157,0.07) 0%, transparent 65%)", transform: "translate(-30%, -30%)" }} />
+      <div className="absolute bottom-0 right-0 w-[500px] h-[500px] rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(74,159,212,0.07) 0%, transparent 65%)", transform: "translate(30%, 30%)" }} />
 
       <div className="relative max-w-7xl mx-auto px-6">
-        <motion.div
-          initial={{ opacity: 0, y: 40 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="text-center mb-20"
-        >
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full mb-6" style={{ backgroundColor: P.blue + "10", border: `1px solid ${P.blue}20` }}>
-            <Zap size={12} style={{ color: P.blue }} />
-            <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: P.blue }}>How It Works</span>
+
+        {/* Header */}
+        <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-20">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-5"
+            style={{ background: "rgba(255,107,157,0.1)", border: "1px solid rgba(255,107,157,0.25)" }}>
+            <HeartPulse size={11} style={{ color: P.pink }} />
+            <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: P.pink }}>How It Works</span>
           </div>
-          <h2 className="text-5xl md:text-6xl font-black tracking-tighter mb-6" style={{ color: P.ink }}>
-            MULTIMODAL BY{" "}
-            <span className="text-transparent bg-clip-text" style={{ backgroundImage: `linear-gradient(to right, ${P.blue}, ${P.teal})` }}>
-              ARCHITECTURE
+          <h2 className="text-5xl md:text-6xl font-black tracking-tighter mb-4" style={{ color: P.ink }}>
+            Four Steps.{" "}
+            <span className="text-transparent bg-clip-text" style={{ backgroundImage: `linear-gradient(to right, ${P.pink}, ${P.blue})` }}>
+              Zero Exposure.
             </span>
           </h2>
-          <p className="text-lg max-w-2xl mx-auto" style={{ color: P.slate }}>
-            Federated learning fuses histopathology and clinical data without ever moving a single patient record.
-            Every architectural decision starts with the assumption that data must stay local — while intelligence must be shared.
+          <p className="text-base max-w-xl mx-auto" style={{ color: P.muted }}>
+            From raw patient data to a global AI model — without a single record ever leaving its hospital.
           </p>
         </motion.div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {steps.map((step, i) => (
-            <motion.div
-              key={step.number}
-              initial={{ opacity: 0, y: 60 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.12, duration: 0.7 }}
-              whileHover={{ y: -6 }}
-              className="relative p-8 rounded-3xl border border-black/5 group"
-              style={{ backgroundColor: P.cream }}
-            >
-              <div className="text-7xl font-black mb-6 leading-none select-none" style={{ color: step.color}}>
-                {step.number}
-              </div>
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-5" style={{ backgroundColor: step.color + "15" }}>
-                <step.icon size={22} style={{ color: step.color }} />
-              </div>
-              <h3 className="text-xl font-black mb-3" style={{ color: P.ink }}>{step.title}</h3>
-              <p className="text-sm leading-relaxed" style={{ color: P.slate }}>{step.desc}</p>
-              {i < steps.length - 1 && (
-                <div className="hidden lg:block absolute -right-3 top-1/2 -translate-y-1/2 z-10">
-                  <div className="w-6 h-6 rounded-full border-2 flex items-center justify-center" style={{ backgroundColor: P.white, borderColor: step.color + "40" }}>
-                    <ArrowRight size={12} style={{ color: step.color }} />
-                  </div>
-                </div>
-              )}
-            </motion.div>
-          ))}
-        </div>
+        {/* Steps row */}
+        <div className="relative">
 
-        <motion.div
-          initial={{ opacity: 0, scaleX: 0 }}
-          whileInView={{ opacity: 1, scaleX: 1 }}
-          viewport={{ once: true }}
-          transition={{ duration: 1.2, delay: 0.4 }}
-          className="mt-16 h-1 rounded-full origin-left"
-          style={{ background: `linear-gradient(to right, ${P.blue}, ${P.teal}, ${P.pink}, ${P.coral})` }}
-        />
-        <div className="mt-4 flex justify-between">
-          {["Hospital A", "Hospital B", "Hospital C", "Global Model"].map((label, i) => (
-            <span key={label} className="text-xs font-bold uppercase tracking-widest" style={{ color: P.muted }}>{label}</span>
-          ))}
+          {/* Connecting dashed line (desktop) */}
+          <div className="hidden lg:block absolute top-[72px] left-[12.5%] right-[12.5%] h-px pointer-events-none" style={{ zIndex: 0 }}>
+            <svg width="100%" height="2" className="overflow-visible">
+              <line x1="0" y1="1" x2="100%" y2="1"
+                stroke="url(#hiw-grad)" strokeWidth="1.5"
+                strokeDasharray="8 6"
+                style={{ animation: "hiw-line-flow 1.5s linear infinite" }}
+              />
+              <defs>
+                <linearGradient id="hiw-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%"   stopColor="#4A9FD4" />
+                  <stop offset="33%"  stopColor="#FF6B9D" />
+                  <stop offset="66%"  stopColor="#7B61FF" />
+                  <stop offset="100%" stopColor="#FF8C42" />
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {steps.map((step, i) => {
+              const Icon = step.icon;
+              return (
+                <motion.div
+                  key={step.number}
+                  initial={{ opacity: 0, y: 50 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.65, delay: i * 0.13, ease: [0.22, 1, 0.36, 1] }}
+                  className="flex flex-col items-center text-center relative z-10"
+                >
+                  {/* Icon circle with animated rings */}
+                  <div className="relative w-24 h-24 flex items-center justify-center mb-5">
+                    {/* Outer pulse ring */}
+                    <div className="hiw-dot-pulse absolute inset-0 rounded-full pointer-events-none"
+                      style={{ border: `1.5px solid ${step.pulse}30` }} />
+                    {/* Spinning dashed rings */}
+                    <div className="hiw-ring-a absolute inset-2 rounded-full pointer-events-none"
+                      style={{ border: `1.5px dashed ${step.pulse}35` }} />
+                    <div className="hiw-ring-b absolute inset-4 rounded-full pointer-events-none"
+                      style={{ border: `1px dashed ${step.pulse}25` }} />
+                    {/* Card */}
+                    <motion.div
+                      whileHover={{ scale: 1.08 }}
+                      transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                      className="relative w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg"
+                      style={{ background: "white", boxShadow: `0 6px 20px ${step.pulse}25` }}
+                    >
+                      {/* Gradient top strip */}
+                      <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl" style={{ background: step.gradient }} />
+                      <div className="hiw-icon-float" style={{ animationDelay: `${i * 0.6}s` }}>
+                        <Icon size={22} style={{ color: step.pulse }} />
+                      </div>
+                    </motion.div>
+                    {/* Step number badge */}
+                    <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center text-white text-[9px] font-black shadow-md"
+                      style={{ background: step.gradient }}>
+                      {step.number}
+                    </div>
+                  </div>
+
+                  {/* Card body */}
+                  <motion.div
+                    whileHover={{ y: -4, boxShadow: `0 20px 48px ${step.pulse}18` }}
+                    transition={{ duration: 0.2 }}
+                    className="w-full rounded-2xl p-6 bg-white"
+                    style={{
+                      boxShadow: `0 4px 24px ${step.pulse}12`,
+                      border: `1px solid ${step.pulse}18`,
+                    }}
+                  >
+                    {/* Tag */}
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full mb-3"
+                      style={{ background: `${step.pulse}12` }}>
+                      <div className="w-1.5 h-1.5 rounded-full" style={{ background: step.pulse }} />
+                      <span className="text-[9px] font-black uppercase tracking-widest" style={{ color: step.pulse }}>{step.tag}</span>
+                    </div>
+
+                    <h3 className="text-base font-black mb-2 leading-snug" style={{ color: P.ink }}>{step.title}</h3>
+                    <p className="text-xs leading-relaxed mb-4" style={{ color: P.muted }}>{step.desc}</p>
+
+                    {/* Stat */}
+                    <div className="pt-3 border-t flex items-center gap-2" style={{ borderColor: `${step.pulse}15` }}>
+                      <CheckCircle2 size={12} style={{ color: step.pulse }} />
+                      <span className="text-[10px] font-bold" style={{ color: step.pulse }}>{step.stat}</span>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </section>
@@ -1217,9 +1343,9 @@ function TechDeepDive() {
         { label: "WSI Encoder", value: "ViT-L/16 (40× tiles)" },
         { label: "Clinical Encoder", value: "Biomarker + EHR Transformer" },
         { label: "Fusion Layer", value: "Cross-Modal Attention" },
-        { label: "Multimodal Accuracy", value: "94.2% (± 0.8%)" },
-        { label: "Single-Modality Baseline", value: "87.1%" },
-        { label: "Federated Rounds", value: "128 completed" },
+        { label: "Multimodal Accuracy", value: "Validated & Improving" },
+        { label: "Single-Modality Baseline", value: "Outperformed" },
+        { label: "Federated Rounds", value: "Active — R-01" },
       ],
     },
     {
@@ -1371,7 +1497,7 @@ function TechDeepDive() {
               >
                 <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: active.color }} />
                 <span className="text-xs font-black uppercase tracking-widest" style={{ color: active.color }}>
-                  Live in production across 34+ sites
+                  Live in production across 5+ sites
                 </span>
               </motion.div>
             </div>
@@ -1408,7 +1534,7 @@ function UseCases() {
       tag: "Clinical Network",
       title: "Multi-Center\nDiagnostics",
       desc: "Connect pathology departments across a regional hospital network. Train a shared multimodal model fusing WSI and clinical data from each site — without transferring a single slide or record. Each site retains full data ownership while contributing to a superior shared diagnostic engine.",
-      metrics: [{ label: "Sites Connected", value: "12+" }, { label: "Accuracy Gain", value: "+8.3%" }],
+      metrics: [{ label: "Sites Connected", value: "5+" }, { label: "Data Sovereignty", value: "Preserved" }],
       color: P.blue,
     },
     {
@@ -1416,7 +1542,7 @@ function UseCases() {
       tag: "Academic Research",
       title: "Cross-Institution\nStudies",
       desc: "Run multi-center clinical AI studies that were previously impossible due to data-sharing restrictions. BRECAI-FED's federated multimodal protocol satisfies IRB requirements at participating institutions by design.",
-      metrics: [{ label: "IRB Compliant", value: "100%" }, { label: "Avg Study Time", value: "-60%" }],
+      metrics: [{ label: "IRB Compliant", value: "100%" }, { label: "Data Stays Local", value: "Always" }],
       color: P.teal,
     },
     {
@@ -1424,7 +1550,7 @@ function UseCases() {
       tag: "Global Deployment",
       title: "International\nCollaboration",
       desc: "Overcome cross-border data sovereignty laws (GDPR, PIPEDA, PDPA) that block traditional AI research. Federated multimodal learning lets EU, US, and Asian institutions train a joint diagnostic model legally — imaging and clinical data stay local.",
-      metrics: [{ label: "Jurisdictions", value: "14" }, { label: "Regulations Met", value: "GDPR/HIPAA" }],
+      metrics: [{ label: "Jurisdictions", value: "Multi" }, { label: "Regulations Met", value: "GDPR/HIPAA" }],
       color: P.pink,
     },
     {
@@ -1529,7 +1655,7 @@ function Science() {
     {
       icon: Stethoscope,
       title: "Clinical Validation",
-      desc: "Prospectively validated across 12 independent cohorts. Multimodal concordance with IHC-based PAM50 subtyping: 94.2%. Every model version undergoes external blinded validation before deployment.",
+      desc: "Validated across independent cohorts. Multimodal concordance with IHC-based PAM50 subtyping is continuously measured. Every model version undergoes external blinded validation before deployment.",
       color: P.pink,
     },
     {
@@ -1815,7 +1941,7 @@ function CTA() {
             READY?
           </h2>
           <p className="text-xl mb-12 max-w-xl mx-auto" style={{ color: P.slate }}>
-            Join 34+ hospital networks fusing WSI and clinical data. 14-day free trial. Full multimodal platform access.
+            Join our growing network of hospitals fusing imaging and clinical data. 14-day free trial. Full multimodal platform access.
           </p>
           <Magnetic>
             <Link to="/auth">
@@ -1907,7 +2033,7 @@ export default function LandingPage() {
       <main>
         <Hero />
         <Marquee />
-        <TrustBadges />
+        {/* <TrustBadges /> */}
         {/* <StackingCards /> */}
         <HowItWorks />
         <TechDeepDive />
