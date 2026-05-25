@@ -155,6 +155,24 @@ export default function XaiDeepDive() {
 
       {!loading && xaiData && !xaiLoading && (
         <>
+          {/* Segmentation Heatmap */}
+          {heatmapUrl && (
+            <motion.div variants={fadeUp} className="mb-5">
+              <SectionCard title="Segmentation & Attention Heatmap" subtitle="Most informative tissue regions identified by the model" icon={Microscope} iconColor="pink">
+                <div className="px-5 pb-5 pt-3">
+                  <img
+                    src={heatmapUrl}
+                    alt="XAI heatmap"
+                    className="w-full max-w-2xl mx-auto rounded-xl border border-slate-200 shadow-sm"
+                  />
+                  <p className="text-[11px] text-slate-400 font-medium text-center mt-3">
+                    Brighter overlays indicate higher diagnostic relevance. Numbered patches show the model's top attention regions.
+                  </p>
+                </div>
+              </SectionCard>
+            </motion.div>
+          )}
+
           {/* Fusion gate */}
           {fusionGate && (
             <motion.div variants={fadeUp} className="mb-5">
