@@ -221,6 +221,7 @@ function ResultsPanel({ prediction, xai, patient, onProceed, onReport }) {
   const topPatches = xai?.xai?.top_features?.top_patches || []
   const fusionGate = xai?.xai?.top_features?.fusion_gate
   const heatmapUrl = xai?.xai?.heatmap_url
+  const segmentationUrl = xai?.xai?.segmentation_url
 
   return (
     <div className="space-y-4">
@@ -263,13 +264,30 @@ function ResultsPanel({ prediction, xai, patient, onProceed, onReport }) {
         </div>
       </div>
 
-      {/* Segmentation Heatmap */}
+      {/* Segmentation overlay — numbered patch locations on slide */}
+      {segmentationUrl && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-4">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Tissue Segmentation Map</p>
+          <img
+            src={segmentationUrl}
+            alt="Tissue segmentation with numbered patch locations"
+            crossOrigin="anonymous"
+            className="w-full rounded-xl border border-slate-100"
+          />
+          <p className="text-[10px] text-slate-400 font-medium text-center mt-2">
+            Numbered circles show the top-attended tissue regions. Gold = highest attention.
+          </p>
+        </div>
+      )}
+
+      {/* Top patches grid */}
       {heatmapUrl && (
         <div className="bg-white rounded-2xl border border-slate-200 p-4">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Segmentation & Attention Heatmap</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Top Attended Patches</p>
           <img
             src={heatmapUrl}
-            alt="XAI heatmap"
+            alt="Top attended tissue patches"
+            crossOrigin="anonymous"
             className="w-full rounded-xl border border-slate-100"
           />
           <p className="text-[10px] text-slate-400 font-medium text-center mt-2">

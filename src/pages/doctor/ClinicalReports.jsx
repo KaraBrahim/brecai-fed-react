@@ -46,6 +46,7 @@ function openReportForPrint(report, patient, doctor) {
 
   // Heatmap from R2 (presigned URL from Laravel)
   const heatmapUrl = report.heatmap_url || report.prediction?.xai_result?.heatmap_url
+  const segmentationUrl = report.segmentation_url || report.prediction?.xai_result?.segmentation_url
   const topPatches = (xai.top_patches || []).slice(0, 10)
 
   const html = `<!DOCTYPE html>
@@ -196,12 +197,23 @@ ${gate.image_weight != null ? `
 ` : ''}
 
 <!-- Histopathology Segmentation & Heatmap -->
+${segmentationUrl ? `
+<div class="section">
+  <div class="section-title">Tissue Segmentation Map</div>
+  <div style="text-align:center; margin: 8px 0;">
+    <img src="${segmentationUrl}" alt="Tissue segmentation" crossorigin="anonymous" style="max-width:100%; width:600px; border-radius:10px; border:1px solid #e2e8f0;" />
+    <p style="font-size:11px; color:#64748b; font-style:italic; margin-top:8px;">Numbered circles show the top-attended tissue regions on the slide thumbnail. Gold = highest attention.</p>
+  </div>
+</div>
+` : ''}
+
+<!-- Top Attended Patches -->
 ${heatmapUrl ? `
 <div class="section">
-  <div class="section-title">Top-Attended Histopathology Patches</div>
+  <div class="section-title">Top Attended Histopathology Patches</div>
   <div style="text-align:center; margin: 8px 0;">
     <img src="${heatmapUrl}" alt="Top attended patches" crossorigin="anonymous" style="max-width:100%; width:600px; border-radius:10px; border:1px solid #e2e8f0;" />
-    <p style="font-size:11px; color:#64748b; font-style:italic; margin-top:8px;">Top-20 patches the model focused on. Each tile is a real region from the WSI labeled with its attention score. Gold/silver/bronze borders mark the top 3 most-attended regions.</p>
+    <p style="font-size:11px; color:#64748b; font-style:italic; margin-top:8px;">Top-20 patches the model focused on. Each tile is a real region from the WSI labeled with its attention score.</p>
   </div>
 </div>
 ` : ''}
