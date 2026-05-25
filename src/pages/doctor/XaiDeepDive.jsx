@@ -56,6 +56,7 @@ export default function XaiDeepDive() {
   const fusionGate = xaiData?.xai?.top_features?.fusion_gate
   const clinicalImportances = xaiData?.xai?.top_features?.clinical || {}
   const heatmapUrl = xaiData?.xai?.heatmap_url
+  const segmentationUrl = xaiData?.xai?.segmentation_url
 
   // Build clinical feature chart data
   const clinicalFeatureNames = {
@@ -155,7 +156,26 @@ export default function XaiDeepDive() {
 
       {!loading && xaiData && !xaiLoading && (
         <>
-          {/* Segmentation Heatmap */}
+          {/* Segmentation overlay — numbered patch locations on slide thumbnail */}
+          {segmentationUrl && (
+            <motion.div variants={fadeUp} className="mb-5">
+              <SectionCard title="Tissue Segmentation Map" subtitle="Top-attended regions numbered on the slide thumbnail" icon={Microscope} iconColor="blue">
+                <div className="px-5 pb-5 pt-3">
+                  <img
+                    src={segmentationUrl}
+                    alt="Tissue segmentation with numbered patch locations"
+                    crossOrigin="anonymous"
+                    className="w-full max-w-3xl mx-auto rounded-xl border border-slate-200 shadow-sm block"
+                  />
+                  <p className="text-[11px] text-slate-400 font-medium mt-2 text-center">
+                    Numbered circles show the top-attended tissue regions. Gold = highest attention. Red circles = top 40 regions.
+                  </p>
+                </div>
+              </SectionCard>
+            </motion.div>
+          )}
+
+          {/* Top patches grid — actual tissue tiles */}
           {heatmapUrl && (
             <motion.div variants={fadeUp} className="mb-5">
               <SectionCard title="Segmentation & Attention Heatmap" subtitle="Most informative tissue regions identified by the model" icon={Microscope} iconColor="pink">
