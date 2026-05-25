@@ -44,6 +44,10 @@ function openReportForPrint(report, patient, doctor) {
   const erPr = `${patient?.er_status ? 'ER+' : 'ER−'} / ${patient?.pr_status ? 'PR+' : 'PR−'} / ${patient?.her2_binary ? 'HER2+' : 'HER2−'}`
   const stageLabel = patient?.stage_num ? `Stage ${['I', 'II', 'III', 'IV'][patient.stage_num - 1] || patient.stage_num}` : '—'
 
+  // Heatmap from R2 (presigned URL from Laravel)
+  const heatmapUrl = report.heatmap_url || report.prediction?.xai_result?.heatmap_url
+  const topPatches = (xai.top_patches || []).slice(0, 10)
+
   const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -191,6 +195,17 @@ ${gate.image_weight != null ? `
 </div>
 ` : ''}
 
+<!-- Histopathology Segmentation & Heatmap -->
+${heatmapUrl ? `
+<div class="section">
+  <div class="section-title">Top-Attended Histopathology Patches</div>
+  <div style="text-align:center; margin: 8px 0;">
+    <img src="${heatmapUrl}" alt="Top attended patches" crossorigin="anonymous" style="max-width:100%; width:600px; border-radius:10px; border:1px solid #e2e8f0;" />
+    <p style="font-size:11px; color:#64748b; font-style:italic; margin-top:8px;">Top-20 patches the model focused on. Each tile is a real region from the WSI labeled with its attention score. Gold/silver/bronze borders mark the top 3 most-attended regions.</p>
+  </div>
+</div>
+` : ''}
+
 <!-- Clinical Notes -->
 ${report.notes ? `
 <div class="section">
@@ -274,15 +289,35 @@ export default function ClinicalReports() {
     }
   }
 
-  const handleFinalize = async (report) => {
+  const [finalizeReport, setFinalizeReport] = useState(null)
+  const [finalizing, setFinalizing] = useState(false)
+
+  const handleFinalizeClick = async (report) => {
+    // Load full report and open preview modal
     try {
-      await doctorApi.reports.finalize(report.id)
-      showToast('Report finalized')
+      const full = await doctorApi.reports.get(report.id)
+      setFinalizeReport(full)
+    } catch {
+      showToast('Failed to load report preview', false)
+    }
+  }
+
+  const confirmFinalize = async () => {
+    if (!finalizeReport) return
+    setFinalizing(true)
+    try {
+      await doctorApi.reports.finalize(finalizeReport.id)
+      showToast('Report finalized and emailed as PDF')
+      setFinalizeReport(null)
       load()
     } catch (err) {
       showToast(err?.response?.data?.message || 'Failed to finalize', false)
+    } finally {
+      setFinalizing(false)
     }
   }
+
+  const handleFinalize = handleFinalizeClick
 
   const stats = {
     total: reports.length,
@@ -394,20 +429,105 @@ export default function ClinicalReports() {
                     <FileCheck2 className="w-3.5 h-3.5" /> Finalize
                   </button>
                 )}
-                {r.status === 'draft' && (
-                  <button
-                    onClick={() => handleDelete(r)}
-                    className="w-9 h-9 rounded-xl border border-red-200 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 transition"
-                    title="Delete report"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
+                <button
+                  onClick={() => handleDelete(r)}
+                  className="w-9 h-9 rounded-xl border border-red-200 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 transition"
+                  title="Delete report"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
             </motion.div>
           ))}
         </motion.div>
       )}
+
+      {/* Finalize preview modal */}
+      <AnimatePresence>
+        {finalizeReport && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[80]"
+              onClick={() => !finalizing && setFinalizeReport(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }}
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[90] w-[calc(100%-2rem)] max-w-3xl bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden"
+            >
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                <div>
+                  <p className="font-extrabold text-slate-900 text-lg">Review Before Finalizing</p>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    Patient {finalizeReport.patient?.patient_identifier} · Report #{finalizeReport.id}
+                  </p>
+                </div>
+                <button
+                  onClick={() => !finalizing && setFinalizeReport(null)}
+                  disabled={finalizing}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition disabled:opacity-50"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="px-6 py-5 max-h-[55vh] overflow-y-auto">
+                <div className="space-y-4">
+                  <div className={`rounded-xl border-2 p-4 ${finalizeReport.prediction?.is_lum_a ? 'bg-teal-50 border-teal-200' : 'bg-pink-50 border-pink-200'}`}>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">AI Classification</p>
+                    <p className={`text-2xl font-black ${finalizeReport.prediction?.is_lum_a ? 'text-[#0BB592]' : 'text-[#F55486]'}`}>
+                      {finalizeReport.prediction?.is_lum_a ? 'Luminal A' : 'Non-Luminal A'}
+                    </p>
+                    <p className="text-sm text-slate-600 font-semibold mt-0.5">
+                      Confidence: {((finalizeReport.prediction?.confidence_lum_a ?? 0) * 100).toFixed(1)}%
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Patient ID</p>
+                      <p className="text-sm font-bold text-slate-900 mt-0.5">{finalizeReport.patient?.patient_identifier || '—'}</p>
+                    </div>
+                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Age / Stage</p>
+                      <p className="text-sm font-bold text-slate-900 mt-0.5">{finalizeReport.patient?.age ?? '—'} / Stage {finalizeReport.patient?.stage_num ?? '—'}</p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => openReportForPrint(finalizeReport, finalizeReport.patient, user)}
+                    className="w-full px-4 py-2.5 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-sm font-bold text-slate-700 flex items-center justify-center gap-2 transition"
+                  >
+                    <Printer className="w-4 h-4" /> Open Full Preview / Print
+                  </button>
+
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs font-semibold text-amber-800 leading-relaxed">
+                    Once finalized, the report cannot be edited. A PDF copy will be emailed to you.
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-3">
+                <button
+                  onClick={() => setFinalizeReport(null)}
+                  disabled={finalizing}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 transition disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmFinalize}
+                  disabled={finalizing}
+                  className="flex items-center gap-2 px-5 py-2 rounded-xl bg-[#0BB592] text-white text-sm font-black hover:bg-[#089b7c] transition disabled:opacity-60"
+                >
+                  {finalizing ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileCheck2 className="w-4 h-4" />}
+                  {finalizing ? 'Finalizing...' : 'Approve & Finalize'}
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Toast */}
       <AnimatePresence>

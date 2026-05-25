@@ -220,6 +220,7 @@ function ResultsPanel({ prediction, xai, patient, onProceed, onReport }) {
   const confNonLumA = prediction?.confidence_non_lum_a ?? 0
   const topPatches = xai?.xai?.top_features?.top_patches || []
   const fusionGate = xai?.xai?.top_features?.fusion_gate
+  const heatmapUrl = xai?.xai?.heatmap_url
 
   return (
     <div className="space-y-4">
@@ -261,6 +262,21 @@ function ResultsPanel({ prediction, xai, patient, onProceed, onReport }) {
           </div>
         </div>
       </div>
+
+      {/* Segmentation Heatmap */}
+      {heatmapUrl && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-4">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Segmentation & Attention Heatmap</p>
+          <img
+            src={heatmapUrl}
+            alt="XAI heatmap"
+            className="w-full rounded-xl border border-slate-100"
+          />
+          <p className="text-[10px] text-slate-400 font-medium text-center mt-2">
+            Top diagnostic regions identified by the model on the slide.
+          </p>
+        </div>
+      )}
 
       {/* Confidence bars */}
       <div className="grid grid-cols-2 gap-3">

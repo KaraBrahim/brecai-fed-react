@@ -55,6 +55,7 @@ export default function XaiDeepDive() {
   const topPatches = xaiData?.xai?.top_features?.top_patches || []
   const fusionGate = xaiData?.xai?.top_features?.fusion_gate
   const clinicalImportances = xaiData?.xai?.top_features?.clinical || {}
+  const heatmapUrl = xaiData?.xai?.heatmap_url
 
   // Build clinical feature chart data
   const clinicalFeatureNames = {
@@ -154,6 +155,24 @@ export default function XaiDeepDive() {
 
       {!loading && xaiData && !xaiLoading && (
         <>
+          {/* Segmentation Heatmap */}
+          {heatmapUrl && (
+            <motion.div variants={fadeUp} className="mb-5">
+              <SectionCard title="Segmentation & Attention Heatmap" subtitle="Most informative tissue regions identified by the model" icon={Microscope} iconColor="pink">
+                <div className="px-5 pb-5 pt-3">
+                  <img
+                    src={heatmapUrl}
+                    alt="XAI heatmap"
+                    className="w-full max-w-2xl mx-auto rounded-xl border border-slate-200 shadow-sm"
+                  />
+                  <p className="text-[11px] text-slate-400 font-medium text-center mt-3">
+                    Brighter overlays indicate higher diagnostic relevance. Numbered patches show the model's top attention regions.
+                  </p>
+                </div>
+              </SectionCard>
+            </motion.div>
+          )}
+
           {/* Fusion gate */}
           {fusionGate && (
             <motion.div variants={fadeUp} className="mb-5">
@@ -229,6 +248,22 @@ export default function XaiDeepDive() {
               </SectionCard>
             )}
           </div>
+
+          {/* Heatmap image — segmentation visualization from HF */}
+          {heatmapUrl && (
+            <motion.div variants={fadeUp} className="mb-4">
+              <SectionCard title="Attention Heatmap" subtitle="Top-attention patches highlighted on the original tissue" icon={Eye} iconColor="pink">
+                <div className="px-5 pb-5 pt-3">
+                  <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-50">
+                    <img src={heatmapUrl} alt="XAI Heatmap" className="w-full h-auto block" />
+                  </div>
+                  <p className="text-[11px] text-slate-400 font-medium mt-2">
+                    Brighter patches = higher model attention. Top-16 most informative regions are shown.
+                  </p>
+                </div>
+              </SectionCard>
+            </motion.div>
+          )}
 
           {/* Top attention patches */}
           {topPatches.length > 0 && (
