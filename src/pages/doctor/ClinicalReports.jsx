@@ -198,35 +198,11 @@ ${gate.image_weight != null ? `
 <!-- Histopathology Segmentation & Heatmap -->
 ${heatmapUrl ? `
 <div class="section">
-  <div class="section-title">Histopathology Segmentation & Attention Heatmap</div>
+  <div class="section-title">Top-Attended Histopathology Patches</div>
   <div style="text-align:center; margin: 8px 0;">
-    <img src="${heatmapUrl}" alt="Attention heatmap" crossorigin="anonymous" style="max-width:100%; width:520px; border-radius:10px; border:1px solid #e2e8f0;" />
-    <p style="font-size:11px; color:#64748b; font-style:italic; margin-top:8px;">Top-attention regions identified by the model on the histopathology slide. Brighter areas indicate higher diagnostic relevance.</p>
+    <img src="${heatmapUrl}" alt="Top attended patches" crossorigin="anonymous" style="max-width:100%; width:600px; border-radius:10px; border:1px solid #e2e8f0;" />
+    <p style="font-size:11px; color:#64748b; font-style:italic; margin-top:8px;">Top-20 patches the model focused on. Each tile is a real region from the WSI labeled with its attention score. Gold/silver/bronze borders mark the top 3 most-attended regions.</p>
   </div>
-</div>
-` : ''}
-
-<!-- Top Diagnostic Regions -->
-${topPatches.length > 0 ? `
-<div class="section">
-  <div class="section-title">Top Diagnostic Regions (Patch Attention Ranking)</div>
-  <table style="width:100%; border-collapse:collapse; margin-top:6px;">
-    <thead>
-      <tr>
-        <th style="background:#f1f5f9; padding:8px 12px; text-align:left; font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:1px; color:#64748b; border-bottom:2px solid #e2e8f0;">Rank</th>
-        <th style="background:#f1f5f9; padding:8px 12px; text-align:left; font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:1px; color:#64748b; border-bottom:2px solid #e2e8f0;">Patch ID</th>
-        <th style="background:#f1f5f9; padding:8px 12px; text-align:left; font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:1px; color:#64748b; border-bottom:2px solid #e2e8f0;">Attention Score</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${topPatches.map((p, i) => `
-      <tr>
-        <td style="padding:7px 12px; font-size:12px; border-bottom:1px solid #e2e8f0;">#${i + 1}</td>
-        <td style="padding:7px 12px; font-size:12px; border-bottom:1px solid #e2e8f0;">Patch ${p.patch_index ?? '—'}</td>
-        <td style="padding:7px 12px; font-size:12px; border-bottom:1px solid #e2e8f0;"><strong>${((p.attention || 0) * 100).toFixed(2)}%</strong></td>
-      </tr>`).join('')}
-    </tbody>
-  </table>
 </div>
 ` : ''}
 

@@ -287,15 +287,13 @@ export default function ExaminationsList() {
                         <FileCheck2 className="w-3.5 h-3.5" /> Report
                       </button>
                     )}
-                    {exam.status !== 'concluded' && (
-                      <button
-                        onClick={() => setDeleteId(exam.id)}
-                        className="w-9 h-9 rounded-xl border border-pink-200 bg-pink-50 flex items-center justify-center text-[#F55486] hover:bg-pink-100 transition"
-                        title="Delete examination"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => setDeleteId(exam.id)}
+                      className="w-9 h-9 rounded-xl border border-pink-200 bg-pink-50 flex items-center justify-center text-[#F55486] hover:bg-pink-100 transition"
+                      title="Delete examination"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               </motion.div>
