@@ -394,15 +394,13 @@ export default function ClinicalReports() {
                     <FileCheck2 className="w-3.5 h-3.5" /> Finalize
                   </button>
                 )}
-                {r.status === 'draft' && (
-                  <button
-                    onClick={() => handleDelete(r)}
-                    className="w-9 h-9 rounded-xl border border-red-200 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 transition"
-                    title="Delete report"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
+                <button
+                  onClick={() => handleDelete(r)}
+                  className="w-9 h-9 rounded-xl border border-red-200 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 transition"
+                  title="Delete report"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
             </motion.div>
           ))}
