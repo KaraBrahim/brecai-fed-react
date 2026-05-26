@@ -415,6 +415,12 @@ const admin = {
     complete(id, data) {
       return client.post(`/admin/federated-rounds/${id}/complete`, data).then((r) => r.data);
     },
+    cancel(id) {
+      return client.post(`/admin/federated-rounds/${id}/cancel`).then((r) => r.data);
+    },
+    delete(id) {
+      return client.delete(`/admin/federated-rounds/${id}`).then((r) => r.data);
+    },
   },
 };
 

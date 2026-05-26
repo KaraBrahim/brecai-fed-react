@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { Network, Server, RefreshCcw, Globe2, Brain, Plus, CheckCircle2, Clock, XCircle, AlertCircle } from 'lucide-react'
+import { Network, Server, RefreshCcw, Globe2, Brain, Plus, CheckCircle2, Clock, XCircle, AlertCircle, Trash2 } from 'lucide-react'
 import { AdminHero, MetricTile, DataTable, StatusPill } from '@/components/admin'
 import { Btn, SectionCard, Modal, Field, inputClass, Toast, stagger } from '@/components/shared'
 import admin from '@/api/api-client/admin'
@@ -50,6 +50,9 @@ export default function FederatedRegistry() {
   const [completing,    setCompleting]    = useState(null)   // round being completed
   const [newRound,      setNewRound]      = useState(false)  // create-round modal
   const [newRoundModel, setNewRoundModel] = useState('')
+  const [newRoundTitle, setNewRoundTitle] = useState('')
+  const [newRoundModality, setNewRoundModality] = useState('open')
+  const [newRoundMinSamples, setNewRoundMinSamples] = useState('')
   const [globalAcc,     setGlobalAcc]     = useState('')
   const [saving,        setSaving]        = useState(false)
   const [toast,         setToast]         = useState({ open: false, message: '', tone: 'teal' })
@@ -108,18 +111,37 @@ export default function FederatedRegistry() {
 
   /* ── Create round ── */
   const createRound = async () => {
-    if (!newRoundModel) { showToast('Select a model', 'pink'); return }
     setSaving(true)
     try {
-      await admin.federatedRounds.create({ ai_model_id: Number(newRoundModel) })
+      await admin.federatedRounds.create({
+        ai_model_id: newRoundModel ? Number(newRoundModel) : undefined,
+        modality: newRoundModality || 'open',
+        title: newRoundTitle || undefined,
+        min_samples: newRoundMinSamples ? Number(newRoundMinSamples) : undefined,
+      })
       showToast('New FL round opened', 'teal')
       setNewRound(false)
       setNewRoundModel('')
+      setNewRoundTitle('')
+      setNewRoundModality('open')
+      setNewRoundMinSamples('')
       load(page)
     } catch (err) {
       handleApiError(err, showToast)
     } finally {
       setSaving(false)
+    }
+  }
+
+  /* ── Delete round ── */
+  const deleteRound = async (round) => {
+    if (!confirm(`Delete Round #${round.round_number}? This cannot be undone.`)) return
+    try {
+      await admin.federatedRounds.delete(round.id)
+      showToast(`Round #${round.round_number} deleted`, 'teal')
+      load(page)
+    } catch (err) {
+      handleApiError(err, showToast)
     }
   }
 
@@ -258,6 +280,15 @@ export default function FederatedRegistry() {
           >
             Contributions
           </button>
+          {['initiated', 'failed'].includes(r.status) && (
+            <button
+              onClick={() => deleteRound(r)}
+              title="Delete round"
+              className="w-8 h-8 rounded-lg border border-red-200 bg-red-50/40 text-red-400 flex items-center justify-center hover:bg-red-50 hover:text-red-600 transition"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       ),
     },
@@ -473,7 +504,7 @@ export default function FederatedRegistry() {
         open={newRound}
         onClose={() => { setNewRound(false); setNewRoundModel('') }}
         title="Create FL Round"
-        subtitle="Select the AI model to train in this federated round"
+        subtitle="Open a new federated learning round for instructor contributions"
         size="sm"
         footer={
           <>
@@ -486,20 +517,51 @@ export default function FederatedRegistry() {
           </>
         }
       >
-        <Field label="AI Model">
-          <select
-            className={inputClass}
-            value={newRoundModel}
-            onChange={e => setNewRoundModel(e.target.value)}
-          >
-            <option value="">— Select model —</option>
-            {models.map(m => (
-              <option key={m.id} value={m.id}>
-                {m.name} v{m.version}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <div className="space-y-4">
+          <Field label="Round Title (optional)">
+            <input
+              className={inputClass}
+              placeholder="e.g. LumA Classification Update — May 2026"
+              value={newRoundTitle || ''}
+              onChange={e => setNewRoundTitle(e.target.value)}
+            />
+          </Field>
+          <Field label="Accepted Modality">
+            <select
+              className={inputClass}
+              value={newRoundModality || 'open'}
+              onChange={e => setNewRoundModality(e.target.value)}
+            >
+              <option value="open">Open — any modality accepted</option>
+              <option value="image_only">Image Only (A4 model)</option>
+              <option value="clinical_only">Clinical Only (A1 model)</option>
+              <option value="multimodal">Multimodal (A6 model)</option>
+            </select>
+          </Field>
+          <Field label="AI Model (optional — leave blank for modality-based)">
+            <select
+              className={inputClass}
+              value={newRoundModel}
+              onChange={e => setNewRoundModel(e.target.value)}
+            >
+              <option value="">— Auto-select by modality —</option>
+              {models.map(m => (
+                <option key={m.id} value={m.id}>
+                  {m.name} v{m.version}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Min. samples per contributor">
+            <input
+              type="number"
+              className={inputClass}
+              placeholder="20"
+              value={newRoundMinSamples || ''}
+              onChange={e => setNewRoundMinSamples(e.target.value)}
+            />
+          </Field>
+        </div>
       </Modal>
 
       {/* ── Complete round modal ── */}
