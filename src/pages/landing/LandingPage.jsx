@@ -373,10 +373,10 @@ function Navbar() {
   }, []);
 
   const navLinks = [
-    { label: "About", href: "#about", icon: Users },
     { label: "How It Works", href: "#howitworks", icon: Zap },
     { label: "Technology", href: "#tech", icon: Brain },
     { label: "Use Cases", href: "#usecases", icon: Globe },
+    { label: "About", href: "#about", icon: Users },
     { label: "Contact", href: "#contact", icon: Mail },
   ];
 
