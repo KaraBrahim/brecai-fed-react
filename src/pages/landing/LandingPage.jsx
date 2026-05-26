@@ -21,6 +21,7 @@ import {
   Scan, Merge, Combine
 } from "lucide-react";
 import logo from "@/assets/brecai-fed logo.png";
+import uc2Logo from "@/assets/Logo-uc2-icon-removebg-preview.png";
 
 /* ════════════════════════════════════════════════════════════════════════
    PALETTE — Sky Blue / #4A9FD4 Primary Theme
@@ -1207,6 +1208,7 @@ function About() {
     {
       name: "Ahmed Chikh Salah",
       role: "SDSI",
+      focus: "",
       avatar: "AC",
       gradient: "linear-gradient(135deg, #4A9FD4, #2E86AB)",
       links: [{ label: "Constantine 2", icon: GraduationCap }],
@@ -1214,6 +1216,7 @@ function About() {
     {
       name: "Brahim Kara",
       role: "SDSI",
+      focus: "",
       avatar: "BK",
       gradient: "linear-gradient(135deg, #FF6B9D, #e05588)",
       links: [{ label: "Constantine 2", icon: GraduationCap }],
@@ -1261,9 +1264,9 @@ function About() {
           className="mb-12 p-6 rounded-2xl flex flex-col md:flex-row items-center gap-6 text-center md:text-left"
           style={{ background: `linear-gradient(135deg, ${P.blue}08, ${P.teal}06)`, border: `1px solid ${P.blue}20` }}
         >
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center shrink-0"
-            style={{ background: `linear-gradient(135deg, ${P.blue}, ${P.teal})` }}>
-            <GraduationCap size={28} color="#fff" />
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center shrink-0 bg-white overflow-hidden"
+            style={{ border: `1px solid ${P.blue}20`, boxShadow: `0 4px 16px ${P.blue}15` }}>
+            <img src={uc2Logo} alt="UC2" className="w-12 h-12 object-contain" />
           </div>
           <div className="flex-1">
             <p className="text-[10px] font-black uppercase tracking-widest mb-1" style={{ color: P.muted }}>Institution</p>
@@ -2027,7 +2030,7 @@ function Contact() {
   const contacts = [
     { icon: Mail, label: "Email Us", value: "brahim.kara@univ-constantine2.dz", color: P.blue },
     { icon: Phone, label: "Call Us", value: "+213 783 072 430", color: P.teal },
-    { icon: MapPin, label: "University", value: "Université Abdelhamid Mehri — Constantine 2, Algeria", color: P.pink },
+    { icon: MapPin, label: "University", value: "University Abdelhamid Mehri — Constantine 2, Algeria", color: P.pink },
     { icon: Building2, label: "Department", value: "NTIC Faculty · Software Technologies & Information Systems", color: P.coral },
   ];
 
@@ -2178,7 +2181,7 @@ function Contact() {
    ════════════════════════════════════════════════════════════════════════ */
 function CTA() {
   return (
-    <section className="py-32 relative overflow-hidden" style={{ backgroundColor: P.cream }}>
+    <section className="py-26 relative overflow-hidden" style={{ backgroundColor: P.cream }}>
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full blur-[150px]" style={{ background: `linear-gradient(to right, ${P.blue}10, ${P.teal}10, ${P.pink}10)` }} />
       <div className="relative max-w-4xl mx-auto px-6 text-center">
         <motion.div
