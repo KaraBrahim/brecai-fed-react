@@ -248,18 +248,22 @@ export default function AuthLayout() {
         {/* Top nav */}
         <div className="absolute top-6 right-6 flex items-center gap-3 text-sm font-semibold">
           {/* Language switcher */}
-          <div className="flex items-center gap-1">
+          <div className="relative flex items-center gap-0 p-1 rounded-full bg-slate-100 border border-slate-200">
             {LANGUAGES.filter(lang => lang.code !== 'ar').map(lang => (
               <button
                 key={lang.code}
                 onClick={() => setLocale(lang.code)}
-                title={lang.label}
-                className={`px-3 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest transition-all duration-150 ${
-                  locale === lang.code
-                    ? 'bg-[#0572B2] text-white'
-                    : 'text-slate-400 hover:text-slate-700'
-                }`}
+                className="relative z-10 px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest transition-colors duration-150"
+                style={{ color: locale === lang.code ? '#fff' : '#94a3b8' }}
               >
+                {locale === lang.code && (
+                  <motion.div
+                    layoutId="lang-pill"
+                    className="absolute inset-0 rounded-full bg-[#0572B2]"
+                    style={{ zIndex: -1 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                  />
+                )}
                 {lang.code}
               </button>
             ))}

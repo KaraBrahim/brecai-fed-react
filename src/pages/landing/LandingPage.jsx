@@ -1206,16 +1206,14 @@ function About() {
   const team = [
     {
       name: "Ahmed Chikh Salah",
-      role: "AI & Full-Stack Engineer",
-      focus: "A6 Cross-Attention Fusion · WSI Pipeline · React Frontend",
+      role: "SDSI",
       avatar: "AC",
       gradient: "linear-gradient(135deg, #4A9FD4, #2E86AB)",
       links: [{ label: "Constantine 2", icon: GraduationCap }],
     },
     {
       name: "Brahim Kara",
-      role: "AI & Backend Engineer",
-      focus: "Federated Learning · Clinical Data Pipeline · Laravel API",
+      role: "SDSI",
       avatar: "BK",
       gradient: "linear-gradient(135deg, #FF6B9D, #e05588)",
       links: [{ label: "Constantine 2", icon: GraduationCap }],
