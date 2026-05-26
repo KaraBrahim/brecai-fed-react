@@ -268,12 +268,14 @@ function ResultsPanel({ prediction, xai, patient, onProceed, onReport }) {
       {segmentationUrl && (
         <div className="bg-white rounded-2xl border border-slate-200 p-4">
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Tissue Segmentation Map</p>
-          <img
-            src={segmentationUrl}
-            alt="Tissue segmentation with numbered patch locations"
-            crossOrigin="anonymous"
-            className="w-full rounded-xl border border-slate-100"
-          />
+          <div className="w-full overflow-x-auto rounded-xl border border-slate-100 bg-slate-950 flex justify-center items-center p-2">
+            <img
+              src={segmentationUrl}
+              alt="Tissue segmentation with numbered patch locations"
+              crossOrigin="anonymous"
+              className="max-h-[480px] object-contain w-auto h-auto min-w-[200px]"
+            />
+          </div>
           <p className="text-[10px] text-slate-400 font-medium text-center mt-2">
             Numbered circles show the top-attended tissue regions. Gold = highest attention.
           </p>
