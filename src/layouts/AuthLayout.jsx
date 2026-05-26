@@ -249,7 +249,7 @@ export default function AuthLayout() {
         <div className="absolute top-6 right-6 flex items-center gap-3 text-sm font-semibold">
           {/* Language switcher */}
           <div className="relative flex items-center gap-0 p-1 rounded-full bg-slate-100 border border-slate-200">
-            {LANGUAGES.filter(lang => lang.code !== 'ar').map(lang => (
+            {LANGUAGES.map(lang => (
               <button
                 key={lang.code}
                 onClick={() => setLocale(lang.code)}

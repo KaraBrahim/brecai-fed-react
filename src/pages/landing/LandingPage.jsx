@@ -20,7 +20,7 @@ import {
   Hospital, GraduationCap, ChevronDown, Mail, Phone, MapPin,
   Scan, Merge, Combine
 } from "lucide-react";
-import logo from "@/assets/brecai-fed logo.png";
+import logo from "@/assets/logo.png";
 import uc2Logo from "@/assets/Logo-uc2-icon-removebg-preview.png";
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -2269,6 +2269,7 @@ export default function LandingPage() {
 
   return (
     <div
+      dir="ltr"
       className="min-h-screen font-sans overflow-x-hidden"
       style={{
         backgroundColor: P.cream,
