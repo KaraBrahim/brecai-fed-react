@@ -371,7 +371,13 @@ function Navbar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const navLinks = [];
+  const navLinks = [
+    { label: "About", href: "#about", icon: Users },
+    { label: "How It Works", href: "#howitworks", icon: Zap },
+    { label: "Technology", href: "#tech", icon: Brain },
+    { label: "Use Cases", href: "#usecases", icon: Globe },
+    { label: "Contact", href: "#contact", icon: Mail },
+  ];
 
   return (
     <>
@@ -379,41 +385,80 @@ function Navbar() {
         initial={{ y: -100 }}
         animate={{ y: 0 }}
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-        className="fixed top-0 left-0 right-0 z-50 bg-sky-50/80 backdrop-blur-2xl border-b border-sky-200/60"
+        className="fixed top-0 left-0 right-0 z-50 backdrop-blur-2xl border-b"
+        style={{
+          backgroundColor: scrolled ? "rgba(235,245,251,0.92)" : "rgba(235,245,251,0.75)",
+          borderColor: scrolled ? `${P.blue}25` : "rgba(74,159,212,0.12)",
+          boxShadow: scrolled ? `0 4px 24px rgba(74,159,212,0.08)` : "none",
+          transition: "background-color 0.3s, box-shadow 0.3s, border-color 0.3s",
+        }}
       >
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between gap-8">
+
+          {/* Logo */}
+          <Link to="/" className="flex items-center gap-2.5 shrink-0">
             <img src={logo} alt="BRECAI-FED" className="h-8 w-auto" />
-            <span className="font-black text-sm tracking-tight" style={{ color: P.ink }}>BRECAI-FED</span>
+            <div className="flex flex-col leading-none">
+              <span className="font-black text-sm tracking-tight" style={{ color: P.ink }}>BRECAI<span style={{ color: P.blue }}>-FED</span></span>
+              <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: P.muted }}>Breast Cancer AI</span>
+            </div>
           </Link>
 
-          <div className="hidden md:flex items-center gap-6">
-            {navLinks.map((item) => (
-              <a
-                key={item}
-                href={`#${item.toLowerCase()}`}
-                className="text-xs font-bold uppercase tracking-wider transition-colors hover:opacity-100"
-                style={{ color: P.slate, opacity: 0.8 }}
+          {/* Center nav links */}
+          <div className="hidden lg:flex items-center gap-1 flex-1 justify-center">
+            {navLinks.map(({ label, href, icon: Icon }) => (
+              <motion.a
+                key={label}
+                href={href}
+                whileHover={{ scale: 1.03 }}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all"
+                style={{ color: P.slate }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.backgroundColor = `${P.blue}12`;
+                  e.currentTarget.style.color = P.blue;
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.backgroundColor = "transparent";
+                  e.currentTarget.style.color = P.slate;
+                }}
               >
-                {item}
-              </a>
+                <Icon size={13} />
+                {label}
+              </motion.a>
             ))}
+          </div>
+
+          {/* Right side */}
+          <div className="hidden md:flex items-center gap-3 shrink-0">
+            {/* Live badge */}
+            {/* <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-full"
+              style={{ background: `${P.teal}12`, border: `1px solid ${P.teal}25` }}>
+              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: P.teal }} />
+              <span className="text-[9px] font-black uppercase tracking-widest" style={{ color: P.teal }}>System Live</span>
+            </div>
+ */}
             <Link to="/auth">
               <Magnetic>
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  className="px-5 py-2 rounded-full text-white text-xs font-black transition-colors"
-                  style={{ backgroundColor: P.blue }}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-full text-white text-xs font-black shadow-lg transition-all"
+                  style={{
+                    background: `linear-gradient(135deg, ${P.blue}, ${P.teal})`,
+                    boxShadow: `0 4px 16px ${P.blue}35`,
+                  }}
                 >
-                  Launch
+                  <Zap size={12} />
+                  Launch Platform
                 </motion.button>
               </Magnetic>
             </Link>
           </div>
 
+          {/* Mobile hamburger */}
           <button
-            className="md:hidden p-2"
+            className="md:hidden p-2 rounded-xl transition-colors"
+            style={{ backgroundColor: mobileOpen ? `${P.blue}12` : "transparent" }}
             onClick={() => setMobileOpen(!mobileOpen)}
             aria-label="Toggle menu"
           >
@@ -422,6 +467,7 @@ function Navbar() {
         </div>
       </motion.nav>
 
+      {/* Mobile drawer */}
       <AnimatePresence>
         {mobileOpen && (
           <>
@@ -430,39 +476,59 @@ function Navbar() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setMobileOpen(false)}
-              className="fixed inset-0 z-40 bg-black/20 md:hidden"
+              className="fixed inset-0 z-40 bg-black/20 md:hidden backdrop-blur-sm"
             />
             <motion.div
               initial={{ x: "100%" }}
               animate={{ x: 0 }}
               exit={{ x: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="fixed right-0 top-0 bottom-0 z-50 w-80 bg-white p-6 md:hidden shadow-2xl"
+              className="fixed right-0 top-0 bottom-0 z-50 w-72 md:hidden shadow-2xl flex flex-col"
+              style={{ backgroundColor: P.white }}
             >
-              <div className="flex justify-end mb-8">
-                <button onClick={() => setMobileOpen(false)} aria-label="Close menu">
-                  <X size={24} style={{ color: P.ink }} />
+              {/* Drawer header */}
+              <div className="flex items-center justify-between px-6 py-5 border-b" style={{ borderColor: `${P.blue}15` }}>
+                <div className="flex items-center gap-2">
+                  <img src={logo} alt="BRECAI-FED" className="h-7 w-auto" />
+                  <span className="font-black text-sm" style={{ color: P.ink }}>BRECAI<span style={{ color: P.blue }}>-FED</span></span>
+                </div>
+                <button onClick={() => setMobileOpen(false)} className="p-1.5 rounded-lg" style={{ backgroundColor: `${P.blue}10` }}>
+                  <X size={18} style={{ color: P.ink }} />
                 </button>
               </div>
-              <div className="flex flex-col gap-6">
-                {navLinks.map((item) => (
-                  <a
-                    key={item}
-                    href={`#${item.toLowerCase()}`}
+
+              {/* Links */}
+              <div className="flex-1 px-4 py-6 flex flex-col gap-1">
+                {navLinks.map(({ label, href, icon: Icon }, i) => (
+                  <motion.a
+                    key={label}
+                    href={href}
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.06 }}
                     onClick={() => setMobileOpen(false)}
-                    className="text-2xl font-black transition-colors hover:opacity-100"
-                    style={{ color: P.ink, opacity: 0.9 }}
+                    className="flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-colors"
+                    style={{ color: P.slate }}
+                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = `${P.blue}10`; e.currentTarget.style.color = P.blue; }}
+                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = P.slate; }}
                   >
-                    {item}
-                  </a>
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${P.blue}10` }}>
+                      <Icon size={15} style={{ color: P.blue }} />
+                    </div>
+                    {label}
+                  </motion.a>
                 ))}
+              </div>
+
+              {/* Drawer footer */}
+              <div className="px-4 pb-6 pt-4 border-t" style={{ borderColor: `${P.blue}15` }}>
                 <Link to="/auth" onClick={() => setMobileOpen(false)}>
                   <motion.button
-                    whileTap={{ scale: 0.95 }}
-                    className="w-full mt-4 px-6 py-3 rounded-full text-white font-black text-sm"
-                    style={{ backgroundColor: P.blue }}
+                    whileTap={{ scale: 0.97 }}
+                    className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-white font-black text-sm shadow-lg"
+                    style={{ background: `linear-gradient(135deg, ${P.blue}, ${P.teal})`, boxShadow: `0 4px 16px ${P.blue}35` }}
                   >
-                    Launch Platform →
+                    <Zap size={14} /> Launch Platform →
                   </motion.button>
                 </Link>
               </div>
@@ -786,7 +852,7 @@ function HorizontalRoles() {
   ];
 
   return (
-    <section id="platform" className="relative py-24 overflow-hidden" style={{ backgroundColor: P.ink }}>
+    <section id="platform" className="relative py-10 overflow-hidden" style={{ backgroundColor: P.ink }}>
       <div className="absolute top-8 left-8 z-10">
         <span className="text-xs font-black text-white/30 uppercase tracking-widest flex items-center gap-2">
           Platform Roles
@@ -884,7 +950,7 @@ function Stats() {
   ];
 
   return (
-    <section className="py-24" style={{ backgroundColor: P.cream }}>
+    <section className="py-10" style={{ backgroundColor: P.cream }}>
       <div className="max-w-7xl mx-auto px-6">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-black/10 rounded-3xl overflow-hidden">
           {stats.map((stat, i) => (
@@ -915,21 +981,21 @@ function Stats() {
 function Testimonials() {
   const quotes = [
     {
-      quote: "BRECAI-FED's multimodal approach — fusing our pathology slides with clinical biomarker data — delivered diagnostic confidence we couldn't achieve with imaging alone. A true breakthrough.",
-      author: "Dr. Sarah Chen",
-      role: "Chief of Oncology, Mayo Clinic",
-      avatar: "👩‍⚕️"
+      quote: "BRECAI-FED bridges the diagnostic gap we face every day in Algeria — where PAM50 and Oncotype DX are simply not available. Being able to subtype Luminal A from routine IHC markers and a histology slide, with zero performance penalty, is exactly what our patients need.",
+      author: "Ahmed Chikh Salah",
+      role: "Co-Developer, BRECAI-FED · University of Constantine 2",
+      avatar: "�‍💻"
     },
     {
-      quote: "The federated multimodal training significantly reduced our model development time while maintaining strong accuracy. Combining imaging and clinical features through cross-attention is clinically transformative.",
-      author: "Prof. Marcus Webb",
-      role: "AI Research Lead, Johns Hopkins",
+      quote: "The cross-attention fusion architecture genuinely surprised us — the model learns to rely more on the image when clinical data is sparse, and more on biomarkers when the slide is ambiguous. That adaptive behaviour is what makes it clinically trustworthy.",
+      author: "Brahim Kara",
+      role: "Co-Developer, BRECAI-FED · University of Constantine 2",
       avatar: "👨‍🔬"
     }
   ];
 
   return (
-    <section className="py-32" style={{ backgroundColor: P.cream }}>
+    <section className="py-10" style={{ backgroundColor: P.cream }}>
       <div className="max-w-5xl mx-auto px-6">
         <h2 className="text-4xl md:text-5xl font-black text-center mb-16" style={{ color: P.ink }}>
           What <span className="text-transparent bg-clip-text" style={{ backgroundImage: `linear-gradient(to right, ${P.teal}, ${P.pink})` }}>Experts Say</span>
@@ -977,7 +1043,7 @@ function Security() {
   ];
 
   return (
-    <section id="security" className="py-32 bg-white relative overflow-hidden">
+    <section id="security" className="py-10 bg-white relative overflow-hidden">
       <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-20 items-center">
         <motion.div
           initial={{ opacity: 0, x: -60 }}
@@ -1075,15 +1141,11 @@ function FAQ() {
     {
       q: "Can we integrate with our existing EHR and PACS systems?",
       a: "BRECAI-FED supports HL7 FHIR, DICOM, and custom API integrations. Our multimodal pipeline can ingest WSI from PACS, biomarker panels from LIS, and structured clinical data from EHR systems. Our implementation team provides dedicated support for onboarding."
-    },
-    {
-      q: "What's the deployment timeline?",
-      a: "Typical deployment takes 4-6 weeks: Week 1-2 for multimodal pipeline setup and integration testing, Week 3-4 for federated node configuration, Week 5-6 for staff training and go-live. We offer a sandbox environment for evaluation."
     }
   ];
 
   return (
-    <section className="py-32 bg-white">
+    <section className="py-10 bg-white">
       <div className="max-w-4xl mx-auto px-6">
         <h2 className="text-4xl md:text-5xl font-black text-center mb-16" style={{ color: P.ink }}>
           Frequently Asked Questions
@@ -1132,6 +1194,165 @@ function FAQ() {
             </motion.div>
           ))}
         </div>
+      </div>
+    </section>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   ABOUT
+   ════════════════════════════════════════════════════════════════════════ */
+function About() {
+  const team = [
+    {
+      name: "Ahmed Chikh Salah",
+      role: "AI & Full-Stack Engineer",
+      focus: "A6 Cross-Attention Fusion · WSI Pipeline · React Frontend",
+      avatar: "AC",
+      gradient: "linear-gradient(135deg, #4A9FD4, #2E86AB)",
+      links: [{ label: "Constantine 2", icon: GraduationCap }],
+    },
+    {
+      name: "Brahim Kara",
+      role: "AI & Backend Engineer",
+      focus: "Federated Learning · Clinical Data Pipeline · Laravel API",
+      avatar: "BK",
+      gradient: "linear-gradient(135deg, #FF6B9D, #e05588)",
+      links: [{ label: "Constantine 2", icon: GraduationCap }],
+    },
+  ];
+
+  const supervisors = [
+    { name: "Pr. Benmerzoug Djamel", role: "Thesis Supervisor" },
+    { name: "Pr. Bouramoul Abdelkrim", role: "Thesis Co-Supervisor" },
+  ];
+
+  return (
+    <section id="about" className="py-8 relative overflow-hidden" style={{ background: `linear-gradient(180deg, ${P.white} 0%, ${P.cream} 100%)` }}>
+      {/* Dot grid */}
+      <div className="absolute inset-0 pointer-events-none" style={{
+        backgroundImage: `radial-gradient(${P.blue}18 1.5px, transparent 1.5px)`,
+        backgroundSize: "28px 28px",
+      }} />
+
+      <div className="relative max-w-6xl mx-auto px-6">
+
+        {/* Header */}
+        <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-16">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-5"
+            style={{ background: `${P.blue}12`, border: `1px solid ${P.blue}30` }}>
+            <Users size={11} style={{ color: P.blue }} />
+            <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: P.blue }}>About the Project</span>
+          </div>
+          <h2 className="text-5xl md:text-6xl font-black tracking-tighter mb-4" style={{ color: P.ink }}>
+            Built at{" "}
+            <span className="text-transparent bg-clip-text" style={{ backgroundImage: `linear-gradient(to right, ${P.blue}, ${P.pink})` }}>
+              Constantine 2
+            </span>
+          </h2>
+          <p className="text-base max-w-2xl mx-auto" style={{ color: P.muted }}>
+            A Master's thesis project from the University of Abdelhamid Mehri — Constantine 2, Algeria.
+            BRECAI-FED was developed to address the real diagnostic gap faced by Algerian oncology departments
+            where advanced genomic testing is unavailable.
+          </p>
+        </motion.div>
+
+        {/* University badge */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+          className="mb-12 p-6 rounded-2xl flex flex-col md:flex-row items-center gap-6 text-center md:text-left"
+          style={{ background: `linear-gradient(135deg, ${P.blue}08, ${P.teal}06)`, border: `1px solid ${P.blue}20` }}
+        >
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center shrink-0"
+            style={{ background: `linear-gradient(135deg, ${P.blue}, ${P.teal})` }}>
+            <GraduationCap size={28} color="#fff" />
+          </div>
+          <div className="flex-1">
+            <p className="text-[10px] font-black uppercase tracking-widest mb-1" style={{ color: P.muted }}>Institution</p>
+            <h3 className="text-lg font-black" style={{ color: P.ink }}>University of Abdelhamid Mehri — Constantine 2</h3>
+            <p className="text-sm font-medium mt-0.5" style={{ color: P.slate }}>
+              Faculty of New Technologies of Information and Communication (NTIC) ·
+              Department of Software Technologies and Information Systems
+            </p>
+          </div>
+          <div className="shrink-0 px-4 py-2 rounded-full text-xs font-black"
+            style={{ background: `${P.blue}15`, color: P.blue }}>
+            Master's Thesis · June 2026
+          </div>
+        </motion.div>
+
+        {/* Team cards */}
+        <div className="grid md:grid-cols-2 gap-6 mb-10">
+          {team.map((member, i) => (
+            <motion.div
+              key={member.name}
+              initial={{ opacity: 0, y: 40 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: i * 0.12, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+              whileHover={{ y: -4, transition: { duration: 0.2 } }}
+              className="relative rounded-2xl p-7 bg-white overflow-hidden"
+              style={{ boxShadow: "0 4px 24px rgba(0,0,0,0.06)", border: "1px solid rgba(0,0,0,0.06)" }}
+            >
+              {/* Top accent */}
+              <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl" style={{ background: member.gradient }} />
+
+              <div className="flex items-start gap-5">
+                {/* Avatar */}
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-white text-lg font-black shrink-0 shadow-lg"
+                  style={{ background: member.gradient }}>
+                  {member.avatar}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-lg font-black mb-0.5" style={{ color: P.ink }}>{member.name}</h3>
+                  <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: P.muted }}>{member.role}</p>
+
+                  {/* Focus tags */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {member.focus.split(" · ").map(f => (
+                      <span key={f} className="text-[9px] font-black uppercase tracking-wide px-2.5 py-1 rounded-full"
+                        style={{ background: `${P.blue}10`, color: P.blue }}>
+                        {f}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* University tag */}
+                  <div className="flex items-center gap-1.5 mt-4">
+                    <GraduationCap size={12} style={{ color: P.muted }} />
+                    <span className="text-[10px] font-bold" style={{ color: P.muted }}>Constantine 2 · NTIC Faculty</span>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Supervisors */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+          className="rounded-2xl p-6"
+          style={{ background: `${P.ink}06`, border: `1px solid ${P.ink}10` }}
+        >
+          <p className="text-[10px] font-black uppercase tracking-widest mb-4 text-center" style={{ color: P.muted }}>Under the Supervision of</p>
+          <div className="flex flex-col sm:flex-row justify-center gap-4">
+            {supervisors.map((s, i) => (
+              <div key={i} className="flex items-center gap-3 px-5 py-3 rounded-xl bg-white"
+                style={{ border: `1px solid ${P.blue}15` }}>
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                  style={{ background: `${P.blue}12` }}>
+                  <Award size={16} style={{ color: P.blue }} />
+                </div>
+                <div>
+                  <p className="text-sm font-black" style={{ color: P.ink }}>{s.name}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: P.muted }}>{s.role}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+
       </div>
     </section>
   );
@@ -1189,7 +1410,7 @@ function HowItWorks() {
   ];
 
   return (
-    <section className="py-13 relative overflow-hidden" style={{
+    <section id="howitworks" className="py-13 relative overflow-hidden" style={{
       background: "linear-gradient(160deg, #fdf6f9 0%, #f0f7ff 50%, #fdf0f5 100%)"
     }}>
       <style>{`
@@ -1388,7 +1609,7 @@ function TechDeepDive() {
   const active = tabs[activeTab];
 
   return (
-    <section className="py-32 relative overflow-hidden" style={{ backgroundColor: P.ink }}>
+    <section id="tech" className="py-32 relative overflow-hidden" style={{ backgroundColor: P.ink }}>
       <div className="absolute inset-0 opacity-5">
         {Array.from({ length: 12 }).map((_, i) => (
           <div
@@ -1562,40 +1783,40 @@ function UseCases() {
   const cases = [
     {
       icon: Hospital,
-      tag: "Clinical Network",
-      title: "Multi-Center\nDiagnostics",
-      desc: "Connect pathology departments across a regional hospital network. Train a shared multimodal model fusing WSI and clinical data from each site — without transferring a single slide or record. Each site retains full data ownership while contributing to a superior shared diagnostic engine.",
-      metrics: [{ label: "Sites Connected", value: "5+" }, { label: "Data Sovereignty", value: "Preserved" }],
+      tag: "Algerian Clinical Context",
+      title: "IHC-Only\nDeployment",
+      desc: "Designed for hospitals where advanced genomic tests (PAM50, Oncotype DX) are unavailable. BRECAI-FED works with routine IHC markers only — ER, PR, HER2, age, and stage — delivering the same accuracy as when genomics are available, with zero performance penalty.",
+      metrics: [{ label: "Genomics Required", value: "No" }, { label: "Performance Drop", value: "0%" }],
       color: P.blue,
     },
     {
       icon: GraduationCap,
-      tag: "Academic Research",
-      title: "Cross-Institution\nStudies",
-      desc: "Run multi-center clinical AI studies that were previously impossible due to data-sharing restrictions. BRECAI-FED's federated multimodal protocol satisfies IRB requirements at participating institutions by design.",
-      metrics: [{ label: "IRB Compliant", value: "100%" }, { label: "Data Stays Local", value: "Always" }],
+      tag: "Federated Learning",
+      title: "Privacy-Preserving\nCollaboration",
+      desc: "Validated through simulation across 4 hospital clients with non-IID data distributions (Dirichlet α=0.5). Each site trains locally and shares only model weight updates — raw patient slides and records never leave the institution.",
+      metrics: [{ label: "AUC (Federated)", value: "0.87" }, { label: "vs Centralized", value: "−3.14%" }],
       color: P.teal,
     },
     {
-      icon: Globe,
-      tag: "Global Deployment",
-      title: "International\nCollaboration",
-      desc: "Overcome cross-border data sovereignty laws (GDPR, PIPEDA, PDPA) that block traditional AI research. Federated multimodal learning lets EU, US, and Asian institutions train a joint diagnostic model legally — imaging and clinical data stay local.",
-      metrics: [{ label: "Jurisdictions", value: "Multi" }, { label: "Regulations Met", value: "GDPR/HIPAA" }],
+      icon: Brain,
+      tag: "Multimodal vs Unimodal",
+      title: "Fusion Beats\nImage-Only",
+      desc: "The A6 Cross-Attention Fusion model — combining CONCH WSI features with clinical biomarkers — outperforms every image-only and clinical-only baseline. Multimodal fusion achieves AUC 0.90 vs 0.80 for image-only (CONCH) and 0.75 for ResNet-50.",
+      metrics: [{ label: "A6 Fusion AUC", value: "0.90" }, { label: "Image-Only AUC", value: "0.80" }],
       color: P.pink,
     },
     {
-      icon: Award,
-      tag: "Rare Subtype Research",
-      title: "Rare Variant\nDetection",
-      desc: "Pool rare Luminal A variant cases across institutions to reach statistical significance. Even sites with only a handful of rare cases contribute multimodal signals — WSI morphology plus biomarker profiles — to breakthrough research safely.",
-      metrics: [{ label: "Rare Cases Pooled", value: "340+" }, { label: "Detection Uplift", value: "+22%" }],
+      icon: Stethoscope,
+      tag: "Clinical Decision Support",
+      title: "Luminal A\nSubtyping",
+      desc: "Helps clinicians distinguish Luminal A from non-Luminal A breast cancer subtypes — a critical decision that determines whether a patient needs chemotherapy or can be treated with hormone therapy alone. Tested on 51 held-out patients from the TCGA-BRCA dataset.",
+      metrics: [{ label: "Luminal A Recall", value: "88.95%" }, { label: "F1 Score", value: "86.03%" }],
       color: P.coral,
     },
   ];
 
   return (
-    <section className="py-32 relative overflow-hidden" style={{ backgroundColor: P.cream }}>
+    <section id="usecases" className="py-10 relative overflow-hidden" style={{ backgroundColor: P.cream }}>
       <div className="max-w-7xl mx-auto px-6">
         <motion.div
           initial={{ opacity: 0, y: 40 }}
@@ -1768,7 +1989,7 @@ function LiveMetrics() {
   const metrics = [
     { icon: Activity, label: "Federated Round", value: "R-01", unit: "in progress", color: P.teal },
     { icon: BarChart3, label: "Total Predictions", value: "1", unit: "all time", color: P.blue },
-    { icon: Droplets, label: "Data Centralized", value: "0", unit: "bytes", color: P.pink },
+    { icon: Brain, label: "AI Model", value: "A6", unit: "Cross-Attention Fusion", color: P.pink },
     { icon: Network, label: "Connected Organizations", value: "5", unit: "active", color: P.lavender },
     { icon: Users, label: "Registered Patients", value: "31", unit: "on platform", color: P.coral },
   ];
@@ -1806,10 +2027,10 @@ function Contact() {
   };
 
   const contacts = [
-    { icon: Mail, label: "Email Us", value: "contact@brecai-fed.com", color: P.blue },
-    { icon: Phone, label: "Call Us", value: "+1 (800) 273-2224", color: P.teal },
-    { icon: MapPin, label: "Headquarters", value: "Boston, MA — Medical Innovation District", color: P.pink },
-    { icon: Building2, label: "Partner Program", value: "partners@brecai-fed.com", color: P.coral },
+    { icon: Mail, label: "Email Us", value: "brahim.kara@univ-constantine2.dz", color: P.blue },
+    { icon: Phone, label: "Call Us", value: "+213 783 072 430", color: P.teal },
+    { icon: MapPin, label: "University", value: "Université Abdelhamid Mehri — Constantine 2, Algeria", color: P.pink },
+    { icon: Building2, label: "Department", value: "NTIC Faculty · Software Technologies & Information Systems", color: P.coral },
   ];
 
   return (
@@ -1866,7 +2087,7 @@ function Contact() {
             </div>
             <div className="flex items-center gap-3 p-4 rounded-2xl" style={{ backgroundColor: P.teal + "10", border: `1px solid ${P.teal}20` }}>
               <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: P.teal }} />
-              <span className="text-sm font-bold" style={{ color: P.teal }}>Typical response time: &lt; 4 business hours</span>
+              <span className="text-sm font-bold" style={{ color: P.teal }}>Typical response time: &lt; 1 hour</span>
             </div>
           </motion.div>
 
@@ -1943,7 +2164,7 @@ function Contact() {
                     <CheckCircle2 size={32} style={{ color: P.teal }} />
                   </motion.div>
                   <h3 className="text-2xl font-black mb-3" style={{ color: P.ink }}>Message Received</h3>
-                  <p style={{ color: P.slate }}>We'll reach out within 4 business hours with a personalised multimodal demo plan.</p>
+                  <p style={{ color: P.slate }}>We'll reach out within 1 hour with a personalised multimodal demo plan.</p>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -1997,40 +2218,38 @@ function CTA() {
    ════════════════════════════════════════════════════════════════════════ */
 function Footer() {
   return (
-    <footer className="pt-20 pb-10" style={{ backgroundColor: P.ink }}>
+    <footer className="py-10" style={{ backgroundColor: P.ink }}>
       <div className="max-w-7xl mx-auto px-6">
-        <div className="flex flex-col md:flex-row justify-between items-start gap-12 mb-16">
-          <div>
-            <img src={logo} alt="BRECAI-FED" className="h-10 w-auto brightness-0 invert mb-4" />
-            <p className="text-sm text-white/40 max-w-xs">
-              Multimodal AI for Luminal A breast cancer subtyping. WSI + clinical data. Federated-trained, centrally deployed. Privacy-first. Clinical-grade.
-            </p>
+        <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+          {/* Brand */}
+          <div className="flex items-center gap-3">
+            <img src={logo} alt="BRECAI-FED" className="h-8 w-auto brightness-0 invert" />
+            <div>
+              <p className="text-sm font-black text-white">BRECAI<span style={{ color: P.teal }}>-FED</span></p>
+              <p className="text-[10px] text-white/30 font-medium">Master's Thesis · Constantine 2 · June 2026</p>
+            </div>
           </div>
-          <div className="flex gap-16">
-            {[
-              { title: "Product", links: ["Multimodal AI", "Federated Training", "XAI", "Reports"] },
-              { title: "Company", links: ["About", "Blog", "Careers", "Contact"] },
-              { title: "Legal", links: ["Privacy", "Terms", "Compliance", "Security"] },
-            ].map((col) => (
-              <div key={col.title}>
-                <h4 className="text-xs font-black text-white/30 uppercase tracking-widest mb-4">{col.title}</h4>
-                <ul className="space-y-2">
-                  {col.links.map((link) => (
-                    <li key={link}>
-                      <span className="text-sm text-white/50 hover:text-white transition-colors cursor-pointer">{link}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+
+          {/* Quick links */}
+          <div className="flex items-center gap-6">
+            {["#about", "#howitworks", "#tech", "#usecases", "#contact"].map((href, i) => (
+              <a key={href} href={href}
+                className="text-[11px] font-bold uppercase tracking-widest text-white/30 hover:text-white/70 transition-colors">
+                {["About", "How It Works", "Technology", "Use Cases", "Contact"][i]}
+              </a>
             ))}
           </div>
-        </div>
-        <div className="pt-8 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-xs text-white/20">© 2026 BRECAI-FED. All rights reserved.</p>
+
+          {/* Status */}
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: P.teal }} />
-            <span className="text-xs text-white/20">All systems operational</span>
+            <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: P.teal }} />
+            <span className="text-[10px] text-white/25 font-medium">All systems operational</span>
           </div>
+        </div>
+
+        <div className="mt-8 pt-6 border-t border-white/8 flex flex-col sm:flex-row justify-between items-center gap-2">
+          <p className="text-[11px] text-white/20">© 2026 BRECAI-FED · Ahmed Chikh Salah & Brahim Kara · University of Abdelhamid Mehri — Constantine 2</p>
+          <p className="text-[11px] text-white/20">Supervised by Pr. Benmerzoug Djamel & Pr. Bouramoul Abdelkrim</p>
         </div>
       </div>
     </footer>
@@ -2066,17 +2285,19 @@ export default function LandingPage() {
         <Marquee />
         {/* <TrustBadges /> */}
         {/* <StackingCards /> */}
+        
         <HowItWorks />
         <TechDeepDive />
         <LiveMetrics />
         <HorizontalRoles />
-        <Science />
+      {/*   <Science /> */}
         <UseCases />
         <Stats />
         <Testimonials />
         {/* <Security /> */}
         <FAQ />
         <Contact />
+        <About />
         <CTA />
       </main>
       <Footer />

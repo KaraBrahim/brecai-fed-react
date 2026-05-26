@@ -248,23 +248,23 @@ export default function AuthLayout() {
         {/* Top nav */}
         <div className="absolute top-6 right-6 flex items-center gap-3 text-sm font-semibold">
           {/* Language switcher */}
-          <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
-            {LANGUAGES.map(lang => (
+          <div className="flex items-center gap-1">
+            {LANGUAGES.filter(lang => lang.code !== 'ar').map(lang => (
               <button
                 key={lang.code}
                 onClick={() => setLocale(lang.code)}
                 title={lang.label}
-                className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                className={`px-3 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest transition-all duration-150 ${
                   locale === lang.code
-                    ? 'bg-white text-[#0572B2] shadow-sm'
+                    ? 'bg-[#0572B2] text-white'
                     : 'text-slate-400 hover:text-slate-700'
                 }`}
               >
-                {lang.flag}
+                {lang.code}
               </button>
             ))}
           </div>
-          <NavLink to="/" className="text-slate-400 hover:text-[#0572B2] transition-colors text-xs font-bold uppercase tracking-widest">Platform</NavLink>
+          <NavLink to="/" className="text-slate-400 hover:text-[#0572B2] transition-colors text-xs font-bold uppercase tracking-widest">← Home</NavLink>
           <NavLink
             to="/auth"
             end
