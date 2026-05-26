@@ -171,12 +171,12 @@ export default function InstructorDashboard() {
         <SparkTile label="Best Accuracy"   value={bestAcc != null ? pct(bestAcc) : '—'} sub="Global peak" icon={TrendingUp}  color="pink"   trend={[60,65,70,74,78,80,83,85,87]} />
       </div>
 
-      {/* System health tiles */}
+      {/* Status tiles */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-7">
-        <PulseTile label="Active Rounds"    value={activeRounds.length}    sub="Open for contributions" status={activeRounds.length > 0 ? 'warn' : 'ok'} />
-        <PulseTile label="Active Models"    value={activeModels.length}    sub="Serving predictions"    status={activeModels.length > 0 ? 'ok' : 'crit'} />
-        <PulseTile label="Completed Rounds" value={completedRounds.length} sub="Historical"             status="info" />
+        <PulseTile label="Open Rounds"        value={activeRounds.length}    sub="Accepting contributions" status={activeRounds.length > 0 ? 'warn' : 'ok'} />
         <PulseTile label="Predictions Served" value={kpis?.total_predictions_served != null ? Number(kpis.total_predictions_served).toLocaleString() : '—'} sub="Via FL models" status="ok" />
+        <PulseTile label="Total Models"       value={kpis?.total_ai_models ?? '—'} sub="In registry" status="info" />
+        <PulseTile label="Latest Round"       value={kpis?.latest_round_number ? `R-${String(kpis.latest_round_number).padStart(2,'0')}` : '—'} sub={kpis?.latest_global_accuracy ? `Acc: ${pct(kpis.latest_global_accuracy)}` : 'No data'} status={kpis?.latest_global_accuracy > 0.8 ? 'ok' : 'warn'} />
       </div>
 
       {/* Charts */}
