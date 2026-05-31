@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const BACKEND  = env.VITE_API_URL   || 'https://breast-cancer-detection-backend-main-5kbnz8.laravel.cloud'
+  const BACKEND  = env.VITE_API_URL   || 'https://brecai-fed-backend-96a1fb38b145.herokuapp.com'
   const FASTAPI  = env.VITE_FASTAPI_URL || 'https://ahmedchikhsalah-brecai-fed-api.hf.space'
   const MODAL    = 'https://brest-cancer-detection-project-m2--brecai-extract.modal.run'
   const HF_TOKEN = env.VITE_HF_TOKEN   || ''
