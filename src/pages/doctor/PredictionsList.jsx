@@ -191,10 +191,14 @@ export default function PredictionsList() {
               variants={fadeUp}
               className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col sm:flex-row sm:items-center gap-4"
             >
-              {/* Confidence ring */}
+              {/* Confidence ring — shows the confidence for the predicted class */}
               <div className="shrink-0">
                 {pred.confidence_lum_a != null ? (
-                  <ConfidenceRing value={pred.confidence_lum_a} isLumA={pred.is_lum_a} size={56} />
+                  <ConfidenceRing
+                    value={pred.is_lum_a ? pred.confidence_lum_a : (pred.confidence_non_lum_a ?? (1 - pred.confidence_lum_a))}
+                    isLumA={pred.is_lum_a}
+                    size={56}
+                  />
                 ) : (
                   <div className={`w-14 h-14 rounded-full border-2 flex items-center justify-center text-xs font-black ${
                     pred.status === 'failed' ? 'border-[#F55486] text-[#F55486] bg-pink-50' :
@@ -258,14 +262,14 @@ export default function PredictionsList() {
                   )}
                 </div>
 
-                {/* Prominent confidence bar */}
+                {/* Prominent confidence bar — confidence for the predicted class */}
                 {pred.confidence_lum_a != null && (
                   <div className="mt-2 flex items-center gap-2">
                     <div className="h-2 flex-1 max-w-[200px] bg-slate-100 rounded-full overflow-hidden">
                       <div
                         className="h-full rounded-full"
                         style={{
-                          width: `${pred.confidence_lum_a * 100}%`,
+                          width: `${(pred.is_lum_a ? pred.confidence_lum_a : (pred.confidence_non_lum_a ?? (1 - pred.confidence_lum_a))) * 100}%`,
                           background: pred.is_lum_a
                             ? 'linear-gradient(90deg, #0BB592, #0dd4aa)'
                             : 'linear-gradient(90deg, #F55486, #ff7baa)',
@@ -273,7 +277,7 @@ export default function PredictionsList() {
                       />
                     </div>
                     <span className={`text-xs font-black ${pred.is_lum_a ? 'text-[#0BB592]' : 'text-[#F55486]'}`}>
-                      {(pred.confidence_lum_a * 100).toFixed(1)}% LumA
+                      {((pred.is_lum_a ? pred.confidence_lum_a : (pred.confidence_non_lum_a ?? (1 - pred.confidence_lum_a))) * 100).toFixed(1)}%
                     </span>
                   </div>
                 )}

@@ -8,6 +8,16 @@ const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemi
 
 const SYSTEM_PROMPT = `You are a medical AI data quality inspector for a federated learning platform that classifies breast cancer into LumA vs non-LumA subtypes.
 
+IMPORTANT ARCHITECTURE CONSTRAINTS:
+- The image backbone MUST be CONCH ViT-B/16 (Vision Transformer for histopathology), NOT ResNet or MobileNet
+- Image models use A4 (Attention MIL) or A6 (Cross-Attention Fusion) architectures
+- A6 = CONCH + Clinical features fusion (multimodal)
+- A4 = CONCH only (image-only)
+- CONCH feature dimension is 512
+- For GPU + 8GB+ RAM: recommend train_conch_a6_fl.py (batch_size=16, epochs=5, lr=0.001)
+- For GPU + limited RAM: recommend train_conch_a4_fl.py (batch_size=8, epochs=3, lr=0.001)
+- For CPU only: recommend train_conch_a4_cpu_fl.py (batch_size=4, epochs=3, lr=0.0005)
+
 Analyze the provided dataset statistics and machine resources, then return a JSON response ONLY (no markdown, no prose) with this exact structure:
 {
   "overall_status": "ready|warning|error",
@@ -19,10 +29,10 @@ Analyze the provided dataset statistics and machine resources, then return a JSO
   "recommendations": ["rec1", "rec2", "rec3"],
   "estimated_rounds": 5,
   "recommended_script": {
-    "name": "train_resnet18_fl.py",
-    "reason": "Why this script is recommended based on dataset and resources",
+    "name": "train_conch_a6_fl.py",
+    "reason": "Why this CONCH-based script is recommended based on dataset and resources",
     "batch_size": 16,
-    "epochs": 3,
+    "epochs": 5,
     "lr": 0.001,
     "augmentation": true,
     "pretrained": true
@@ -189,31 +199,31 @@ function ruleBased(stats, resources) {
 
   if (isImageModality) {
     if (hasGpu && ramGb >= 8) {
-      scriptName = 'train_resnet50_fl.py'
-      scriptReason = 'GPU available with sufficient RAM — ResNet-50 for best accuracy'
-      recBatchSize = 32
+      scriptName = 'train_conch_a6_fl.py'
+      scriptReason = 'GPU available with sufficient RAM — CONCH ViT-B/16 with A6 Cross-Attention Fusion for best accuracy'
+      recBatchSize = 16
       recEpochs = 5
       recLr = 0.001
       usePretrained = true
       useAugmentation = true
     } else if (hasGpu) {
-      scriptName = 'train_resnet18_fl.py'
-      scriptReason = 'GPU available but limited RAM — lighter ResNet-18'
-      recBatchSize = 16
+      scriptName = 'train_conch_a4_fl.py'
+      scriptReason = 'GPU available but limited RAM — CONCH ViT-B/16 with A4 Attention MIL (lighter than A6)'
+      recBatchSize = 8
       recEpochs = 3
       recLr = 0.001
       usePretrained = true
       useAugmentation = true
-      resourceWarnings.push('Limited RAM may cause OOM with larger batch sizes')
+      resourceWarnings.push('Limited RAM may cause OOM with larger batch sizes for A6')
     } else {
-      scriptName = 'train_mobilenet_fl.py'
-      scriptReason = 'No GPU detected — MobileNet for CPU-friendly training'
-      recBatchSize = 8
+      scriptName = 'train_conch_a4_cpu_fl.py'
+      scriptReason = 'No GPU detected — CONCH ViT-B/16 with A4 Attention MIL optimized for CPU (smaller batches)'
+      recBatchSize = 4
       recEpochs = 3
       recLr = 0.0005
       usePretrained = true
       useAugmentation = false
-      resourceWarnings.push('No GPU detected — training will be significantly slower')
+      resourceWarnings.push('No GPU detected — CONCH feature extraction will be significantly slower')
       resourceWarnings.push('Augmentation disabled to reduce CPU load')
     }
   } else {

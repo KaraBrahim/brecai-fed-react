@@ -249,13 +249,13 @@ function ResultsPanel({ prediction, xai, patient, onProceed, onReport }) {
         </div>
         <div className="text-right shrink-0">
           <p className={cn('text-3xl font-black font-mono', isLumA ? 'text-[#0BB592]' : 'text-[#F55486]')}>
-            {(confLumA * 100).toFixed(1)}%
+            {((isLumA ? confLumA : confNonLumA) * 100).toFixed(1)}%
           </p>
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('doctor.confidence')}</p>
           <div className="mt-1.5 h-2 w-24 bg-slate-200 rounded-full overflow-hidden">
             <motion.div
               initial={{ width: 0 }}
-              animate={{ width: `${confLumA * 100}%` }}
+              animate={{ width: `${(isLumA ? confLumA : confNonLumA) * 100}%` }}
               transition={{ duration: 1, ease: 'easeOut' }}
               className="h-full rounded-full"
               style={{ background: isLumA ? '#0BB592' : '#F55486' }}

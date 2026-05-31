@@ -17,7 +17,9 @@ import doctorApi from '@/api/api-client/doctor'
 /* ── Client-side PDF generation (print-ready window) ────────────────────── */
 function openReportForPrint(report, patient, doctor) {
   const isLumA = report.prediction?.is_lum_a
-  const conf = report.prediction?.confidence_lum_a ?? 0
+  const confLumA = report.prediction?.confidence_lum_a ?? 0
+  const confNonLumA = report.prediction?.confidence_non_lum_a ?? (1 - confLumA)
+  const conf = isLumA ? confLumA : confNonLumA
   const confPct = (conf * 100).toFixed(1)
   const date = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
   const xai = report.prediction?.xai_result?.top_features || {}
@@ -491,7 +493,12 @@ export default function ClinicalReports() {
                       {finalizeReport.prediction?.is_lum_a ? 'Luminal A' : 'Non-Luminal A'}
                     </p>
                     <p className="text-sm text-slate-600 font-semibold mt-0.5">
-                      Confidence: {((finalizeReport.prediction?.confidence_lum_a ?? 0) * 100).toFixed(1)}%
+                      Confidence: {(() => {
+                        const isLA = finalizeReport.prediction?.is_lum_a
+                        const cla = finalizeReport.prediction?.confidence_lum_a ?? 0
+                        const cnla = finalizeReport.prediction?.confidence_non_lum_a ?? (1 - cla)
+                        return ((isLA ? cla : cnla) * 100).toFixed(1)
+                      })()}%
                     </p>
                   </div>
 

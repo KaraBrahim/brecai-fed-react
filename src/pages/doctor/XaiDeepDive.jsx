@@ -115,7 +115,9 @@ export default function XaiDeepDive() {
               {selectedPred.is_lum_a ? 'Luminal A' : 'Non-Luminal A'}
             </StatusPill>
             <span className="text-sm font-bold text-slate-700 font-mono">
-              {selectedPred.confidence_lum_a != null ? `${(selectedPred.confidence_lum_a * 100).toFixed(1)}% confidence` : ''}
+              {selectedPred.confidence_lum_a != null
+                ? `${((selectedPred.is_lum_a ? selectedPred.confidence_lum_a : (selectedPred.confidence_non_lum_a ?? (1 - selectedPred.confidence_lum_a))) * 100).toFixed(1)}% confidence`
+                : ''}
             </span>
             {selectedPred.ai_model && (
               <span className="text-xs font-semibold text-slate-400">{selectedPred.ai_model.name}</span>
