@@ -985,7 +985,7 @@ function Testimonials() {
       quote: "BRECAI-FED bridges the diagnostic gap we face every day in Algeria — where PAM50 and Oncotype DX are simply not available. Being able to subtype Luminal A from routine IHC markers and a histology slide, with zero performance penalty, is exactly what our patients need.",
       author: "Ahmed Chikh Salah",
       role: "Co-Developer, BRECAI-FED · University of Constantine 2",
-      avatar: "�‍💻"
+      avatar: "‍💻"
     },
     {
       quote: "The cross-attention fusion architecture genuinely surprised us — the model learns to rely more on the image when clinical data is sparse, and more on biomarkers when the slide is ambiguous. That adaptive behaviour is what makes it clinically trustworthy.",

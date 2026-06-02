@@ -20,7 +20,7 @@ export function setAuthToken(token) {
 }
 
 /* ── Axios instance ──────────────────────────────────────────── */
-const BASE_URL = (typeof __BACKEND_URL__ !== 'undefined' ? __BACKEND_URL__ : 'https://breast-cancer-detection-backend-main-5kbnz8.laravel.cloud') + '/api';
+const BASE_URL = (typeof __BACKEND_URL__ !== 'undefined' ? __BACKEND_URL__ : 'https://brecai-fed-backend-96a1fb38b145.herokuapp.com') + '/api';
 
 const client = axios.create({
   baseURL: BASE_URL,
