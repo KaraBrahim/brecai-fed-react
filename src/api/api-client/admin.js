@@ -409,11 +409,16 @@ const admin = {
     get(id) {
       return client.get(`/admin/federated-rounds/${id}`).then((r) => r.data);
     },
+    /** POST /admin/federated-rounds — deadline is required, Gemini hyperparams auto-generated */
     create(data) {
       return client.post('/admin/federated-rounds', data).then((r) => r.data);
     },
     complete(id, data) {
       return client.post(`/admin/federated-rounds/${id}/complete`, data).then((r) => r.data);
+    },
+    /** POST /admin/federated-rounds/:id/aggregate — trigger aggregation manually */
+    aggregate(id) {
+      return client.post(`/admin/federated-rounds/${id}/aggregate`).then((r) => r.data);
     },
     cancel(id) {
       return client.post(`/admin/federated-rounds/${id}/cancel`).then((r) => r.data);

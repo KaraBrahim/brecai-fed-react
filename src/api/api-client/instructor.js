@@ -123,9 +123,24 @@ const instructor = {
       return client.get('/fl/rounds/current').then((r) => r.data);
     },
 
+    /** POST /api/fl/rounds/inspect-data — inspect available data before training */
+    inspectData(data) {
+      return client.post('/fl/rounds/inspect-data', data).then((r) => r.data);
+    },
+
+    /** POST /api/fl/rounds/start-training — begin local training (async, no admin wait) */
+    startTraining(data) {
+      return client.post('/fl/rounds/start-training', data).then((r) => r.data);
+    },
+
     /** POST /api/fl/rounds/submit-contribution — submit local training result */
     submitContribution(data) {
       return client.post('/fl/rounds/submit-contribution', data).then((r) => r.data);
+    },
+
+    /** POST /api/fl/rounds/suggest-hyperparams — get Gemini smart hyperparams */
+    suggestHyperparams(data) {
+      return client.post('/fl/rounds/suggest-hyperparams', data).then((r) => r.data);
     },
   },
 

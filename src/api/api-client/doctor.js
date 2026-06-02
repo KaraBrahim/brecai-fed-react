@@ -83,8 +83,9 @@ const doctor = {
 
     /**
      * POST /api/doctor/patients
+     * patient_identifier is now optional — auto-generated as BRECAI-FED-XX-XXXX-XXXX if omitted
      * @param {{
-     *   patient_identifier: string,
+     *   patient_identifier?: string,
      *   er_status: boolean,
      *   pr_status: boolean,
      *   her2_binary: boolean,

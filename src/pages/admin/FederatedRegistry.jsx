@@ -11,14 +11,16 @@ import {
 
 // ── Status helpers ─────────────────────────────────────────────────────────
 const STATUS_TONE = {
-  pending:     'amber',
-  in_progress: 'blue',
+  initiated:   'amber',
+  training:    'blue',
+  aggregating: 'purple',
   completed:   'teal',
   failed:      'pink',
 }
 const STATUS_ICON = {
-  pending:     AlertCircle,
-  in_progress: Clock,
+  initiated:   AlertCircle,
+  training:    Clock,
+  aggregating: Clock,
   completed:   CheckCircle2,
   failed:      XCircle,
 }
@@ -53,6 +55,7 @@ export default function FederatedRegistry() {
   const [newRoundTitle, setNewRoundTitle] = useState('')
   const [newRoundModality, setNewRoundModality] = useState('open')
   const [newRoundMinSamples, setNewRoundMinSamples] = useState('')
+  const [newRoundDeadline, setNewRoundDeadline] = useState('')
   const [globalAcc,     setGlobalAcc]     = useState('')
   const [saving,        setSaving]        = useState(false)
   const [toast,         setToast]         = useState({ open: false, message: '', tone: 'teal' })
@@ -118,6 +121,7 @@ export default function FederatedRegistry() {
         modality: newRoundModality || 'open',
         title: newRoundTitle || undefined,
         min_samples: newRoundMinSamples ? Number(newRoundMinSamples) : undefined,
+        deadline: newRoundDeadline || undefined,
       })
       showToast('New FL round opened', 'teal')
       setNewRound(false)
@@ -125,6 +129,7 @@ export default function FederatedRegistry() {
       setNewRoundTitle('')
       setNewRoundModality('open')
       setNewRoundMinSamples('')
+      setNewRoundDeadline('')
       load(page)
     } catch (err) {
       handleApiError(err, showToast)
@@ -559,6 +564,15 @@ export default function FederatedRegistry() {
               placeholder="20"
               value={newRoundMinSamples || ''}
               onChange={e => setNewRoundMinSamples(e.target.value)}
+            />
+          </Field>
+          <Field label="Deadline *" hint="Auto-aggregation triggers after this date">
+            <input
+              type="datetime-local"
+              className={inputClass}
+              value={newRoundDeadline || ''}
+              onChange={e => setNewRoundDeadline(e.target.value)}
+              required
             />
           </Field>
         </div>

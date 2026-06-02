@@ -91,8 +91,8 @@ function Spinner() {
   )
 }
 
-const ROUND_STATUS_TONE = { pending: 'amber', in_progress: 'blue', completed: 'teal', failed: 'red' }
-const ROUND_STATUS_LABEL = { pending: 'Pending', in_progress: 'In Progress', completed: 'Completed', failed: 'Failed' }
+const ROUND_STATUS_TONE = { initiated: 'amber', training: 'blue', aggregating: 'purple', completed: 'teal', failed: 'red' }
+const ROUND_STATUS_LABEL = { initiated: 'Initiated', training: 'Training', aggregating: 'Aggregating', completed: 'Completed', failed: 'Failed' }
 
 function pct(v) {
   if (v == null) return '—'
@@ -155,7 +155,7 @@ export default function TrainingConsole() {
     count: d.contribution_count,
   }))
 
-  const activeRounds = rounds.filter(r => r.status === 'pending' || r.status === 'in_progress')
+  const activeRounds = rounds.filter(r => ['initiated', 'training', 'aggregating'].includes(r.status))
   const completedRounds = rounds.filter(r => r.status === 'completed')
 
   const handleNewRound = async () => {
@@ -241,6 +241,14 @@ export default function TrainingConsole() {
       render: (r) => <span className="font-mono text-[11px] font-semibold text-slate-500">{r.started_at ? new Date(r.started_at).toLocaleDateString() : '—'}</span>,
     },
     {
+      key: 'deadline', label: 'Deadline', sortable: true,
+      render: (r) => {
+        if (!r.deadline) return <span className="font-mono text-[11px] font-semibold text-slate-400">No deadline</span>
+        const isPast = new Date(r.deadline) < new Date()
+        return <span className={`font-mono text-[11px] font-semibold ${isPast ? 'text-red-500' : 'text-amber-600'}`}>{new Date(r.deadline).toLocaleDateString()}</span>
+      },
+    },
+    {
       key: 'ended_at', label: 'Ended', sortable: true,
       render: (r) => <span className="font-mono text-[11px] font-semibold text-slate-500">{r.ended_at ? new Date(r.ended_at).toLocaleDateString() : '—'}</span>,
     },
@@ -248,7 +256,7 @@ export default function TrainingConsole() {
       key: '_actions', label: '', align: 'right',
       render: (r) => (
         <div className="flex items-center justify-end gap-1.5">
-          {(r.status === 'pending' || r.status === 'in_progress') && (
+          {['initiated', 'training'].includes(r.status) && (
             <button
               onClick={(e) => { e.stopPropagation(); setCompleteTarget(r); setGlobalAccuracy('') }}
               title="Complete round"
@@ -256,6 +264,9 @@ export default function TrainingConsole() {
             >
               <Flag className="w-3.5 h-3.5" /> Complete
             </button>
+          )}
+          {r.status === 'aggregating' && (
+            <StatusPill tone="purple">Aggregating...</StatusPill>
           )}
           <button
             onClick={(e) => { e.stopPropagation(); navigate('/app/instructor/logs') }}
@@ -365,6 +376,11 @@ export default function TrainingConsole() {
                 <span className="font-mono text-[11px] font-semibold text-slate-400 hidden sm:inline">
                   {r.started_at ? new Date(r.started_at).toLocaleDateString() : '—'}
                 </span>
+                {r.deadline && (
+                  <span className={`font-mono text-[11px] font-semibold ${new Date(r.deadline) < new Date() ? 'text-red-500' : 'text-amber-600'}`}>
+                    Due: {new Date(r.deadline).toLocaleDateString()}
+                  </span>
+                )}
                 <button
                   onClick={() => { setCompleteTarget(r); setGlobalAccuracy('') }}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-[#4c1d95] to-[#7c3aed] text-white text-xs font-bold hover:opacity-90 transition shadow-sm"

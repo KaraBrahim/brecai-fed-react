@@ -41,8 +41,8 @@ function PatientForm({ initial, onSave, onCancel, loading, error }) {
   return (
     <form onSubmit={e => { e.preventDefault(); onSave(f) }} className="space-y-4">
       <div>
-        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{t('doctor.patientId')} *</label>
-        <input className={inputCls} value={f.patient_identifier} onChange={e => set('patient_identifier', e.target.value)} placeholder="e.g. DZ-CONST-042" required />
+        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{t('doctor.patientId')} <span className="text-slate-300 font-normal">(auto-generated if empty)</span></label>
+        <input className={inputCls} value={f.patient_identifier} onChange={e => set('patient_identifier', e.target.value)} placeholder="e.g. BRECAI-FED-01-0001-A3F7 (leave empty for auto)" />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
