@@ -16,7 +16,7 @@ import {
   X, Search, Plus, Brain, Upload, CheckCircle2, AlertTriangle,
   ChevronRight, ChevronLeft, Zap, User, Microscope, BarChart3,
   FileText, Clock, Loader2, Image as ImageIcon, FlaskConical,
-  Layers, ArrowRight, Check,
+  Layers, ArrowRight, Check, Maximize2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useT } from '@/stores/i18nStore'
@@ -212,6 +212,65 @@ function NewPatientForm({ onCreated, onCancel }) {
   )
 }
 
+/* ── Image lightbox ──────────────────────────────────────────────────────── */
+function ImageLightbox({ src, alt, onClose }) {
+  if (!src) return null
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[200] bg-black/90 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition"
+      >
+        <X className="w-5 h-5 text-white" />
+      </button>
+      <img
+        src={src}
+        alt={alt}
+        crossOrigin="anonymous"
+        onClick={e => e.stopPropagation()}
+        className="max-w-full max-h-full object-contain rounded-xl shadow-2xl"
+        style={{ maxHeight: 'calc(100vh - 64px)' }}
+      />
+    </motion.div>
+  )
+}
+
+/* ── XAI image card with expand button ───────────────────────────────────── */
+function XaiImageCard({ title, caption, src, alt, onExpand }) {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{title}</p>
+        <button
+          onClick={onExpand}
+          title="View full screen"
+          className="p-1.5 rounded-lg text-slate-400 hover:text-[#0572B2] hover:bg-blue-50 transition"
+        >
+          <Maximize2 className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="w-full rounded-xl border border-slate-100 bg-slate-950 overflow-hidden flex justify-center items-center p-2">
+        <img
+          src={src}
+          alt={alt}
+          crossOrigin="anonymous"
+          className="w-full object-contain rounded-lg"
+          style={{ maxHeight: '480px' }}
+        />
+      </div>
+      {caption && (
+        <p className="text-[10px] text-slate-400 font-medium text-center mt-2">{caption}</p>
+      )}
+    </div>
+  )
+}
+
 /* ── Results panel ───────────────────────────────────────────────────────── */
 function ResultsPanel({ prediction, xai, patient, onProceed, onReport }) {
   const t = useT()
@@ -224,8 +283,19 @@ function ResultsPanel({ prediction, xai, patient, onProceed, onReport }) {
   const segmentationUrl = xai?.xai?.segmentation_url  // numbered-circles map
   const patchesUrl = xai?.xai?.patches_url        // 5×4 grid of actual patch thumbnails
 
+  const [lightbox, setLightbox] = useState(null) // { src, alt }
+
   return (
     <div className="space-y-4">
+      <AnimatePresence>
+        {lightbox && (
+          <ImageLightbox
+            src={lightbox.src}
+            alt={lightbox.alt}
+            onClose={() => setLightbox(null)}
+          />
+        )}
+      </AnimatePresence>
       {/* Main result banner */}
       <div className={cn(
         'rounded-2xl border-2 p-5 flex items-start gap-4',
@@ -267,38 +337,24 @@ function ResultsPanel({ prediction, xai, patient, onProceed, onReport }) {
 
       {/* Attention heatmap — plasma colormap overlaid on tissue (primary XAI view) */}
       {heatmapUrl && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-4">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Tissue Segmentation Map</p>
-          <div className="w-full overflow-x-auto rounded-xl border border-slate-100 bg-slate-950 flex justify-center items-center p-2">
-            <img
-              src={heatmapUrl}
-              alt="Attention heatmap showing model focus regions"
-              crossOrigin="anonymous"
-              className="max-h-[480px] object-contain w-auto h-auto min-w-[200px]"
-            />
-          </div>
-          <p className="text-[10px] text-slate-400 font-medium text-center mt-2">
-            Attention heatmap — brighter regions = higher model focus. Numbered circles = top patches.
-          </p>
-        </div>
+        <XaiImageCard
+          title="Tissue Segmentation Map"
+          caption="Attention heatmap — brighter regions = higher model focus. Numbered circles = top patches."
+          src={heatmapUrl}
+          alt="Attention heatmap"
+          onExpand={() => setLightbox({ src: heatmapUrl, alt: 'Attention heatmap' })}
+        />
       )}
 
       {/* Top-20 patches grid — actual microscopy patch thumbnails */}
       {patchesUrl && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-4">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Top Attended Patches</p>
-          <div className="w-full overflow-x-auto rounded-xl border border-slate-100 bg-slate-950 flex justify-center items-center p-2">
-            <img
-              src={patchesUrl}
-              alt="Top attended tissue patches grid"
-              crossOrigin="anonymous"
-              className="max-h-[600px] object-contain w-auto h-auto min-w-[200px]"
-            />
-          </div>
-          <p className="text-[10px] text-slate-400 font-medium text-center mt-2">
-            Top diagnostic regions identified by the model — actual tissue patch thumbnails.
-          </p>
-        </div>
+        <XaiImageCard
+          title="Top Attended Patches"
+          caption="Top diagnostic regions identified by the model — actual tissue patch thumbnails."
+          src={patchesUrl}
+          alt="Top attended patches"
+          onExpand={() => setLightbox({ src: patchesUrl, alt: 'Top attended patches' })}
+        />
       )}
 
       {/* Confidence bars */}
