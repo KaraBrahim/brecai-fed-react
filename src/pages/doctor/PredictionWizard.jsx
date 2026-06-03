@@ -220,8 +220,9 @@ function ResultsPanel({ prediction, xai, patient, onProceed, onReport }) {
   const confNonLumA = prediction?.confidence_non_lum_a ?? 0
   const topPatches = xai?.xai?.top_features?.top_patches || []
   const fusionGate = xai?.xai?.top_features?.fusion_gate
-  const heatmapUrl = xai?.xai?.heatmap_url
-  const segmentationUrl = xai?.xai?.segmentation_url
+  const heatmapUrl = xai?.xai?.heatmap_url       // attention heatmap (plasma colormap overlay)
+  const segmentationUrl = xai?.xai?.segmentation_url  // numbered-circles map
+  const patchesUrl = xai?.xai?.patches_url        // 5×4 grid of actual patch thumbnails
 
   return (
     <div className="space-y-4">
@@ -264,36 +265,38 @@ function ResultsPanel({ prediction, xai, patient, onProceed, onReport }) {
         </div>
       </div>
 
-      {/* Segmentation overlay — numbered patch locations on slide */}
-      {segmentationUrl && (
+      {/* Attention heatmap — plasma colormap overlaid on tissue (primary XAI view) */}
+      {heatmapUrl && (
         <div className="bg-white rounded-2xl border border-slate-200 p-4">
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Tissue Segmentation Map</p>
           <div className="w-full overflow-x-auto rounded-xl border border-slate-100 bg-slate-950 flex justify-center items-center p-2">
             <img
-              src={segmentationUrl}
-              alt="Tissue segmentation with numbered patch locations"
+              src={heatmapUrl}
+              alt="Attention heatmap showing model focus regions"
               crossOrigin="anonymous"
               className="max-h-[480px] object-contain w-auto h-auto min-w-[200px]"
             />
           </div>
           <p className="text-[10px] text-slate-400 font-medium text-center mt-2">
-            Numbered circles show the top-attended tissue regions. Gold = highest attention.
+            Attention heatmap — brighter regions = higher model focus. Numbered circles = top patches.
           </p>
         </div>
       )}
 
-      {/* Top patches grid */}
-      {heatmapUrl && (
+      {/* Top-20 patches grid — actual microscopy patch thumbnails */}
+      {patchesUrl && (
         <div className="bg-white rounded-2xl border border-slate-200 p-4">
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Top Attended Patches</p>
-          <img
-            src={heatmapUrl}
-            alt="Top attended tissue patches"
-            crossOrigin="anonymous"
-            className="w-full rounded-xl border border-slate-100"
-          />
+          <div className="w-full overflow-x-auto rounded-xl border border-slate-100 bg-slate-950 flex justify-center items-center p-2">
+            <img
+              src={patchesUrl}
+              alt="Top attended tissue patches grid"
+              crossOrigin="anonymous"
+              className="max-h-[600px] object-contain w-auto h-auto min-w-[200px]"
+            />
+          </div>
           <p className="text-[10px] text-slate-400 font-medium text-center mt-2">
-            Top diagnostic regions identified by the model on the slide.
+            Top diagnostic regions identified by the model — actual tissue patch thumbnails.
           </p>
         </div>
       )}
