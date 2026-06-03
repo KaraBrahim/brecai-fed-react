@@ -57,6 +57,7 @@ export default function XaiDeepDive() {
   const clinicalImportances = xaiData?.xai?.top_features?.clinical || {}
   const heatmapUrl = xaiData?.xai?.heatmap_url
   const segmentationUrl = xaiData?.xai?.segmentation_url
+  const patchesUrl = xaiData?.xai?.patches_url
 
   // Build clinical feature chart data
   const clinicalFeatureNames = {
@@ -177,18 +178,36 @@ export default function XaiDeepDive() {
             </motion.div>
           )}
 
-          {/* Top patches grid — actual tissue tiles */}
+          {/* Attention heatmap — plasma colormap overlay */}
           {heatmapUrl && (
             <motion.div variants={fadeUp} className="mb-5">
-              <SectionCard title="Segmentation & Attention Heatmap" subtitle="Most informative tissue regions identified by the model" icon={Microscope} iconColor="pink">
+              <SectionCard title="Attention Heatmap" subtitle="Plasma colormap showing model focus regions on the tissue" icon={Eye} iconColor="pink">
                 <div className="px-5 pb-5 pt-3">
                   <img
                     src={heatmapUrl}
-                    alt="XAI heatmap"
-                    className="w-full max-w-2xl mx-auto rounded-xl border border-slate-200 shadow-sm"
+                    alt="Attention heatmap overlay"
+                    className="w-full max-w-3xl mx-auto rounded-xl border border-slate-200 shadow-sm block"
                   />
-                  <p className="text-[11px] text-slate-400 font-medium text-center mt-3">
-                    Brighter overlays indicate higher diagnostic relevance. Numbered patches show the model's top attention regions.
+                  <p className="text-[11px] text-slate-400 font-medium mt-2 text-center">
+                    Hot colors (yellow/red) indicate regions the model focused on most. Numbered circles mark top-attended patches.
+                  </p>
+                </div>
+              </SectionCard>
+            </motion.div>
+          )}
+
+          {/* Top patches grid — actual tissue patch images */}
+          {patchesUrl && (
+            <motion.div variants={fadeUp} className="mb-5">
+              <SectionCard title="Top-Attended Patches" subtitle="Actual tissue regions the model focused on, ranked by attention" icon={Microscope} iconColor="teal">
+                <div className="px-5 pb-5 pt-3">
+                  <img
+                    src={patchesUrl}
+                    alt="Top attended patches grid"
+                    className="w-full max-w-2xl mx-auto rounded-xl border border-slate-200 shadow-sm block"
+                  />
+                  <p className="text-[11px] text-slate-400 font-medium mt-2 text-center">
+                    Each tile shows the actual WSI region with its attention score. Gold border = top-3, orange = top-8.
                   </p>
                 </div>
               </SectionCard>
@@ -271,23 +290,7 @@ export default function XaiDeepDive() {
             )}
           </div>
 
-          {/* Heatmap image — segmentation visualization from HF */}
-          {heatmapUrl && (
-            <motion.div variants={fadeUp} className="mb-4">
-              <SectionCard title="Attention Heatmap" subtitle="Top-attention patches highlighted on the original tissue" icon={Eye} iconColor="pink">
-                <div className="px-5 pb-5 pt-3">
-                  <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-50">
-                    <img src={heatmapUrl} alt="XAI Heatmap" className="w-full h-auto block" />
-                  </div>
-                  <p className="text-[11px] text-slate-400 font-medium mt-2">
-                    Brighter patches = higher model attention. Top-16 most informative regions are shown.
-                  </p>
-                </div>
-              </SectionCard>
-            </motion.div>
-          )}
-
-          {/* Top attention patches */}
+          {/* Top attention patches summary */}
           {topPatches.length > 0 && (
             <motion.div variants={fadeUp}>
               <SectionCard title={t('doctor.topPatches2')} subtitle={`Top ${topPatches.length} highest-attention patches from WSI`} icon={Microscope} iconColor="teal">

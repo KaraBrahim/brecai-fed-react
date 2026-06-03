@@ -128,6 +128,8 @@
  * @property {number} id
  * @property {number} prediction_id
  * @property {string|null} heatmap_path
+ * @property {string|null} segmentation_path
+ * @property {string|null} patches_path
  * @property {string} heatmap_status  - "pending" | "processing" | "completed" | "failed"
  * @property {string|null} shap_plot_path
  * @property {string} shap_status  - "pending" | "processing" | "completed" | "failed"
