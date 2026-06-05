@@ -16,7 +16,8 @@ import {
   X, Search, Plus, Brain, Upload, CheckCircle2, AlertTriangle,
   ChevronRight, ChevronLeft, Zap, User, Microscope, BarChart3,
   FileText, Clock, Loader2, Image as ImageIcon, FlaskConical,
-  Layers, ArrowRight, Check, Maximize2,
+  Layers, ArrowRight, Check, Maximize2, RefreshCw, Activity,
+  TrendingUp, TrendingDown, Dna, Shield, Info,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useT } from '@/stores/i18nStore'
@@ -144,20 +145,36 @@ function NewPatientForm({ onCreated, onCancel }) {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [idPreview, setIdPreview] = useState('')
+  const [idLoading, setIdLoading] = useState(true)
   const set = (k, v) => setF(p => ({ ...p, [k]: v }))
+
+  // Fetch the next auto-generated identifier from backend
+  useEffect(() => {
+    doctorApi.patients.nextIdentifier()
+      .then(res => setIdPreview(res.patient_identifier || ''))
+      .catch(() => setIdPreview(''))
+      .finally(() => setIdLoading(false))
+  }, [])
+
+  const refreshPreview = () => {
+    setIdLoading(true)
+    doctorApi.patients.nextIdentifier()
+      .then(res => setIdPreview(res.patient_identifier || ''))
+      .catch(() => {})
+      .finally(() => setIdLoading(false))
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!f.patient_identifier.trim()) { setError('Patient ID is required'); return }
     if (!f.age || isNaN(f.age)) { setError('Valid age is required'); return }
     setLoading(true)
     setError('')
     try {
-      const patient = await doctorApi.patients.create({
-        ...f,
-        age: parseInt(f.age),
-        stage_num: parseInt(f.stage_num),
-      })
+      // Send identifier only if user manually typed one; otherwise backend auto-generates
+      const payload = { ...f, age: parseInt(f.age), stage_num: parseInt(f.stage_num) }
+      if (!payload.patient_identifier.trim()) delete payload.patient_identifier
+      const patient = await doctorApi.patients.create(payload)
       onCreated(patient)
     } catch (err) {
       setError(err?.response?.data?.message || 'Failed to create patient')
@@ -179,10 +196,39 @@ function NewPatientForm({ onCreated, onCancel }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Auto-generated patient identifier section */}
       <div>
-        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{t('doctor.patientId')}</label>
-        <input className={inputCls} value={f.patient_identifier} onChange={e => set('patient_identifier', e.target.value)} placeholder="e.g. DZ-CONST-042" />
+        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
+          Patient ID <span className="text-slate-300 font-medium normal-case">(auto-generated if blank)</span>
+        </label>
+        <div className="relative">
+          <input
+            className={inputCls}
+            value={f.patient_identifier}
+            onChange={e => set('patient_identifier', e.target.value)}
+            placeholder={idLoading ? 'Loading…' : (idPreview || 'BRECAI-FED-XX-XXXX-XXXX')}
+          />
+        </div>
+        {idPreview && !f.patient_identifier && (
+          <div className="mt-1.5 flex items-center gap-2">
+            <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-100">
+              <Dna className="w-3 h-3 text-[#0572B2] shrink-0" />
+              <span className="text-[10px] font-mono font-bold text-[#0572B2]">{idPreview}</span>
+              <span className="text-[9px] text-slate-400 ml-auto">will be assigned</span>
+            </div>
+            <button
+              type="button"
+              onClick={refreshPreview}
+              disabled={idLoading}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-[#0572B2] hover:bg-blue-50 transition disabled:opacity-40"
+              title="Refresh preview"
+            >
+              <RefreshCw className={cn('w-3.5 h-3.5', idLoading && 'animate-spin')} />
+            </button>
+          </div>
+        )}
       </div>
+
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{t('doctor.age')}</label>
@@ -220,7 +266,7 @@ function ImageLightbox({ src, alt, onClose }) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[200] bg-black/90 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-4"
       onClick={onClose}
     >
       <button
@@ -235,18 +281,25 @@ function ImageLightbox({ src, alt, onClose }) {
         crossOrigin="anonymous"
         onClick={e => e.stopPropagation()}
         className="max-w-full max-h-full object-contain rounded-xl shadow-2xl"
-        style={{ maxHeight: 'calc(100vh - 64px)' }}
+        style={{ maxHeight: 'calc(100vh - 80px)', maxWidth: 'calc(100vw - 80px)' }}
       />
     </motion.div>
   )
 }
 
 /* ── XAI image card with expand button ───────────────────────────────────── */
-function XaiImageCard({ title, caption, src, alt, onExpand }) {
+function XaiImageCard({ title, caption, src, alt, onExpand, badge }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-4">
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{title}</p>
+    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+      <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{title}</p>
+          {badge && (
+            <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-[#0572B2]/10 text-[#0572B2]">
+              {badge}
+            </span>
+          )}
+        </div>
         <button
           onClick={onExpand}
           title="View full screen"
@@ -255,18 +308,51 @@ function XaiImageCard({ title, caption, src, alt, onExpand }) {
           <Maximize2 className="w-4 h-4" />
         </button>
       </div>
-      <div className="w-full rounded-xl border border-slate-100 bg-slate-950 overflow-hidden flex justify-center items-center p-2">
+      <div className="bg-slate-950 relative">
         <img
           src={src}
           alt={alt}
           crossOrigin="anonymous"
-          className="w-full object-contain rounded-lg"
-          style={{ maxHeight: '480px' }}
+          className="w-full object-contain"
+          style={{ maxHeight: '520px', minHeight: '200px' }}
         />
       </div>
       {caption && (
-        <p className="text-[10px] text-slate-400 font-medium text-center mt-2">{caption}</p>
+        <div className="px-4 py-2 bg-slate-50 border-t border-slate-100">
+          <p className="text-[10px] text-slate-400 font-medium">{caption}</p>
+        </div>
       )}
+    </div>
+  )
+}
+
+/* ── Confidence gauge ────────────────────────────────────────────────────── */
+function ConfidenceGauge({ label, value, color, isMain }) {
+  const pct = Math.round(value * 100)
+  return (
+    <div className={cn(
+      'rounded-2xl border p-4 flex flex-col gap-2',
+      isMain ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-50 border-slate-100'
+    )}>
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+        {isMain && <span className="text-[9px] font-bold text-slate-300 uppercase">Model confidence</span>}
+      </div>
+      <p className={cn('text-3xl font-black font-mono leading-none', color)}>{pct}%</p>
+      <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 1.2, ease: 'easeOut' }}
+          className="h-full rounded-full"
+          style={{ background: color.includes('teal') || color.includes('0BB592')
+            ? 'linear-gradient(90deg, #0BB592, #06d6a0)'
+            : 'linear-gradient(90deg, #F55486, #ff2d6b)' }}
+        />
+      </div>
+      <p className={cn('text-[10px] font-semibold', value >= 0.7 ? 'text-slate-500' : value >= 0.55 ? 'text-amber-500' : 'text-slate-400')}>
+        {value >= 0.8 ? 'High confidence' : value >= 0.65 ? 'Moderate confidence' : value >= 0.55 ? 'Low confidence' : 'Borderline — review recommended'}
+      </p>
     </div>
   )
 }
@@ -279,122 +365,151 @@ function ResultsPanel({ prediction, xai, patient, onProceed, onReport }) {
   const confNonLumA = prediction?.confidence_non_lum_a ?? 0
   const topPatches = xai?.xai?.top_features?.top_patches || []
   const fusionGate = xai?.xai?.top_features?.fusion_gate
-  const heatmapUrl = xai?.xai?.heatmap_url       // attention heatmap (plasma colormap overlay)
-  const segmentationUrl = xai?.xai?.segmentation_url  // numbered-circles map
-  const patchesUrl = xai?.xai?.patches_url        // 5×4 grid of actual patch thumbnails
+  const heatmapUrl = xai?.xai?.heatmap_url        // zoomed tissue segmentation overlay
+  const patchesUrl = xai?.xai?.patches_url         // top-attended patch thumbnails grid
 
-  const [lightbox, setLightbox] = useState(null) // { src, alt }
+  const [lightbox, setLightbox] = useState(null)
+  const hasImages = !!(heatmapUrl || patchesUrl)
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <AnimatePresence>
         {lightbox && (
-          <ImageLightbox
-            src={lightbox.src}
-            alt={lightbox.alt}
-            onClose={() => setLightbox(null)}
-          />
+          <ImageLightbox src={lightbox.src} alt={lightbox.alt} onClose={() => setLightbox(null)} />
         )}
       </AnimatePresence>
-      {/* Main result banner */}
-      <div className={cn(
-        'rounded-2xl border-2 p-5 flex items-start gap-4',
-        isLumA ? 'bg-teal-50 border-teal-200' : 'bg-pink-50 border-pink-200'
-      )}>
-        <div className={cn(
-          'w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-md',
-          isLumA ? 'bg-[#0BB592] text-white' : 'bg-[#F55486] text-white'
-        )}>
-          {isLumA ? <CheckCircle2 className="w-7 h-7" /> : <AlertTriangle className="w-7 h-7" />}
-        </div>
-        <div className="flex-1">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">AI Prediction Result</p>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-            {isLumA ? t('doctor.luminalAResult') : t('doctor.nonLuminalAResult')}
-          </h2>
-          <p className={cn('text-sm font-semibold mt-1', isLumA ? 'text-teal-700' : 'text-[#F55486]')}>
-            {isLumA
-              ? 'Favorable prognosis — Endocrine therapy candidate'
-              : 'Higher risk profile — MDT review recommended'}
-          </p>
-        </div>
-        <div className="text-right shrink-0">
-          <p className={cn('text-3xl font-black font-mono', isLumA ? 'text-[#0BB592]' : 'text-[#F55486]')}>
-            {((isLumA ? confLumA : confNonLumA) * 100).toFixed(1)}%
-          </p>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('doctor.confidence')}</p>
-          <div className="mt-1.5 h-2 w-24 bg-slate-200 rounded-full overflow-hidden">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${(isLumA ? confLumA : confNonLumA) * 100}%` }}
-              transition={{ duration: 1, ease: 'easeOut' }}
-              className="h-full rounded-full"
-              style={{ background: isLumA ? '#0BB592' : '#F55486' }}
-            />
+
+      {/* ── Main result banner ─────────────────────────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        className={cn(
+          'rounded-2xl border-2 p-5',
+          isLumA ? 'bg-gradient-to-br from-teal-50 to-emerald-50 border-teal-200' : 'bg-gradient-to-br from-pink-50 to-rose-50 border-pink-200'
+        )}
+      >
+        <div className="flex items-start gap-4">
+          <div className={cn(
+            'w-16 h-16 rounded-2xl flex items-center justify-center shrink-0 shadow-lg',
+            isLumA ? 'bg-gradient-to-br from-[#0BB592] to-[#06d6a0] text-white' : 'bg-gradient-to-br from-[#F55486] to-[#ff2d6b] text-white'
+          )}>
+            {isLumA ? <CheckCircle2 className="w-8 h-8" /> : <AlertTriangle className="w-8 h-8" />}
           </div>
-        </div>
-      </div>
-
-      {/* Attention heatmap — plasma colormap overlaid on tissue (primary XAI view) */}
-      {heatmapUrl && (
-        <XaiImageCard
-          title="Tissue Segmentation Map"
-          caption="Attention heatmap — brighter regions = higher model focus. Numbered circles = top patches."
-          src={heatmapUrl}
-          alt="Attention heatmap"
-          onExpand={() => setLightbox({ src: heatmapUrl, alt: 'Attention heatmap' })}
-        />
-      )}
-
-      {/* Top-20 patches grid — actual microscopy patch thumbnails */}
-      {patchesUrl && (
-        <XaiImageCard
-          title="Top Attended Patches"
-          caption="Top diagnostic regions identified by the model — actual tissue patch thumbnails."
-          src={patchesUrl}
-          alt="Top attended patches"
-          onExpand={() => setLightbox({ src: patchesUrl, alt: 'Top attended patches' })}
-        />
-      )}
-
-      {/* Confidence bars */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-white rounded-2xl border border-slate-200 p-4">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Luminal A</p>
-          <p className="text-2xl font-black text-[#0BB592] font-mono">{(confLumA * 100).toFixed(1)}%</p>
-          <div className="mt-2 h-2 bg-slate-100 rounded-full overflow-hidden">
-            <motion.div initial={{ width: 0 }} animate={{ width: `${confLumA * 100}%` }} transition={{ duration: 1 }} className="h-full bg-[#0BB592] rounded-full" />
-          </div>
-        </div>
-        <div className="bg-white rounded-2xl border border-slate-200 p-4">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Non-Luminal A</p>
-          <p className="text-2xl font-black text-[#F55486] font-mono">{(confNonLumA * 100).toFixed(1)}%</p>
-          <div className="mt-2 h-2 bg-slate-100 rounded-full overflow-hidden">
-            <motion.div initial={{ width: 0 }} animate={{ width: `${confNonLumA * 100}%` }} transition={{ duration: 1 }} className="h-full bg-[#F55486] rounded-full" />
-          </div>
-        </div>
-      </div>
-
-      {/* Fusion gate */}
-      {fusionGate && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-4">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">{t('doctor.fusionGate')}</p>
-          <div className="flex items-center gap-3">
-            <div className="flex-1">
-              <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1">
-                <span>{t('doctor.imageContrib')}</span>
-                <span>{(fusionGate.image_weight * 100).toFixed(0)}%</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">AI Prediction Result</p>
+            <h2 className="text-2xl font-black text-slate-900 tracking-tight leading-tight">
+              {isLumA ? t('doctor.luminalAResult') : t('doctor.nonLuminalAResult')}
+            </h2>
+            <p className={cn('text-sm font-semibold mt-1.5', isLumA ? 'text-teal-700' : 'text-[#F55486]')}>
+              {isLumA
+                ? 'Favorable prognosis — Endocrine therapy candidate'
+                : 'Higher risk profile — MDT review recommended'}
+            </p>
+            {patient && (
+              <div className="mt-2 flex items-center gap-1.5 text-[10px] text-slate-400 font-semibold">
+                <User className="w-3 h-3" />
+                <span className="font-mono">{patient.patient_identifier}</span>
+                <span>·</span>
+                <span>Age {patient.age} · Stage {patient.stage_num}</span>
               </div>
-              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+            )}
+          </div>
+          <div className="text-right shrink-0">
+            <p className={cn('text-4xl font-black font-mono leading-none', isLumA ? 'text-[#0BB592]' : 'text-[#F55486]')}>
+              {((isLumA ? confLumA : confNonLumA) * 100).toFixed(0)}%
+            </p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{t('doctor.confidence')}</p>
+            <div className="mt-2 h-2 w-28 bg-white/60 rounded-full overflow-hidden border border-slate-200">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${(isLumA ? confLumA : confNonLumA) * 100}%` }}
+                transition={{ duration: 1.2, ease: 'easeOut' }}
+                className="h-full rounded-full"
+                style={{ background: isLumA ? '#0BB592' : '#F55486' }}
+              />
+            </div>
+            <p className={cn('text-[9px] font-semibold mt-1',
+              (isLumA ? confLumA : confNonLumA) >= 0.8 ? 'text-slate-500' :
+              (isLumA ? confLumA : confNonLumA) >= 0.6 ? 'text-amber-500' : 'text-slate-400'
+            )}>
+              {(isLumA ? confLumA : confNonLumA) >= 0.8 ? 'High' :
+               (isLumA ? confLumA : confNonLumA) >= 0.6 ? 'Moderate' : 'Borderline'}
+            </p>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* ── XAI Images ─────────────────────────────────────────────────── */}
+      {hasImages && (
+        <div className={cn('grid gap-4', heatmapUrl && patchesUrl ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1')}>
+          {heatmapUrl && (
+            <XaiImageCard
+              title="Tissue Segmentation Map"
+              badge="Zoomed · AI Attention"
+              caption="Tissue cropped to region of interest — numbered circles show top attended diagnostic areas."
+              src={heatmapUrl}
+              alt="Tissue segmentation map"
+              onExpand={() => setLightbox({ src: heatmapUrl, alt: 'Tissue segmentation map' })}
+            />
+          )}
+          {patchesUrl && (
+            <XaiImageCard
+              title="Top Attended Patches"
+              badge={`Top ${topPatches.length > 0 ? topPatches.length : 20}`}
+              caption="Highest-attention tissue patches identified by the model — ranked by diagnostic relevance."
+              src={patchesUrl}
+              alt="Top attended patches"
+              onExpand={() => setLightbox({ src: patchesUrl, alt: 'Top attended patches' })}
+            />
+          )}
+        </div>
+      )}
+
+      {/* ── Confidence breakdown ───────────────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-3">
+        <ConfidenceGauge
+          label="Luminal A"
+          value={confLumA}
+          color={isLumA ? 'text-[#0BB592]' : 'text-slate-400'}
+          isMain={isLumA}
+        />
+        <ConfidenceGauge
+          label="Non-Luminal A"
+          value={confNonLumA}
+          color={!isLumA ? 'text-[#F55486]' : 'text-slate-400'}
+          isMain={!isLumA}
+        />
+      </div>
+
+      {/* ── Fusion gate ────────────────────────────────────────────────── */}
+      {fusionGate && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{t('doctor.fusionGate')}</p>
+            <span className="text-[9px] font-bold text-slate-300 uppercase">Model weighting</span>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <div className="flex justify-between text-xs font-bold text-slate-600 mb-1.5">
+                <div className="flex items-center gap-1.5">
+                  <ImageIcon className="w-3 h-3 text-[#0572B2]" />
+                  <span>{t('doctor.imageContrib')}</span>
+                </div>
+                <span className="font-mono text-[#0572B2]">{(fusionGate.image_weight * 100).toFixed(0)}%</span>
+              </div>
+              <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
                 <motion.div initial={{ width: 0 }} animate={{ width: `${fusionGate.image_weight * 100}%` }} transition={{ duration: 1 }} className="h-full bg-[#0572B2] rounded-full" />
               </div>
             </div>
-            <div className="flex-1">
-              <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1">
-                <span>{t('doctor.clinicalContrib')}</span>
-                <span>{(fusionGate.clinical_weight * 100).toFixed(0)}%</span>
+            <div>
+              <div className="flex justify-between text-xs font-bold text-slate-600 mb-1.5">
+                <div className="flex items-center gap-1.5">
+                  <FlaskConical className="w-3 h-3 text-[#0BB592]" />
+                  <span>{t('doctor.clinicalContrib')}</span>
+                </div>
+                <span className="font-mono text-[#0BB592]">{(fusionGate.clinical_weight * 100).toFixed(0)}%</span>
               </div>
-              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
                 <motion.div initial={{ width: 0 }} animate={{ width: `${fusionGate.clinical_weight * 100}%` }} transition={{ duration: 1 }} className="h-full bg-[#0BB592] rounded-full" />
               </div>
             </div>
@@ -402,43 +517,67 @@ function ResultsPanel({ prediction, xai, patient, onProceed, onReport }) {
         </div>
       )}
 
-      {/* Top patches */}
+      {/* ── Top patches metadata ───────────────────────────────────────── */}
       {topPatches.length > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-4">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">{t('doctor.topPatches')} (top {Math.min(8, topPatches.length)})</p>
-          <div className="grid grid-cols-4 gap-2">
-            {topPatches.slice(0, 8).map((p, i) => (
-              <div key={i} className="rounded-xl bg-slate-50 border border-slate-200 p-2 text-center">
-                <p className="text-[9px] font-black text-slate-400">#{i + 1}</p>
-                <p className="text-xs font-extrabold text-[#0572B2]">{(p.attention * 100).toFixed(1)}%</p>
-                <p className="text-[9px] text-slate-400">patch {p.patch_index}</p>
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">
+            {t('doctor.topPatches')} — attention scores
+          </p>
+          <div className="grid grid-cols-5 gap-1.5">
+            {topPatches.slice(0, 10).map((p, i) => (
+              <div key={i} className={cn(
+                'rounded-xl p-2 text-center border',
+                i === 0 ? 'bg-amber-50 border-amber-200' :
+                i < 3    ? 'bg-orange-50 border-orange-100' :
+                'bg-slate-50 border-slate-100'
+              )}>
+                <p className={cn('text-[9px] font-black',
+                  i === 0 ? 'text-amber-600' : i < 3 ? 'text-orange-500' : 'text-slate-400'
+                )}>#{i + 1}</p>
+                <p className="text-[10px] font-extrabold text-[#0572B2] font-mono">{(p.attention * 100).toFixed(1)}%</p>
+                <p className="text-[8px] text-slate-400">p{p.patch_index}</p>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Therapy recommendation */}
-      <div className={cn('rounded-2xl border p-4', isLumA ? 'bg-teal-50 border-teal-200' : 'bg-pink-50 border-pink-200')}>
-        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Therapy Recommendation</p>
-        <p className="text-sm font-semibold text-slate-700 leading-relaxed">
-          {isLumA
-            ? 'Luminal A subtype confirmed. Strong candidate for Endocrine (Hormonal) Therapy — Tamoxifen / Aromatase Inhibitors. Chemotherapy likely not indicated given low proliferation signature.'
-            : 'Non-Luminal A subtype detected. Higher risk profile — Chemotherapy or Targeted Therapy may be required. Consult multi-disciplinary oncology board for escalation protocol.'}
-        </p>
+      {/* ── Therapy recommendation ─────────────────────────────────────── */}
+      <div className={cn(
+        'rounded-2xl border p-4',
+        isLumA
+          ? 'bg-gradient-to-br from-teal-50 to-emerald-50 border-teal-200'
+          : 'bg-gradient-to-br from-pink-50 to-rose-50 border-pink-200'
+      )}>
+        <div className="flex items-start gap-3">
+          <div className={cn(
+            'w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5',
+            isLumA ? 'bg-teal-100 text-teal-700' : 'bg-pink-100 text-[#F55486]'
+          )}>
+            <Shield className="w-4 h-4" />
+          </div>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Therapy Recommendation</p>
+            <p className="text-sm font-semibold text-slate-700 leading-relaxed">
+              {isLumA
+                ? 'Luminal A confirmed. Strong candidate for Endocrine (Hormonal) Therapy — Tamoxifen / Aromatase Inhibitors. Chemotherapy likely not indicated given low proliferation signature.'
+                : 'Non-Luminal A detected. Higher risk profile — Chemotherapy or Targeted Therapy may be required. Consult multi-disciplinary oncology board for escalation protocol.'}
+            </p>
+          </div>
+        </div>
       </div>
 
-      {/* Actions */}
-      <div className="flex gap-3">
+      {/* ── Actions ────────────────────────────────────────────────────── */}
+      <div className="flex gap-3 pt-1">
         <button
           onClick={onProceed}
-          className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-[#0572B2] text-white font-black text-sm hover:bg-[#0462a0] transition shadow-lg"
+          className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-[#0572B2] text-white font-black text-sm hover:bg-[#0462a0] transition shadow-lg shadow-blue-500/20"
         >
           <FileText className="w-4 h-4" /> {t('doctor.proceedExam')}
         </button>
         <button
           onClick={onReport}
-          className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-white font-black text-sm transition shadow-lg"
+          className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-white font-black text-sm transition shadow-lg shadow-blue-900/20"
           style={{ background: 'linear-gradient(135deg, #093A7A, #0572B2)' }}
         >
           <BarChart3 className="w-4 h-4" /> View Report
@@ -453,7 +592,7 @@ export default function PredictionWizard({ onClose }) {
   const t = useT()
   const navigate = useNavigate()
 
-  const [step, setStep] = useState('patient') // patient | model | slide | running | results
+  const [step, setStep] = useState('patient')
   const [patients, setPatients] = useState([])
   const [patientsLoading, setPatientsLoading] = useState(true)
   const [patientSearch, setPatientSearch] = useState('')
@@ -491,7 +630,6 @@ export default function PredictionWizard({ onClose }) {
     doctorApi.aiModels.list().then(res => {
       const list = Array.isArray(res) ? res : res?.data || []
       setModels(list)
-      // Auto-select first active model
       if (list.length > 0 && !selectedModel) setSelectedModel(list[0])
     }).catch(() => {}).finally(() => setModelsLoading(false))
   }, [step])
@@ -509,7 +647,6 @@ export default function PredictionWizard({ onClose }) {
     setProgressPct(0)
     setProgressStep(0)
 
-    // HF Space handles all inference
     const extractUrl = `${__FASTAPI_URL__}/extract`
     const extractHeaders = __HF_TOKEN__ ? { 'Authorization': `Bearer ${__HF_TOKEN__}` } : {}
 
@@ -543,38 +680,28 @@ export default function PredictionWizard({ onClose }) {
         setProgressPct(25)
 
         const fastApiUrl = __FASTAPI_URL__
-
         const isSVS = slideFile.name.toLowerCase().match(/\.(svs|ndpi|scn|mrxs)$/)
 
         if (isSVS) {
-          // SVS/NDPI: upload to R2 in chunks (multipart), register the r2_key with
-          // Laravel, then let the prediction job run the FULL pipeline on Modal
-          // (download + tile + CONCH + A6 fusion + XAI) in one round-trip.
-          // This skips the .pt round-trip we used to do and cuts ~2 minutes
-          // off the wait by avoiding HF Free CPU for the fusion step.
-
-          const PART_SIZE = 16 * 1024 * 1024 // 16 MB
+          const PART_SIZE = 16 * 1024 * 1024
           const MAX_RETRIES = 4
           const partCount = Math.max(1, Math.ceil(slideFile.size / PART_SIZE))
 
           setProgressLabel(`Initializing upload (${partCount} parts)…`)
           setProgressPct(28)
 
-          // 1. Init multipart upload
           const init = await doctorApi.wsiMultipart.init({
             filename: slideFile.name,
             patient_id: selectedPatient.id,
           })
           const { upload_id: uploadId, r2_key: r2Key } = init
 
-          // 2. Get presigned PUT URLs for every part
           const { part_urls: partUrls } = await doctorApi.wsiMultipart.parts({
             upload_id: uploadId,
             r2_key: r2Key,
             part_count: partCount,
           })
 
-          // 3. Upload each part with retries — stable, resumable per-part
           const uploadedParts = []
           try {
             for (let i = 0; i < partCount; i++) {
@@ -597,12 +724,11 @@ export default function PredictionWizard({ onClose }) {
               }
               uploadedParts.push({ PartNumber: i + 1, ETag: etag })
 
-              const pct = 28 + Math.round(((i + 1) / partCount) * 40) // 28→68
+              const pct = 28 + Math.round(((i + 1) / partCount) * 40)
               setProgressPct(pct)
               setProgressLabel(`Uploading slide ${i + 1}/${partCount} parts…`)
             }
 
-            // 4. Complete multipart upload — assembles the parts in R2
             await doctorApi.wsiMultipart.complete({
               upload_id: uploadId,
               r2_key: r2Key,
@@ -615,8 +741,6 @@ export default function PredictionWizard({ onClose }) {
             throw new Error(`Slide upload failed: ${upErr.message}`)
           }
 
-          // 5. Register the R2 upload as a WsiUpload in Laravel (so prediction
-          //    job sees an r2_key and routes to Modal automatically).
           setProgressLabel('Registering slide…')
           setProgressPct(72)
           const wsi = await doctorApi.wsiUploads.uploadR2Key({
@@ -628,7 +752,6 @@ export default function PredictionWizard({ onClose }) {
           setProgressPct(75)
 
         } else {
-          // PNG/JPG/TIFF: send directly to HF Space for CONCH extraction
           setProgressLabel('Uploading image to AI server…')
           setProgressPct(30)
 
@@ -689,54 +812,42 @@ export default function PredictionWizard({ onClose }) {
       })
       setPredictionId(predRes.prediction_id)
 
-      // Step 5: Poll for result — or use immediate result if clinical-only (synchronous)
+      // Step 5: Poll for result
       setProgressStep(5)
-      const engineLabel = 'Running AI analysis…'
-      setProgressLabel(engineLabel)
+      setProgressLabel('Running AI analysis…')
 
-      // If the prediction already completed synchronously, use it directly
       if (predRes.status === 'completed') {
         setPrediction(predRes)
         setProgressPct(95)
         setProgressStep(6)
         setProgressLabel('Fetching XAI results…')
-        // Fetch XAI — wait for it so the progress bar completes properly
         try {
           const xaiData = await doctorApi.predictions.getXai(predRes.prediction_id)
           setXai(xaiData)
-        } catch {} // clinical-only has no XAI — that's fine
+        } catch {}
         setProgressPct(100)
         setStep('results')
         return
       }
 
-      // Otherwise poll. With Modal doing the full pipeline, A6 inference takes
-      // ~60-90 s on a warm T4 container. Without Modal we fall back to HF CPU
-      // which is much slower (~25 min). Calibrate accordingly.
       let attempts = 0
-      const maxAttempts = 600 // 600 × 5 s = 50 min ceiling
-      const expectedPolls = 60  // ~5 min for HF with fused checkpoint
+      const maxAttempts = 600
+      const expectedPolls = 60
       while (attempts < maxAttempts) {
         await new Promise(r => setTimeout(r, 5000))
 
-        // Keep-alive pings every 30s — prevents Laravel Cloud + HF Space from sleeping
         if (attempts % 6 === 0) {
           fetch(`${__FASTAPI_URL__}/health`, { method: 'GET' }).catch(() => {})
         }
 
-        // Resilient polling: 503/502/network errors during deploy restarts are
-        // transient — just skip this poll and retry on the next tick.
         let status
         try {
           status = await doctorApi.predictions.getStatus(predRes.prediction_id)
         } catch (pollErr) {
-          // Transient error (503, network blip, CORS during restart) — skip
           attempts++
           continue
         }
 
-        // Eased curve: fast early, slows as it approaches 94 — never quite gets there
-        // until the actual completion event fires. ratio ∈ [0, ~1).
         const ratio = 1 - Math.exp(-(attempts + 1) / expectedPolls)
         const pct = Math.min(94, Math.round(78 + ratio * 16))
         setProgressPct(pct)
@@ -761,13 +872,8 @@ export default function PredictionWizard({ onClose }) {
       throw new Error('Prediction is taking longer than expected. Check the Predictions page for results — the analysis continues in the background.')
 
     } catch (err) {
-      // Clean up: delete the examination if it was created but never completed
       if (examId) {
-        try {
-          await doctorApi.examinations.delete(examId)
-        } catch {
-          // Ignore — may already be in predicted state and can't be deleted
-        }
+        try { await doctorApi.examinations.delete(examId) } catch {}
       }
       setError(
         err?.response?.data?.message ||
@@ -790,27 +896,36 @@ export default function PredictionWizard({ onClose }) {
   const stepKeys = ['patient', 'model', 'slide', 'running', 'results']
   const currentIdx = stepKeys.indexOf(step)
 
+  // Wider modal on results step to accommodate side-by-side images
+  const modalMaxW = step === 'results' ? 'max-w-5xl' : 'max-w-2xl'
+
   return (
     <>
       {/* Backdrop */}
       <motion.div
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80]"
+        className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[80]"
         onClick={step !== 'running' ? onClose : undefined}
       />
 
       {/* Modal */}
       <motion.div
-        initial={{ opacity: 0, scale: 0.96, y: 20 }}
+        initial={{ opacity: 0, scale: 0.95, y: 24 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.96, y: 20 }}
-        transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[90] w-[calc(100%-2rem)] max-w-2xl max-h-[90vh] bg-white rounded-3xl border border-slate-200 shadow-2xl flex flex-col overflow-hidden"
+        exit={{ opacity: 0, scale: 0.95, y: 24 }}
+        transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+        className={cn(
+          'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[90]',
+          'w-[calc(100%-2rem)] max-h-[92vh]',
+          modalMaxW,
+          'bg-white rounded-3xl border border-slate-200 shadow-2xl shadow-slate-900/20 flex flex-col overflow-hidden',
+          'transition-[max-width] duration-300'
+        )}
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#0572B2]/10 flex items-center justify-center">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#0572B2]/15 to-[#0BB592]/10 flex items-center justify-center">
               <Zap className="w-5 h-5 text-[#0572B2]" />
             </div>
             <div>
@@ -826,7 +941,7 @@ export default function PredictionWizard({ onClose }) {
         </div>
 
         {/* Step dots */}
-        <div className="px-6 py-3 border-b border-slate-100 flex items-center justify-between shrink-0">
+        <div className="px-6 py-3 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50/50">
           {stepLabels.map((label, i) => (
             <div key={i} className="flex items-center flex-1 last:flex-none">
               <StepDot
@@ -835,7 +950,7 @@ export default function PredictionWizard({ onClose }) {
                 label={label}
               />
               {i < stepLabels.length - 1 && (
-                <div className={cn('flex-1 h-0.5 mx-2', i < currentIdx ? 'bg-[#0BB592]' : 'bg-slate-200')} />
+                <div className={cn('flex-1 h-0.5 mx-2 rounded-full', i < currentIdx ? 'bg-[#0BB592]' : 'bg-slate-200')} />
               )}
             </div>
           ))}
@@ -911,15 +1026,10 @@ export default function PredictionWizard({ onClose }) {
                 ) : (
                   <div className="space-y-3">
                     {models.map(m => (
-                      <ModelCard
-                        key={m.id}
-                        model={m}
-                        selected={selectedModel?.id === m.id}
-                        onClick={() => setSelectedModel(m)}
-                      />
+                      <ModelCard key={m.id} model={m} selected={selectedModel?.id === m.id} onClick={() => setSelectedModel(m)} />
                     ))}
                     {models.length === 0 && (
-                      <p className="text-center text-slate-400 text-sm py-8">No active AI models available. Contact your administrator.</p>
+                      <p className="text-center text-slate-400 text-sm py-8">No active AI models available.</p>
                     )}
                   </div>
                 )}
@@ -973,7 +1083,7 @@ export default function PredictionWizard({ onClose }) {
                   <div className="text-center py-8">
                     <FlaskConical className="w-12 h-12 text-[#0BB592] mx-auto mb-4" />
                     <p className="text-sm font-bold text-slate-700 mb-2">Clinical-only model selected</p>
-                    <p className="text-xs text-slate-400 font-medium">This model uses patient clinical data only. No slide upload needed.</p>
+                    <p className="text-xs text-slate-400 font-medium">This model uses patient clinical data only.</p>
                   </div>
                 )}
               </motion.div>
@@ -998,7 +1108,6 @@ export default function PredictionWizard({ onClose }) {
                   <p className="text-sm text-slate-400 font-medium mt-1">{progressLabel}</p>
                 </div>
 
-                {/* Progress bar */}
                 <div className="mb-6">
                   <div className="flex justify-between text-[10px] font-bold text-slate-400 mb-1.5">
                     <span>Progress</span>
@@ -1013,7 +1122,6 @@ export default function PredictionWizard({ onClose }) {
                   </div>
                 </div>
 
-                {/* Steps */}
                 <div className="space-y-3">
                   <ProgressStep label={t('doctor.step1Title')} done={progressStep > 1} active={progressStep === 1} />
                   <ProgressStep label={t('doctor.step2Title')} done={progressStep > 2} active={progressStep === 2} />
@@ -1044,7 +1152,7 @@ export default function PredictionWizard({ onClose }) {
 
         {/* Footer nav */}
         {step !== 'running' && step !== 'results' && (
-          <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between shrink-0">
+          <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between shrink-0 bg-white">
             <button
               onClick={() => {
                 const prev = { model: 'patient', slide: 'model', patient: null }
@@ -1074,7 +1182,7 @@ export default function PredictionWizard({ onClose }) {
                 (step === 'patient' && !selectedPatient) ||
                 (step === 'model' && !selectedModel)
               }
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#0572B2] text-white text-sm font-black hover:bg-[#0462a0] transition disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#0572B2] text-white text-sm font-black hover:bg-[#0462a0] transition disabled:opacity-40 disabled:cursor-not-allowed shadow-sm shadow-blue-500/20"
             >
               {step === 'slide' ? (
                 <><Zap className="w-4 h-4" /> {t('doctor.beginPrediction')}</>

@@ -73,6 +73,15 @@ const doctor = {
     },
 
     /**
+     * GET /api/doctor/patients/next-identifier
+     * Returns a preview of the next auto-generated BRECAI-FED identifier.
+     * @returns {Promise<{ patient_identifier: string, format: string }>}
+     */
+    nextIdentifier() {
+      return client.get('/doctor/patients/next-identifier').then((r) => r.data);
+    },
+
+    /**
      * GET /api/doctor/patients/:id
      * @param {number} id
      * @returns {Promise<import('./types.js').Patient>}
