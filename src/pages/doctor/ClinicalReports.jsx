@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   FileText, Search, Eye, Plus, Calendar,
   CheckCircle2, AlertTriangle, Loader2, RefreshCw,
-  FileCheck2, Printer, X, Brain,
+  FileCheck2, Printer, X, Brain, Mail,
 } from 'lucide-react'
 import { SectionCard, stagger, fadeUp } from '@/components/shared'
 import { StatusPill } from '@/components/admin'
@@ -411,8 +411,13 @@ export default function ClinicalReports() {
                   <span className="font-mono text-xs font-bold text-slate-400">#{r.id}</span>
                   <StatusPill tone={r.status === 'final' ? 'teal' : 'amber'}>
                     {r.status === 'final' ? <FileCheck2 className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
-                    {r.status}
+                    {r.status === 'final' ? 'Finalized' : 'Draft'}
                   </StatusPill>
+                  {r.status === 'final' && (
+                    <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-[#0572B2]">
+                      <Mail className="w-2.5 h-2.5" /> Emailed
+                    </span>
+                  )}
                   {r.prediction?.is_lum_a != null && (
                     <StatusPill tone={r.prediction.is_lum_a ? 'teal' : 'pink'}>
                       {r.prediction.is_lum_a ? 'Luminal A' : 'Non-Luminal A'}
