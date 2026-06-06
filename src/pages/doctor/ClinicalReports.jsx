@@ -46,9 +46,10 @@ function openReportForPrint(report, patient, doctor) {
   const erPr = `${patient?.er_status ? 'ER+' : 'ER−'} / ${patient?.pr_status ? 'PR+' : 'PR−'} / ${patient?.her2_binary ? 'HER2+' : 'HER2−'}`
   const stageLabel = patient?.stage_num ? `Stage ${['I', 'II', 'III', 'IV'][patient.stage_num - 1] || patient.stage_num}` : '—'
 
-  // Heatmap from R2 (presigned URL from Laravel)
-  const heatmapUrl = report.heatmap_url || report.prediction?.xai_result?.heatmap_url
-  const segmentationUrl = report.segmentation_url || report.prediction?.xai_result?.segmentation_url
+  // XAI image URLs from Laravel presigned R2 URLs
+  const heatmapUrl     = report.heatmap_url     || report.prediction?.xai_result?.heatmap_url
+  const segmentationUrl= report.segmentation_url|| report.prediction?.xai_result?.segmentation_url
+  const patchesUrl     = report.patches_url     || report.prediction?.xai_result?.patches_url
   const topPatches = (xai.top_patches || []).slice(0, 10)
 
   const html = `<!DOCTYPE html>
@@ -198,7 +199,18 @@ ${gate.image_weight != null ? `
 </div>
 ` : ''}
 
-<!-- Histopathology Segmentation & Heatmap -->
+<!-- Attention Heatmap -->
+${heatmapUrl ? `
+<div class="section">
+  <div class="section-title">Attention Heatmap</div>
+  <div style="text-align:center; margin: 8px 0;">
+    <img src="${heatmapUrl}" alt="Attention heatmap overlay" crossorigin="anonymous" style="max-width:100%; width:600px; border-radius:10px; border:1px solid #e2e8f0;" />
+    <p style="font-size:11px; color:#64748b; font-style:italic; margin-top:8px;">Continuous attention heatmap overlaid on the slide. Hot colors (yellow/red) indicate regions the model focused on most.</p>
+  </div>
+</div>
+` : ''}
+
+<!-- Tissue Segmentation Map -->
 ${segmentationUrl ? `
 <div class="section">
   <div class="section-title">Tissue Segmentation Map</div>
@@ -209,13 +221,13 @@ ${segmentationUrl ? `
 </div>
 ` : ''}
 
-<!-- Top Attended Patches -->
-${heatmapUrl ? `
+<!-- Top Attended Histopathology Patches -->
+${patchesUrl ? `
 <div class="section">
   <div class="section-title">Top Attended Histopathology Patches</div>
   <div style="text-align:center; margin: 8px 0;">
-    <img src="${heatmapUrl}" alt="Top attended patches" crossorigin="anonymous" style="max-width:100%; width:600px; border-radius:10px; border:1px solid #e2e8f0;" />
-    <p style="font-size:11px; color:#64748b; font-style:italic; margin-top:8px;">Top-20 patches the model focused on. Each tile is a real region from the WSI labeled with its attention score.</p>
+    <img src="${patchesUrl}" alt="Top attended patches grid" crossorigin="anonymous" style="max-width:100%; width:600px; border-radius:10px; border:1px solid #e2e8f0;" />
+    <p style="font-size:11px; color:#64748b; font-style:italic; margin-top:8px;">Top-20 tissue patches the model attended to most. Gold border = top-3, orange = top-8.</p>
   </div>
 </div>
 ` : ''}
@@ -320,8 +332,8 @@ export default function ClinicalReports() {
     if (!finalizeReport) return
     setFinalizing(true)
     try {
-      await doctorApi.reports.finalize(finalizeReport.id)
-      showToast('Report finalized and emailed as PDF')
+      const res = await doctorApi.reports.finalize(finalizeReport.id)
+      showToast(res.data?.message || 'Report finalized and emailed as PDF')
       setFinalizeReport(null)
       load()
     } catch (err) {
@@ -476,7 +488,9 @@ export default function ClinicalReports() {
             >
               <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                 <div>
-                  <p className="font-extrabold text-slate-900 text-lg">Review Before Finalizing</p>
+                  <p className="font-extrabold text-slate-900 text-lg">
+                    {finalizeReport.status === 'final' ? 'Resend Report Email' : 'Review Before Finalizing'}
+                  </p>
                   <p className="text-xs text-slate-500 font-medium mt-0.5">
                     Patient {finalizeReport.patient?.patient_identifier} · Report #{finalizeReport.id}
                   </p>
@@ -526,7 +540,9 @@ export default function ClinicalReports() {
                   </button>
 
                   <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs font-semibold text-amber-800 leading-relaxed">
-                    Once finalized, the report cannot be edited. A PDF copy will be emailed to you.
+                    {finalizeReport.status === 'final'
+                      ? 'This report is already finalized. Clicking below will resend the PDF email to your address.'
+                      : 'Once finalized, the report cannot be edited. A PDF copy will be emailed to you.'}
                   </div>
                 </div>
               </div>
@@ -545,7 +561,7 @@ export default function ClinicalReports() {
                   className="flex items-center gap-2 px-5 py-2 rounded-xl bg-[#0BB592] text-white text-sm font-black hover:bg-[#089b7c] transition disabled:opacity-60"
                 >
                   {finalizing ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileCheck2 className="w-4 h-4" />}
-                  {finalizing ? 'Finalizing...' : 'Approve & Finalize'}
+                  {finalizing ? 'Sending...' : finalizeReport?.status === 'final' ? 'Resend Email' : 'Approve & Finalize'}
                 </button>
               </div>
             </motion.div>
