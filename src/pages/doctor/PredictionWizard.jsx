@@ -260,74 +260,118 @@ function NewPatientForm({ onCreated, onCancel }) {
 
 /* ── Image lightbox ──────────────────────────────────────────────────────── */
 function ImageLightbox({ src, alt, onClose }) {
-  const [zoom, setZoom] = React.useState(1)
-  const containerRef = React.useRef(null)
+  const [naturalSize, setNaturalSize] = useState(null)
+  const [zoom, setZoom] = useState(1)
+  const containerRef = useRef(null)
 
-  const clampZoom = z => Math.min(5, Math.max(0.2, z))
+  const clamp = z => Math.min(8, Math.max(0.05, z))
 
-  const handleWheel = e => {
-    e.preventDefault()
-    setZoom(z => clampZoom(z * (e.deltaY < 0 ? 1.15 : 0.87)))
+  // Compute the zoom level that fits the image inside the container
+  const calcFit = useCallback((nw, nh) => {
+    const el = containerRef.current
+    if (!el) return 1
+    return clamp(Math.min((el.clientWidth - 48) / nw, (el.clientHeight - 48) / nh))
+  }, [])
+
+  // When image loads: record natural size and default to fit-to-screen
+  const handleLoad = e => {
+    const nw = e.target.naturalWidth
+    const nh = e.target.naturalHeight
+    setNaturalSize({ w: nw, h: nh })
+    setZoom(calcFit(nw, nh))
   }
 
-  React.useEffect(() => {
+  // Scroll wheel zooms — must be non-passive to call preventDefault
+  useEffect(() => {
     const el = containerRef.current
     if (!el) return
-    el.addEventListener('wheel', handleWheel, { passive: false })
-    return () => el.removeEventListener('wheel', handleWheel)
-  })
+    const onWheel = e => {
+      e.preventDefault()
+      setZoom(z => clamp(z * (e.deltaY < 0 ? 1.12 : 0.9)))
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
 
   if (!src) return null
+
+  // Image renders at its ACTUAL pixel size (naturalWidth * zoom).
+  // The overflow-auto container then creates real scrollbars — no transform trickery.
+  const imgW = naturalSize ? Math.round(naturalSize.w * zoom) : null
+  const fitZ  = naturalSize ? calcFit(naturalSize.w, naturalSize.h) : 1
+  const pct   = Math.round(zoom * 100)
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[200] bg-black/95 flex flex-col items-center justify-center"
+      className="fixed inset-0 z-[200] bg-black/95 flex flex-col"
       onClick={onClose}
     >
-      {/* toolbar */}
-      <div className="absolute top-3 right-3 flex items-center gap-2 z-10" onClick={e => e.stopPropagation()}>
-        <button onClick={() => setZoom(z => clampZoom(z * 1.25))}
-          className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/30 text-white text-lg font-bold flex items-center justify-center transition">+</button>
-        <button onClick={() => setZoom(1)}
-          className="px-2 h-8 rounded-full bg-white/15 hover:bg-white/30 text-white text-xs font-bold transition">
-          {Math.round(zoom * 100)}%
-        </button>
-        <button onClick={() => setZoom(z => clampZoom(z * 0.8))}
-          className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/30 text-white text-lg font-bold flex items-center justify-center transition">−</button>
-        <button onClick={onClose}
-          className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/30 flex items-center justify-center transition ml-1">
-          <X className="w-4 h-4 text-white" />
-        </button>
+      {/* ── toolbar ── */}
+      <div
+        className="flex-none flex items-center justify-end gap-1.5 px-4 py-2.5"
+        onClick={e => e.stopPropagation()}
+      >
+        <button
+          onClick={() => setZoom(z => clamp(z * 1.25))}
+          className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 text-white text-base font-bold flex items-center justify-center transition"
+        >+</button>
+        <button
+          onClick={() => naturalSize && setZoom(calcFit(naturalSize.w, naturalSize.h))}
+          className="px-2.5 h-8 rounded-full bg-white/15 hover:bg-white/25 text-white text-xs font-semibold transition min-w-[52px]"
+          title="Fit to screen"
+        >{pct}%</button>
+        <button
+          onClick={() => setZoom(1)}
+          className="px-2.5 h-8 rounded-full bg-white/15 hover:bg-white/25 text-white text-xs font-semibold transition"
+          title="Actual size (100%)"
+        >1:1</button>
+        <button
+          onClick={() => setZoom(z => clamp(z * 0.8))}
+          className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 text-white text-base font-bold flex items-center justify-center transition"
+        >−</button>
+        <button
+          onClick={onClose}
+          className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center transition ml-2"
+        ><X className="w-4 h-4 text-white" /></button>
       </div>
-      {/* scrollable image area */}
+
+      {/* ── scrollable viewport ── */}
       <div
         ref={containerRef}
-        className="overflow-auto w-full h-full flex items-center justify-center p-10"
+        className="flex-1 overflow-auto"
         onClick={e => e.stopPropagation()}
-        style={{ cursor: zoom > 1 ? 'grab' : 'zoom-in' }}
+        style={{ cursor: zoom > fitZ + 0.05 ? 'grab' : 'zoom-in' }}
       >
-        <img
-          src={src}
-          alt={alt}
-          crossOrigin="anonymous"
-          draggable={false}
-          onClick={() => setZoom(z => z === 1 ? 2 : 1)}
-          style={{
-            transform: `scale(${zoom})`,
-            transformOrigin: 'center center',
-            transition: 'transform 0.15s ease',
-            maxWidth: zoom <= 1 ? 'calc(100vw - 80px)' : 'none',
-            maxHeight: zoom <= 1 ? 'calc(100vh - 80px)' : 'none',
-            display: 'block',
-            borderRadius: '12px',
-            boxShadow: '0 25px 50px rgba(0,0,0,0.8)',
-          }}
-        />
+        {/* inner wrapper: centers image when it's smaller than the viewport */}
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center',
+                      minWidth: '100%', minHeight: '100%', padding: '16px', boxSizing: 'border-box' }}>
+          <img
+            src={src}
+            alt={alt}
+            crossOrigin="anonymous"
+            draggable={false}
+            onLoad={handleLoad}
+            onClick={() => naturalSize && setZoom(z =>
+              z < fitZ * 1.1 ? Math.min(2, 1) : calcFit(naturalSize.w, naturalSize.h)
+            )}
+            style={{
+              width:        imgW ? `${imgW}px` : 'auto',
+              height:       'auto',
+              display:      'block',
+              flexShrink:   0,
+              borderRadius: '10px',
+              boxShadow:    '0 20px 60px rgba(0,0,0,0.8)',
+              transition:   'width 0.12s ease',
+            }}
+          />
+        </div>
       </div>
-      <p className="absolute bottom-3 left-0 right-0 text-center text-white/40 text-xs pointer-events-none">
-        Scroll to zoom · Click to toggle 2× · +/− buttons to adjust
+
+      <p className="flex-none text-center text-white/30 text-[11px] py-1.5 pointer-events-none select-none">
+        Scroll to zoom · Click image to toggle fit / 100% · +/− to adjust
       </p>
     </motion.div>
   )
