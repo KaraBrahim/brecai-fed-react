@@ -260,29 +260,75 @@ function NewPatientForm({ onCreated, onCancel }) {
 
 /* ── Image lightbox ──────────────────────────────────────────────────────── */
 function ImageLightbox({ src, alt, onClose }) {
+  const [zoom, setZoom] = React.useState(1)
+  const containerRef = React.useRef(null)
+
+  const clampZoom = z => Math.min(5, Math.max(0.2, z))
+
+  const handleWheel = e => {
+    e.preventDefault()
+    setZoom(z => clampZoom(z * (e.deltaY < 0 ? 1.15 : 0.87)))
+  }
+
+  React.useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    el.addEventListener('wheel', handleWheel, { passive: false })
+    return () => el.removeEventListener('wheel', handleWheel)
+  })
+
   if (!src) return null
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[200] bg-black/95 flex flex-col items-center justify-center"
       onClick={onClose}
     >
-      <button
-        onClick={onClose}
-        className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition"
-      >
-        <X className="w-5 h-5 text-white" />
-      </button>
-      <img
-        src={src}
-        alt={alt}
-        crossOrigin="anonymous"
+      {/* toolbar */}
+      <div className="absolute top-3 right-3 flex items-center gap-2 z-10" onClick={e => e.stopPropagation()}>
+        <button onClick={() => setZoom(z => clampZoom(z * 1.25))}
+          className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/30 text-white text-lg font-bold flex items-center justify-center transition">+</button>
+        <button onClick={() => setZoom(1)}
+          className="px-2 h-8 rounded-full bg-white/15 hover:bg-white/30 text-white text-xs font-bold transition">
+          {Math.round(zoom * 100)}%
+        </button>
+        <button onClick={() => setZoom(z => clampZoom(z * 0.8))}
+          className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/30 text-white text-lg font-bold flex items-center justify-center transition">−</button>
+        <button onClick={onClose}
+          className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/30 flex items-center justify-center transition ml-1">
+          <X className="w-4 h-4 text-white" />
+        </button>
+      </div>
+      {/* scrollable image area */}
+      <div
+        ref={containerRef}
+        className="overflow-auto w-full h-full flex items-center justify-center p-10"
         onClick={e => e.stopPropagation()}
-        className="max-w-full max-h-full object-contain rounded-xl shadow-2xl"
-        style={{ maxHeight: 'calc(100vh - 80px)', maxWidth: 'calc(100vw - 80px)' }}
-      />
+        style={{ cursor: zoom > 1 ? 'grab' : 'zoom-in' }}
+      >
+        <img
+          src={src}
+          alt={alt}
+          crossOrigin="anonymous"
+          draggable={false}
+          onClick={() => setZoom(z => z === 1 ? 2 : 1)}
+          style={{
+            transform: `scale(${zoom})`,
+            transformOrigin: 'center center',
+            transition: 'transform 0.15s ease',
+            maxWidth: zoom <= 1 ? 'calc(100vw - 80px)' : 'none',
+            maxHeight: zoom <= 1 ? 'calc(100vh - 80px)' : 'none',
+            display: 'block',
+            borderRadius: '12px',
+            boxShadow: '0 25px 50px rgba(0,0,0,0.8)',
+          }}
+        />
+      </div>
+      <p className="absolute bottom-3 left-0 right-0 text-center text-white/40 text-xs pointer-events-none">
+        Scroll to zoom · Click to toggle 2× · +/− buttons to adjust
+      </p>
     </motion.div>
   )
 }
