@@ -64,7 +64,9 @@ export default function XaiDeepDive() {
     er_status: 'ER Status', pr_status: 'PR Status', her2_binary: 'HER2',
     age: 'Age', stage_num: 'Stage', hr_score: 'HR Score',
     er_pr_concordant: 'ER/PR Concordance', buffa_hypoxia_score: 'Buffa Hypoxia',
-    fraction_genome_altered: 'Genome Altered',
+    ragnum_hypoxia_score: 'Ragnum Hypoxia', winter_hypoxia_score: 'Winter Hypoxia',
+    fraction_genome_altered: 'Genome Altered', tumor_break_load: 'Tumor Break Load',
+    genomic_available: 'Genomic Data Available',
   }
 
   const clinicalChartData = Object.entries(clinicalImportances)

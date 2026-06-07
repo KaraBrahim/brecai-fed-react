@@ -105,7 +105,8 @@ const doctor = {
      *   fraction_genome_altered?: number,
      *   buffa_hypoxia_score?: number,
      *   ragnum_hypoxia_score?: number,
-     *   winter_hypoxia_score?: number
+     *   winter_hypoxia_score?: number,
+     *   tumor_break_load?: number
      * }} data
      * @returns {Promise<import('./types.js').Patient>}
      */

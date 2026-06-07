@@ -22,6 +22,7 @@ function exportCSV(patients) {
     'organization',
     'fraction_genome_altered',
     'buffa_hypoxia_score', 'ragnum_hypoxia_score', 'winter_hypoxia_score',
+    'tumor_break_load',
     'created_at',
   ]
   const rows = patients.map((p) =>

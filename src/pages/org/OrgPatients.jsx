@@ -154,6 +154,7 @@ export default function OrgPatients() {
             <DetailRow label="Buffa Hypoxia" value={viewing.buffa_hypoxia_score} />
             <DetailRow label="Ragnum Hypoxia" value={viewing.ragnum_hypoxia_score} />
             <DetailRow label="Winter Hypoxia" value={viewing.winter_hypoxia_score} />
+            <DetailRow label="Tumor Break Load" value={viewing.tumor_break_load} />
             <DetailRow label="Registered"    value={viewing.created_at ? new Date(viewing.created_at).toLocaleDateString() : null} />
           </div>
         )}

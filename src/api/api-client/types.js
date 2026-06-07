@@ -71,6 +71,7 @@
  * @property {number|null} buffa_hypoxia_score
  * @property {number|null} ragnum_hypoxia_score
  * @property {number|null} winter_hypoxia_score
+ * @property {number|null} tumor_break_load
  * @property {string} created_at
  */
 

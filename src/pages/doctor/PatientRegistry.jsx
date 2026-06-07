@@ -16,6 +16,11 @@ import doctorApi from '@/api/api-client/doctor'
 import PredictionWizard from './PredictionWizard'
 
 /* ── Patient form ────────────────────────────────────────────────────────── */
+const GENOMIC_FIELDS = [
+  'fraction_genome_altered', 'buffa_hypoxia_score',
+  'ragnum_hypoxia_score', 'winter_hypoxia_score', 'tumor_break_load',
+]
+
 function PatientForm({ initial, onSave, onCancel, loading, error }) {
   const t = useT()
   const [f, setF] = useState(initial || {
@@ -24,8 +29,23 @@ function PatientForm({ initial, onSave, onCancel, loading, error }) {
     er_status_missing: false, pr_status_missing: false,
     fraction_genome_altered: '', buffa_hypoxia_score: '',
     ragnum_hypoxia_score: '', winter_hypoxia_score: '',
+    tumor_break_load: '',
   })
+  // Expand the genomic section automatically when editing a patient that
+  // already has at least one real genomic value on file.
+  const [genomicsOpen, setGenomicsOpen] = useState(
+    () => GENOMIC_FIELDS.some(k => (initial?.[k] ?? '') !== '')
+  )
   const set = (k, v) => setF(p => ({ ...p, [k]: v }))
+  const toggleGenomics = () => {
+    setGenomicsOpen(open => {
+      const next = !open
+      // Collapsing clears any entered values so a doctor who changes their
+      // mind doesn't accidentally submit stale genomic data hidden from view.
+      if (!next) setF(p => ({ ...p, ...Object.fromEntries(GENOMIC_FIELDS.map(k => [k, ''])) }))
+      return next
+    })
+  }
   const inputCls = 'w-full rounded-xl border-2 border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none focus:border-[#0572B2] focus:bg-white transition'
 
   const BoolSelect = ({ label, k }) => (
@@ -62,17 +82,64 @@ function PatientForm({ initial, onSave, onCancel, loading, error }) {
         <BoolSelect label={t('doctor.her2')} k="her2_binary" />
       </div>
       <div className="pt-2 border-t border-slate-100">
-        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Genomic Data (optional)</p>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Fraction Genome Altered</label>
-            <input type="number" step="0.01" min="0" max="1" className={inputCls} value={f.fraction_genome_altered} onChange={e => set('fraction_genome_altered', e.target.value)} placeholder="0.0 – 1.0" />
-          </div>
-          <div>
-            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Buffa Hypoxia Score</label>
-            <input type="number" step="0.01" className={inputCls} value={f.buffa_hypoxia_score} onChange={e => set('buffa_hypoxia_score', e.target.value)} placeholder="e.g. -3.2" />
-          </div>
-        </div>
+        <label className="flex items-start gap-2.5 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={genomicsOpen}
+            onChange={toggleGenomics}
+            className="mt-0.5 h-4 w-4 rounded border-2 border-slate-300 text-[#0572B2] focus:ring-[#0572B2] focus:ring-offset-0 cursor-pointer"
+          />
+          <span>
+            <span className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
+              Genomic test results available <span className="text-slate-300 font-normal normal-case">(optional)</span>
+            </span>
+            <span className="block text-xs text-slate-400 mt-0.5">
+              Leave unchecked if no genomic panel is on file — the model runs
+              just as accurately without it (Algeria/clinic-only mode). Check
+              this only if you have real lab values to enter.
+            </span>
+          </span>
+        </label>
+
+        <AnimatePresence initial={false}>
+          {genomicsOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className="overflow-hidden"
+            >
+              <div className="grid grid-cols-2 gap-3 pt-3">
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Fraction Genome Altered</label>
+                  <input type="number" step="0.01" min="0" max="1" className={inputCls} value={f.fraction_genome_altered} onChange={e => set('fraction_genome_altered', e.target.value)} placeholder="0.0 – 1.0" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Buffa Hypoxia Score</label>
+                  <input type="number" step="0.01" className={inputCls} value={f.buffa_hypoxia_score} onChange={e => set('buffa_hypoxia_score', e.target.value)} placeholder="e.g. -3.2" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Ragnum Hypoxia Score</label>
+                  <input type="number" step="0.01" className={inputCls} value={f.ragnum_hypoxia_score} onChange={e => set('ragnum_hypoxia_score', e.target.value)} placeholder="e.g. 2.1" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Winter Hypoxia Score</label>
+                  <input type="number" step="0.01" className={inputCls} value={f.winter_hypoxia_score} onChange={e => set('winter_hypoxia_score', e.target.value)} placeholder="e.g. -5.4" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Tumor Break Load</label>
+                  <input type="number" step="1" min="0" className={inputCls} value={f.tumor_break_load} onChange={e => set('tumor_break_load', e.target.value)} placeholder="e.g. 78" />
+                </div>
+              </div>
+              <p className="text-xs text-slate-400 pt-2">
+                Fill in whichever values you have — partial panels are fine.
+                The prediction automatically switches to full-genomics mode
+                whenever at least one of these is present.
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
       {error && <p className="text-[#F55486] text-xs font-semibold bg-pink-50 border border-pink-200 rounded-xl px-3 py-2">{error}</p>}
       <div className="flex gap-2 pt-1">
@@ -148,6 +215,7 @@ export default function PatientRegistry() {
         buffa_hypoxia_score: f.buffa_hypoxia_score !== '' ? parseFloat(f.buffa_hypoxia_score) : null,
         ragnum_hypoxia_score: f.ragnum_hypoxia_score !== '' ? parseFloat(f.ragnum_hypoxia_score) : null,
         winter_hypoxia_score: f.winter_hypoxia_score !== '' ? parseFloat(f.winter_hypoxia_score) : null,
+        tumor_break_load: f.tumor_break_load !== '' ? parseFloat(f.tumor_break_load) : null,
       }
       if (formMode === 'add') {
         await doctorApi.patients.create(payload)
@@ -379,6 +447,7 @@ export default function PatientRegistry() {
                     buffa_hypoxia_score: editPatient.buffa_hypoxia_score ?? '',
                     ragnum_hypoxia_score: editPatient.ragnum_hypoxia_score ?? '',
                     winter_hypoxia_score: editPatient.winter_hypoxia_score ?? '',
+                    tumor_break_load: editPatient.tumor_break_load ?? '',
                   } : null}
                   onSave={handleSave}
                   onCancel={() => setFormMode(null)}
