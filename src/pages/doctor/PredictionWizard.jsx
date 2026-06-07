@@ -825,9 +825,6 @@ export default function PredictionWizard({ onClose }) {
     setProgressPct(0)
     setProgressStep(0)
 
-    const extractUrl = `${__FASTAPI_URL__}/extract`
-    const extractHeaders = __HF_TOKEN__ ? { 'Authorization': `Bearer ${__HF_TOKEN__}` } : {}
-
     let examId = null
 
     try {
@@ -857,125 +854,79 @@ export default function PredictionWizard({ onClose }) {
         setProgressLabel(t('doctor.extracting'))
         setProgressPct(25)
 
-        const fastApiUrl = __FASTAPI_URL__
-        const isSVS = slideFile.name.toLowerCase().match(/\.(svs|ndpi|scn|mrxs)$/)
+        // Always upload the original slide/image to R2 and run prediction via
+        // /predict/a6/from-r2 — that endpoint generates the attention heatmap
+        // overlay + top-patches grid for ANY image type (it has an explicit PIL
+        // fallback path for small patch-level images like BreakHis), whereas the
+        // local-features shortcut (/extract/image → /predict/a6) returns no XAI
+        // visuals at all. Routing everything through R2 means every prediction —
+        // single-patch or full slide — gets a segmentation/overlay image as proof.
+        const PART_SIZE = 16 * 1024 * 1024
+        const MAX_RETRIES = 4
+        const partCount = Math.max(1, Math.ceil(slideFile.size / PART_SIZE))
 
-        if (isSVS) {
-          const PART_SIZE = 16 * 1024 * 1024
-          const MAX_RETRIES = 4
-          const partCount = Math.max(1, Math.ceil(slideFile.size / PART_SIZE))
+        setProgressLabel(`Initializing upload (${partCount} parts)…`)
+        setProgressPct(28)
 
-          setProgressLabel(`Initializing upload (${partCount} parts)…`)
-          setProgressPct(28)
+        const init = await doctorApi.wsiMultipart.init({
+          filename: slideFile.name,
+          patient_id: selectedPatient.id,
+        })
+        const { upload_id: uploadId, r2_key: r2Key } = init
 
-          const init = await doctorApi.wsiMultipart.init({
-            filename: slideFile.name,
-            patient_id: selectedPatient.id,
-          })
-          const { upload_id: uploadId, r2_key: r2Key } = init
+        const { part_urls: partUrls } = await doctorApi.wsiMultipart.parts({
+          upload_id: uploadId,
+          r2_key: r2Key,
+          part_count: partCount,
+        })
 
-          const { part_urls: partUrls } = await doctorApi.wsiMultipart.parts({
+        const uploadedParts = []
+        try {
+          for (let i = 0; i < partCount; i++) {
+            const start = i * PART_SIZE
+            const end = Math.min(start + PART_SIZE, slideFile.size)
+            const blob = slideFile.slice(start, end)
+
+            let etag = null
+            for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+              try {
+                const r = await fetch(partUrls[i], { method: 'PUT', body: blob })
+                if (!r.ok) throw new Error(`HTTP ${r.status}`)
+                etag = r.headers.get('ETag') || r.headers.get('etag')
+                if (!etag) throw new Error('Missing ETag header')
+                break
+              } catch (e) {
+                if (attempt === MAX_RETRIES) throw new Error(`Part ${i + 1}/${partCount} failed: ${e.message}`)
+                await new Promise(r => setTimeout(r, 1500 * attempt))
+              }
+            }
+            uploadedParts.push({ PartNumber: i + 1, ETag: etag })
+
+            const pct = 28 + Math.round(((i + 1) / partCount) * 40)
+            setProgressPct(pct)
+            setProgressLabel(`Uploading slide ${i + 1}/${partCount} parts…`)
+          }
+
+          await doctorApi.wsiMultipart.complete({
             upload_id: uploadId,
             r2_key: r2Key,
-            part_count: partCount,
+            parts: uploadedParts,
           })
-
-          const uploadedParts = []
+        } catch (upErr) {
           try {
-            for (let i = 0; i < partCount; i++) {
-              const start = i * PART_SIZE
-              const end = Math.min(start + PART_SIZE, slideFile.size)
-              const blob = slideFile.slice(start, end)
-
-              let etag = null
-              for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-                try {
-                  const r = await fetch(partUrls[i], { method: 'PUT', body: blob })
-                  if (!r.ok) throw new Error(`HTTP ${r.status}`)
-                  etag = r.headers.get('ETag') || r.headers.get('etag')
-                  if (!etag) throw new Error('Missing ETag header')
-                  break
-                } catch (e) {
-                  if (attempt === MAX_RETRIES) throw new Error(`Part ${i + 1}/${partCount} failed: ${e.message}`)
-                  await new Promise(r => setTimeout(r, 1500 * attempt))
-                }
-              }
-              uploadedParts.push({ PartNumber: i + 1, ETag: etag })
-
-              const pct = 28 + Math.round(((i + 1) / partCount) * 40)
-              setProgressPct(pct)
-              setProgressLabel(`Uploading slide ${i + 1}/${partCount} parts…`)
-            }
-
-            await doctorApi.wsiMultipart.complete({
-              upload_id: uploadId,
-              r2_key: r2Key,
-              parts: uploadedParts,
-            })
-          } catch (upErr) {
-            try {
-              await doctorApi.wsiMultipart.abort({ upload_id: uploadId, r2_key: r2Key })
-            } catch {}
-            throw new Error(`Slide upload failed: ${upErr.message}`)
-          }
-
-          setProgressLabel('Registering slide…')
-          setProgressPct(72)
-          const wsi = await doctorApi.wsiUploads.uploadR2Key({
-            patient_id: selectedPatient.id,
-            r2_key: r2Key,
-            original_name: slideFile.name,
-          })
-          wsiUploadId = wsi.id
-          setProgressPct(75)
-
-        } else {
-          setProgressLabel('Uploading image to AI server…')
-          setProgressPct(30)
-
-          let ptB64 = null
-          try {
-            const imgForm = new FormData()
-            imgForm.append('slide_file', slideFile, slideFile.name)
-
-            let uploadPct = 30
-            const ticker = setInterval(() => {
-              uploadPct = Math.min(55, uploadPct + 1)
-              setProgressPct(uploadPct)
-            }, 1500)
-
-            const res = await fetch(`${__FASTAPI_URL__}/extract/image`, {
-              method: 'POST',
-              headers: extractHeaders,
-              body: imgForm,
-            })
-            clearInterval(ticker)
-            setProgressPct(60)
-
-            if (!res.ok) {
-              const errData = await res.json().catch(() => ({}))
-              throw new Error(errData.detail || errData.error || `Feature extraction failed (${res.status})`)
-            }
-            const data = await res.json()
-            ptB64 = data.pt_b64
-            setProgressPct(65)
-            setProgressLabel(`${data.n_patches} patch${data.n_patches > 1 ? 'es' : ''} processed`)
-          } catch (imgErr) {
-            const msg = imgErr instanceof Error ? imgErr.message : String(imgErr)
-            throw new Error(`Image processing failed: ${msg}`)
-          }
-
-          if (ptB64) {
-            setProgressLabel(t('doctor.uploading'))
-            setProgressPct(70)
-            const wsi = await doctorApi.wsiUploads.uploadPtBase64({
-              patient_id: selectedPatient.id,
-              pt_b64: ptB64,
-              original_name: slideFile.name,
-            })
-            wsiUploadId = wsi.id
-          }
+            await doctorApi.wsiMultipart.abort({ upload_id: uploadId, r2_key: r2Key })
+          } catch {}
+          throw new Error(`Slide upload failed: ${upErr.message}`)
         }
+
+        setProgressLabel('Registering slide…')
+        setProgressPct(72)
+        const wsi = await doctorApi.wsiUploads.uploadR2Key({
+          patient_id: selectedPatient.id,
+          r2_key: r2Key,
+          original_name: slideFile.name,
+        })
+        wsiUploadId = wsi.id
         setProgressPct(75)
       }
 
