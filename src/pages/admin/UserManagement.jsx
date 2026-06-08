@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { Users, Plus, Edit3, ShieldCheck, UserCheck, UserX, MailCheck, Filter } from 'lucide-react'
+import { Users, Plus, Edit3, ShieldCheck, UserCheck, UserX, MailCheck, Filter, Trash2 } from 'lucide-react'
 import { GlassHero, SparkTile, DataTable, StatusPill, Avatar } from '@/components/admin'
 import { Btn, Modal, Field, inputClass, ConfirmDialog, Toast, stagger } from '@/components/shared'
 import admin from '@/api/api-client/admin'
@@ -97,6 +97,7 @@ export default function UserManagement() {
     try {
       if (type === 'activate')   { await admin.users.activate(user.id);   showToast(`${user.name} activated`, 'teal') }
       if (type === 'deactivate') { await admin.users.deactivate(user.id); showToast(`${user.name} deactivated`, 'amber') }
+      if (type === 'delete')     { await admin.users.delete(user.id);     showToast(`${user.name} deleted`, 'pink') }
       setConfirmAction(null)
       load(page)
     } catch (err) {
@@ -157,6 +158,10 @@ export default function UserManagement() {
             className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-900 hover:border-slate-400 transition">
             <Edit3 className="w-3.5 h-3.5" />
           </button>
+          <button onClick={(e) => { e.stopPropagation(); setConfirmAction({ type: 'delete', user: u }) }} title="Delete"
+            className="w-8 h-8 rounded-lg border border-red-100 bg-red-50/40 flex items-center justify-center text-red-500 hover:bg-red-50 transition">
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
         </div>
       ),
     },
@@ -165,6 +170,7 @@ export default function UserManagement() {
   const confirmMeta = {
     activate:   { title: 'Activate user?',   msg: (u) => `${u.name} will be granted platform access immediately.`,  label: 'Activate',   danger: false },
     deactivate: { title: 'Deactivate user?', msg: (u) => `${u.name} will lose access immediately.`,                 label: 'Deactivate', danger: true  },
+    delete:     { title: 'Delete user?',     msg: (u) => `${u.name} and all of their account data will be permanently removed. This cannot be undone.`, label: 'Delete', danger: true },
   }
 
   const needsOrg = editing ? NEEDS_ORG.includes(editing.role) : false
