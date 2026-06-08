@@ -227,7 +227,7 @@ export default function PredictionsList() {
                   {/* Inference type badge */}
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wide bg-[#093A7A]/10 text-[#093A7A] border border-[#093A7A]/20">
                     <Layers className="w-2.5 h-2.5" />
-                    {pred.mode === 'FULL' ? 'A6 Fusion' : 'Clinical Only'}
+                    {pred.wsi_upload_id != null ? 'A6 Fusion' : 'Clinical Only'}
                   </span>
                 </div>
                 <p className="font-bold text-slate-900">

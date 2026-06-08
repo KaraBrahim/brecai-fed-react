@@ -43,7 +43,7 @@ function openReportForPrint(report, patient, doctor) {
       }
 
   // Clinical interpretation
-  const erPr = `${patient?.er_status ? 'ER+' : 'ER−'} / ${patient?.pr_status ? 'PR+' : 'PR−'} / ${patient?.her2_binary ? 'HER2+' : 'HER2−'}`
+  const erPr = `${patient?.er_status ? 'ER+' : 'ER-'} / ${patient?.pr_status ? 'PR+' : 'PR-'} / ${patient?.her2_binary ? 'HER2+' : 'HER2-'}`
   const stageLabel = patient?.stage_num ? `Stage ${['I', 'II', 'III', 'IV'][patient.stage_num - 1] || patient.stage_num}` : '—'
 
   // XAI image URLs from Laravel presigned R2 URLs
@@ -51,6 +51,12 @@ function openReportForPrint(report, patient, doctor) {
   const segmentationUrl= report.segmentation_url|| report.prediction?.xai_result?.segmentation_url
   const patchesUrl     = report.patches_url     || report.prediction?.xai_result?.patches_url
   const topPatches = (xai.top_patches || []).slice(0, 10)
+
+  // Inference mode reflects what data the model actually fused: presence of
+  // imaging-derived XAI output (heatmap/segmentation/patches) means the slide
+  // went through the A6 image+clinical fusion path; otherwise it ran clinical-only.
+  const usedImaging = !!(heatmapUrl || segmentationUrl || patchesUrl)
+  const inferenceModeLabel = usedImaging ? 'A6 Fusion — Image + Clinical' : 'Clinical-Only (No Imaging Data)'
 
   const html = `<!DOCTYPE html>
 <html>
@@ -73,7 +79,7 @@ function openReportForPrint(report, patient, doctor) {
   /* Badge */
   .subtype-badge { display: inline-block; padding: 5px 16px; border-radius: 24px; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 12px; }
   .badge-luma { background: rgba(11,181,146,0.2); color: #0BB592; border: 1.5px solid rgba(11,181,146,0.4); }
-  .badge-nonluma { background: rgba(245,84,134,0.2); color: #F55486; border: 1.5px solid rgba(245,84,134,0.4); }
+  .badge-nonluma { background: rgba(220,38,38,0.12); color: #DC2626; border: 1.5px solid rgba(220,38,38,0.35); }
 
   /* Sections */
   .section { margin-bottom: 22px; }
@@ -86,16 +92,16 @@ function openReportForPrint(report, patient, doctor) {
   .info-card .val { font-size: 15px; font-weight: 900; color: #1e293b; }
 
   /* Result box */
-  .result-box { background: ${isLumA ? 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)' : 'linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%)'}; border: 2px solid ${isLumA ? '#86efac' : '#fda4af'}; border-radius: 14px; padding: 22px 26px; margin-bottom: 22px; display: flex; align-items: center; gap: 24px; }
+  .result-box { background: ${isLumA ? 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)' : 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)'}; border: 2px solid ${isLumA ? '#86efac' : '#fca5a5'}; border-radius: 14px; padding: 22px 26px; margin-bottom: 22px; display: flex; align-items: center; gap: 24px; }
   .result-main { flex: 1; }
   .result-label { font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; color: #64748b; }
-  .result-value { font-size: 28px; font-weight: 900; color: ${isLumA ? '#0BB592' : '#F55486'}; margin: 4px 0; }
+  .result-value { font-size: 28px; font-weight: 900; color: ${isLumA ? '#0BB592' : '#DC2626'}; margin: 4px 0; }
   .result-conf { font-size: 12px; color: #475569; }
-  .conf-ring { width: 72px; height: 72px; border-radius: 50%; border: 6px solid ${isLumA ? '#0BB592' : '#F55486'}; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 900; color: ${isLumA ? '#0BB592' : '#F55486'}; background: white; }
+  .conf-ring { width: 72px; height: 72px; border-radius: 50%; border: 6px solid ${isLumA ? '#0BB592' : '#DC2626'}; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 900; color: ${isLumA ? '#0BB592' : '#DC2626'}; background: white; }
 
   /* Therapy */
   .therapy-box { background: white; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; margin-bottom: 22px; }
-  .therapy-header { background: ${isLumA ? '#0BB592' : '#F55486'}; color: white; padding: 10px 18px; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; }
+  .therapy-header { background: ${isLumA ? '#0BB592' : '#DC2626'}; color: white; padding: 10px 18px; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; }
   .therapy-body { padding: 16px 18px; }
   .therapy-row { display: flex; gap: 12px; margin-bottom: 10px; }
   .therapy-row .label { width: 100px; flex-shrink: 0; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; color: #64748b; padding-top: 2px; }
@@ -157,7 +163,7 @@ function openReportForPrint(report, patient, doctor) {
     <div class="info-card"><div class="lbl">Age</div><div class="val">${patient?.age ?? '—'} years</div></div>
     <div class="info-card"><div class="lbl">Stage</div><div class="val">${stageLabel}</div></div>
     <div class="info-card"><div class="lbl">Receptor Status</div><div class="val">${erPr}</div></div>
-    <div class="info-card"><div class="lbl">Inference Mode</div><div class="val">${report.prediction?.mode === 'FULL' ? 'Full (Genomic)' : 'DZ (Clinical Only)'}</div></div>
+    <div class="info-card"><div class="lbl">Inference Mode</div><div class="val">${inferenceModeLabel}</div></div>
     <div class="info-card"><div class="lbl">AI Model</div><div class="val">A6 Cross-Attention Fusion</div></div>
   </div>
 </div>
