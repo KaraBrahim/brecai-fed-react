@@ -123,6 +123,15 @@ const instructor = {
       return client.get('/fl/rounds/current').then((r) => r.data);
     },
 
+    /**
+     * POST /api/fl/rounds/launch-test — TEMP self-serve round bootstrap (no admin).
+     * Creates a round + genesis blockchain block + auto-accepted invitation for the
+     * current instructor so they can immediately run the local-training flow.
+     */
+    launchTest(data = {}) {
+      return client.post('/fl/rounds/launch-test', data).then((r) => r.data);
+    },
+
     /** POST /api/fl/rounds/inspect-data — inspect available data before training */
     inspectData(data) {
       return client.post('/fl/rounds/inspect-data', data).then((r) => r.data);
