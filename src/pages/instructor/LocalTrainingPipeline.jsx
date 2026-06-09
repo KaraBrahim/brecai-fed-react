@@ -134,7 +134,13 @@ function RoundStatusInvitation({ onAccept, onDecline }) {
   )
 }
 
-function RoundStatusCompleted() {
+function RoundStatusCompleted({ roundData, onLaunchTest, launching }) {
+  const inv = roundData?.invitation
+  const part = roundData?.participation
+  const roundNo = roundData?.round?.round_number
+  const wHash = inv?.weights_hash
+  const submittedAt = inv?.submitted_at ? new Date(inv.submitted_at).toLocaleString() : null
+  const acc = inv?.local_accuracy
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-center min-h-[60vh]">
       <div className="bg-slate-900/60 border-2 border-emerald-700/50 rounded-2xl p-10 max-w-lg text-center">
@@ -142,25 +148,44 @@ function RoundStatusCompleted() {
           <CheckCircle2 size={28} className="text-emerald-400" />
         </div>
         <h2 className="text-2xl font-black text-white mb-2">Round Submission Complete</h2>
-        <p className="text-sm text-slate-400 mb-6">Your model weights have been submitted for this round.</p>
+        <p className="text-sm text-slate-400 mb-6">Your contribution{roundNo ? ` for Round #${roundNo}` : ''} was committed to the blockchain ledger.</p>
         <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4 text-left space-y-3 mb-4">
-          <div className="flex justify-between items-start">
-            <span className="text-xs text-slate-500 font-bold uppercase">TX Hash</span>
-            <span className="text-[11px] text-emerald-300 font-mono break-all max-w-[200px] text-right">0x7f3a...b42d</span>
+          <div className="flex justify-between items-start gap-4">
+            <span className="text-xs text-slate-500 font-bold uppercase shrink-0">Weights Hash</span>
+            <span className="text-[11px] text-emerald-300 font-mono break-all text-right">{wHash ? `sha256:${wHash}` : '—'}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-xs text-slate-500 font-bold uppercase">Weights Hash</span>
-            <span className="text-[11px] text-slate-300 font-mono">sha256:e4c9...1fa8</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-xs text-slate-500 font-bold uppercase">Submitted</span>
-            <span className="text-xs text-slate-300 font-bold">2 hours ago</span>
-          </div>
+          {acc != null && (
+            <div className="flex justify-between">
+              <span className="text-xs text-slate-500 font-bold uppercase">Local Accuracy</span>
+              <span className="text-xs text-slate-300 font-bold">{(acc * 100).toFixed(1)}%</span>
+            </div>
+          )}
+          {submittedAt && (
+            <div className="flex justify-between">
+              <span className="text-xs text-slate-500 font-bold uppercase">Submitted</span>
+              <span className="text-xs text-slate-300 font-bold">{submittedAt}</span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span className="text-xs text-slate-500 font-bold uppercase">Aggregation</span>
-            <span className="text-xs text-amber-300 font-bold">Pending (2/5 received)</span>
+            <span className="text-xs text-amber-300 font-bold">Pending ({part?.submitted ?? 1}/{part?.total_invited ?? 1} received)</span>
           </div>
         </div>
+
+        {onLaunchTest && (
+          <div className="mt-6 pt-6 border-t border-dashed border-amber-700/40">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-amber-400/80 mb-2">Testing mode</p>
+            <button
+              onClick={onLaunchTest}
+              disabled={launching}
+              className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-white font-black text-sm transition hover:scale-[1.02] disabled:opacity-60 disabled:hover:scale-100"
+              style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.blue})` }}
+            >
+              {launching ? <><Loader2 size={16} className="animate-spin" /> Launching…</> : <><Sparkles size={16} /> Launch new test round</>}
+            </button>
+            <p className="text-[10px] text-slate-500 mt-2">Closes this round and opens a fresh one — new genesis block, back to step 1.</p>
+          </div>
+        )}
       </div>
     </motion.div>
   )
@@ -1047,11 +1072,22 @@ export default function LocalTrainingPipeline() {
 
   // TEMP: self-serve round launch (no admin). Creates a real round + genesis
   // blockchain block + auto-accepted invitation, then drops us into the wizard.
+  // force:true lets us close a just-finished round and start a fresh one.
   const handleLaunchTest = async () => {
     setLaunching(true)
     try {
       const { default: instructor } = await import('@/api/api-client/instructor')
-      await instructor.rounds.launchTest({ modality: 'open', min_samples: 1 })
+      await instructor.rounds.launchTest({ modality: 'open', min_samples: 1, force: true })
+      // Reset the wizard so the new round starts clean from step 1.
+      setStep(1)
+      setModality(null)
+      setDataState({ imageFiles: null, imageFolderName: null, clinicalFile: null, scanError: null })
+      setScanResults({ image: null, clinical: null })
+      setInspection({ loading: false, result: null, error: null })
+      setAckImbalance(false)
+      setRegistered(false)
+      setSubmitState({ loading: false, error: null, result: null })
+      setTrainState({ running: false, steps: [], epochs: [] })
       await refreshRound()
     } catch (e) {
       console.error('Failed to launch test round', e)
@@ -1301,7 +1337,7 @@ export default function LocalTrainingPipeline() {
   if (roundStatus === 'completed') {
     return (
       <div className="w-full min-h-screen py-8 px-4 md:px-8 lg:px-12 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-        <RoundStatusCompleted />
+        <RoundStatusCompleted roundData={roundData} onLaunchTest={handleLaunchTest} launching={launching} />
         <DevRoundToggle roundStatus={roundStatus} setRoundStatus={setRoundStatus} />
       </div>
     )
