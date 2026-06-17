@@ -439,7 +439,6 @@ function ImageLightbox({ src, alt, onClose }) {
           <img
             src={src}
             alt={alt}
-            crossOrigin="anonymous"
             draggable={false}
             onLoad={handleLoad}
             onClick={() => naturalSize && setZoom(z =>
@@ -490,7 +489,6 @@ function XaiImageCard({ title, caption, src, alt, onExpand, badge }) {
         <img
           src={src}
           alt={alt}
-          crossOrigin="anonymous"
           className="w-full object-contain"
           style={{ maxHeight: '520px', minHeight: '200px' }}
         />

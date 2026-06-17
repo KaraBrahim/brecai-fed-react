@@ -169,7 +169,6 @@ export default function XaiDeepDive() {
                   <img
                     src={segmentationUrl}
                     alt="Tissue segmentation with numbered patch locations"
-                    crossOrigin="anonymous"
                     className="w-full max-w-3xl mx-auto rounded-xl border border-slate-200 shadow-sm block"
                   />
                   <p className="text-[11px] text-slate-400 font-medium mt-2 text-center">
